@@ -24,7 +24,7 @@ def sigle_process():
                     ang_2 = ang_2,
                     temp_path=temp_path)
 
-def mult_process():
+def multi_process():
 
     ######### Multi Process ##########
 
@@ -67,4 +67,4 @@ if __name__ == "__main__":
     motor_params_list = BLDC_Process.generate_samples(num_samples=n_samples,seed=12)
     BLDC_Process.export_params(params=motor_params_list)
 
-    mult_process()
+    multi_process()

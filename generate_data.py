@@ -17,12 +17,12 @@ if __name__ == "__main__":
     n_r = 80
     n_a = 240
     code = 0
-    n_samples = 1
+    n_samples = 1000
 
     data_path = 'data_gen/Raw_Data/'
 
     ######### samples ###########
-    motor_params_list = BLDC_Process.generate_samples(num_samples=n_samples)
+    motor_params_list = BLDC_Process.generate_samples(num_samples=n_samples,seed=12)
     BLDC_Process.export_params(params=motor_params_list)
 
     for code in range(n_samples):

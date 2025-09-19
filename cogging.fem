@@ -1,0 +1,4070 @@
+[Format]      =  4.0
+[Frequency]   =  0
+[Precision]   =  1e-008
+[MinAngle]    =  30
+[DoSmartMesh] =  1
+[Depth]       =  1
+[LengthUnits] =  millimeters
+[ProblemType] =  planar
+[Coordinates] =  cartesian
+[ACSolver]    =  0
+[PrevType]    =  0
+[PrevSoln]    =  ""
+[Comment]     =  "Add comments here."
+[PointProps]   = 0
+[BdryProps]   = 1
+  <BeginBdry>
+    <BdryName> = "A=0"
+    <BdryType> = 0
+    <A_0> = 0
+    <A_1> = 0
+    <A_2> = 0
+    <Phi> = 0
+    <c0> = 0
+    <c0i> = 0
+    <c1> = 0
+    <c1i> = 0
+    <Mu_ssd> = 0
+    <Sigma_ssd> = 0
+    <innerangle> = 1
+    <outerangle> = 0
+  <EndBdry>
+[BlockProps]  = 119
+  <BeginBlock>
+    <BlockName> = "iron_1008"
+    <Mu_x> = 1
+    <Mu_y> = 1
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 19
+      0	0
+      0.2402	159.19999999999999
+      0.86539999999999995	318.30000000000001
+      1.1106	477.5
+      1.2458	636.60000000000002
+      1.331	795.79999999999995
+      1.5	1591.5
+      1.6000000000000001	3183.0999999999999
+      1.6830000000000001	4774.6000000000004
+      1.7410000000000001	6366.1999999999998
+      1.78	7957.6999999999998
+      1.905	15915.5
+      2.0249999999999999	31831
+      2.085	47746.5
+      2.1299999999999999	63662
+      2.165	79577.5
+      2.2799999999999998	159155
+      2.4849999999999999	318310
+      2.5851000000000002	397887
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "N35"
+    <Mu_x> = 1.05
+    <Mu_y> = 1.05
+    <H_c> = 905659
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0.66700000000000004
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "copper"
+    <Mu_x> = 0.99999099999999996
+    <Mu_y> = 0.99999099999999996
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "vacuum"
+    <Mu_x> = 1
+    <Mu_y> = 1
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "iron_1008"
+    <Mu_x> = 1
+    <Mu_y> = 1
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 19
+      0	0
+      0.2402	159.19999999999999
+      0.86539999999999995	318.30000000000001
+      1.1106	477.5
+      1.2458	636.60000000000002
+      1.331	795.79999999999995
+      1.5	1591.5
+      1.6000000000000001	3183.0999999999999
+      1.6830000000000001	4774.6000000000004
+      1.7410000000000001	6366.1999999999998
+      1.78	7957.6999999999998
+      1.905	15915.5
+      2.0249999999999999	31831
+      2.085	47746.5
+      2.1299999999999999	63662
+      2.165	79577.5
+      2.2799999999999998	159155
+      2.4849999999999999	318310
+      2.5851000000000002	397887
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "vacuum"
+    <Mu_x> = 1
+    <Mu_y> = 1
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+  <BeginBlock>
+    <BlockName> = "vacuum"
+    <Mu_x> = 1
+    <Mu_y> = 1
+    <H_c> = 0
+    <H_cAngle> = 0
+    <J_re> = 0
+    <J_im> = 0
+    <Sigma> = 0
+    <d_lam> = 0
+    <Phi_h> = 0
+    <Phi_hx> = 0
+    <Phi_hy> = 0
+    <LamType> = 0
+    <LamFill> = 1
+    <NStrands> = 0
+    <WireD> = 0
+    <BHPoints> = 0
+  <EndBlock>
+[CircuitProps]  = 72
+  <BeginCircuit>
+    <CircuitName> = "coil_0_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_0_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_1_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_1_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_2_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_2_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_3_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_3_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_4_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_4_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_5_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_5_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_6_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_6_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_7_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_7_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_8_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_8_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_9_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_9_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_10_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_10_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_11_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_11_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_12_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_12_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_13_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_13_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_14_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_14_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_15_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_15_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_16_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_16_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_17_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_17_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_18_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_18_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_19_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_19_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_20_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_20_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_21_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_21_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_22_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_22_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_23_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_23_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_24_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_24_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_25_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_25_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_26_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_26_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_27_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_27_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_28_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_28_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_29_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_29_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_30_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_30_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_31_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_31_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_32_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_32_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_33_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_33_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_34_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_34_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_35_0"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+  <BeginCircuit>
+    <CircuitName> = "coil_35_1"
+    <TotalAmps_re> = 0
+    <TotalAmps_im> = 0
+    <CircuitType> = 1
+  <EndCircuit>
+[NumPoints] = 534
+41.735779989983016	0	0	0
+-41.735779989983016	5.1111589374650856e-015	0	0
+45	0	0	0
+-45	5.5109105961630896e-015	0	0
+37.140783165415883	0	0	0
+36.867871448148598	4.4941994863634172	0	0
+41.429104082320357	5.050214481438708	0	0
+36.72595130410653	5.5355464905314928	0	0
+35.786262109139201	9.9388741010452311	0	0
+41.269625810645088	6.2203952303373038	0	0
+40.213679808498327	11.168495316372773	0	0
+35.490722378471112	10.947438019679733	0	0
+33.905246809629659	15.161530691804758	0	0
+39.881576386701134	12.30183711012257	0	0
+38.099948378859985	17.037290421322027	0	0
+33.462689361553977	16.1147818735651	0	0
+31.266844323126797	20.04550374058466	0	0
+37.602638448599436	18.108476277041593	0	0
+35.135127060707397	22.525500611533886	0	0
+30.687155159729357	20.922148129270472	0	0
+27.92999220135022	24.481693359997706	0	0
+34.483719704045591	23.510602007287787	0	0
+31.385445063068357	27.51052834035335	0	0
+27.226120620633814	25.262148168576992	0	0
+23.969230206718276	28.371002404528888	0	0
+30.594491643934859	28.387539738791499	0	0
+26.934664085607132	31.881016325828949	0	0
+23.156899536683337	29.037833562240746	0	0
+19.473035217228862	31.626550137013115	0	0
+26.02183319637421	32.630346741527958	0	0
+21.882207220666032	35.539335088379161	0	0
+18.570391582707945	32.164861737699567	0	0
+14.541844799208603	34.175613000737371	0	0
+20.867889994991511	36.144245718083532	0	0
+16.3409380056742	38.403763832038379	0	0
+13.569051767423197	34.573380052772237	0	0
+9.285813598049204	35.961249143525649	0	0
+15.247792614270885	38.850741971865261	0	0
+10.434639238222822	40.41031595199928	0	0
+8.264601757837303	36.209586188256729	0	0
+3.8223526654544573	36.943570404622953	0	0
+9.2870847427662806	40.689376848914073	0	0
+4.2952478729118386	41.514168389629496	0	0
+2.7755342018246245	37.036930002835568	0	0
+-1.726493309438899	37.100633350293393	0	0
+3.1189187445538491	41.619078284329376	0	0
+-1.9400922321965448	41.690662905533621	0	0
+-2.7755342018246116	37.036930002835568	0	0
+-7.2367722767437028	36.428929453869401	0	0
+-3.1189187445538349	41.619078284329376	0	0
+-8.1320938827435647	40.935856903874765	0	0
+-8.2646017578372994	36.209586188256729	0	0
+-12.585393709792278	34.943463470439802	0	0
+-9.2870847427662753	40.689376848914073	0	0
+-14.142437993830738	39.266611503450612	0	0
+-13.569051767423201	34.573380052772237	0	0
+-17.652878244101146	32.677418255415773	0	0
+-15.247792614270889	38.850741971865261	0	0
+-19.836863409811013	36.720214888161635	0	0
+-18.570391582707934	32.164861737699574	0	0
+-22.326026648940001	29.681413514373954	0	0
+-20.867889994991497	36.144245718083539	0	0
+-25.088166076646161	33.353549350599664	0	0
+-23.156899536683319	29.037833562240756	0	0
+-26.500448511089996	26.022375042480423	0	0
+-26.021833196374189	32.630346741527966	0	0
+-29.779040570275505	29.24182063562651	0	0
+-27.226120620633814	25.262148168576992	0	0
+-30.082894144175206	21.782039712818193	0	0
+-30.594491643934859	28.387539738791499	0	0
+-33.804700505948148	24.47687796830747	0	0
+-30.687155159729361	20.922148129270465	0	0
+-32.993337632565705	17.055129609708732	0	0
+-34.483719704045598	23.51060200728778	0	0
+-37.075219292903952	19.165162293999735	0	0
+-33.46268936155397	16.114781873565104	0	0
+-35.166764478093931	11.947236093871702	0	0
+-37.602638448599429	18.108476277041596	0	0
+-39.517538945811928	13.42532856352142	0	0
+-35.490722378471119	10.947438019679733	0	0
+-36.55462391651055	6.5724610659109137	0	0
+-39.881576386701141	12.30183711012257	0	0
+-41.077102079437864	7.3855951776216564	0	0
+-36.72595130410653	5.5355464905315035	0	0
+-37.125913461330008	1.0508681184026709	0	0
+-41.269625810645088	6.2203952303373153	0	0
+-41.719070630477049	1.1808797997824931	0	0
+-37.140783165415883	4.5484341221352458e-015	0	0
+-36.867871448148598	-4.4941994863634109	0	0
+-41.429104082320357	-5.0502144814387	0	0
+-36.725951304106538	-5.5355464905314777	0	0
+-35.786262109139209	-9.9388741010452151	0	0
+-41.269625810645095	-6.220395230337286	0	0
+-40.213679808498334	-11.168495316372754	0	0
+-35.490722378471119	-10.947438019679723	0	0
+-33.905246809629666	-15.161530691804748	0	0
+-39.881576386701141	-12.301837110122557	0	0
+-38.099948378859985	-17.037290421322016	0	0
+-33.462689361553977	-16.114781873565097	0	0
+-31.26684432312679	-20.045503740584667	0	0
+-37.602638448599436	-18.108476277041589	0	0
+-35.13512706070739	-22.525500611533893	0	0
+-30.687155159729357	-20.922148129270472	0	0
+-27.92999220135022	-24.481693359997703	0	0
+-34.483719704045591	-23.510602007287787	0	0
+-31.385445063068357	-27.510528340353346	0	0
+-27.226120620633811	-25.262148168576996	0	0
+-23.969230206718272	-28.371002404528891	0	0
+-30.594491643934855	-28.387539738791506	0	0
+-26.934664085607128	-31.881016325828956	0	0
+-23.156899536683341	-29.037833562240738	0	0
+-19.473035217228865	-31.626550137013112	0	0
+-26.021833196374214	-32.630346741527951	0	0
+-21.882207220666039	-35.539335088379154	0	0
+-18.570391582707959	-32.164861737699567	0	0
+-14.54184479920862	-34.175613000737364	0	0
+-20.867889994991526	-36.144245718083532	0	0
+-16.340938005674222	-38.403763832038365	0	0
+-13.569051767423224	-34.573380052772229	0	0
+-9.2858135980492023	-35.961249143525649	0	0
+-15.247792614270915	-38.850741971865247	0	0
+-10.43463923822282	-40.41031595199928	0	0
+-8.2646017578373403	-36.209586188256722	0	0
+-3.8223526654544941	-36.943570404622953	0	0
+-9.2870847427663232	-40.689376848914065	0	0
+-4.2952478729118795	-41.514168389629496	0	0
+-2.7755342018246041	-37.036930002835568	0	0
+1.726493309438919	-37.100633350293393	0	0
+-3.118918744553826	-41.619078284329376	0	0
+1.9400922321965675	-41.690662905533621	0	0
+2.7755342018246236	-37.036930002835568	0	0
+7.2367722767437153	-36.428929453869401	0	0
+3.1189187445538482	-41.619078284329376	0	0
+8.1320938827435789	-40.935856903874765	0	0
+8.2646017578372941	-36.209586188256729	0	0
+12.585393709792266	-34.943463470439809	0	0
+9.2870847427662717	-40.689376848914073	0	0
+14.142437993830725	-39.266611503450612	0	0
+13.569051767423211	-34.573380052772229	0	0
+17.652878244101128	-32.677418255415787	0	0
+15.247792614270901	-38.850741971865254	0	0
+19.836863409810991	-36.720214888161649	0	0
+18.570391582707945	-32.164861737699567	0	0
+22.326026648939969	-29.681413514373979	0	0
+20.867889994991511	-36.144245718083532	0	0
+25.088166076646129	-33.353549350599693	0	0
+23.15689953668333	-29.037833562240749	0	0
+26.500448511089967	-26.022375042480451	0	0
+26.0218331963742	-32.630346741527958	0	0
+29.779040570275473	-29.241820635626542	0	0
+27.226120620633804	-25.26214816857701	0	0
+30.082894144175174	-21.782039712818239	0	0
+30.594491643934848	-28.387539738791521	0	0
+33.804700505948112	-24.476877968307519	0	0
+30.687155159729357	-20.922148129270468	0	0
+32.993337632565719	-17.055129609708708	0	0
+34.483719704045591	-23.510602007287783	0	0
+37.075219292903967	-19.165162293999707	0	0
+33.46268936155397	-16.114781873565107	0	0
+35.166764478093938	-11.947236093871673	0	0
+37.602638448599429	-18.108476277041603	0	0
+39.517538945811943	-13.42532856352139	0	0
+35.490722378471112	-10.947438019679751	0	0
+36.55462391651055	-6.5724610659109013	0	0
+39.881576386701134	-12.301837110122591	0	0
+41.077102079437864	-7.3855951776216431	0	0
+36.72595130410653	-5.5355464905314911	0	0
+37.125913461330008	-1.0508681184026589	0	0
+41.269625810645088	-6.2203952303373011	0	0
+41.719070630477049	-1.1808797997824796	0	0
+34.868837281417477	0.53139121186119365	0	0
+33.986810085495243	1.2423372030603592	0	0
+34.868837281417477	-0.53139121186119365	0	0
+33.986810085495243	-1.2423372030603592	0	0
+29.212407873170399	1.5531164760511305	0	0
+29.212407873170399	-1.5531164760511305	0	0
+29.212407873170399	0	0	0
+34.868837281417477	0	0	0
+34.246826177693137	6.5782282366063223	0	0
+33.254744480989956	7.1252109454876411	0	0
+34.431376408828967	5.5315918659594105	0	0
+33.686203663708483	4.6782843266289547	0	0
+28.498909911882311	6.6022025393852806	0	0
+29.038301603423836	3.5431602454929751	0	0
+28.768605757653074	5.0726813924391276	0	0
+34.339101293261052	6.0549100512828664	0	0
+32.584242590289819	12.425189125126272	0	0
+31.512250293142454	12.79158875886699	0	0
+32.947735587175345	11.42650032405338	0	0
+32.362058989641483	10.456758554379743	0	0
+26.919486994065931	11.450684019435894	0	0
+27.981881233546861	8.5317798359033716	0	0
+27.450684113806396	9.9912319276696326	0	0
+32.765989088732582	11.925844724589826	0	0
+29.931603280202864	17.894616929528329	0	0
+28.812272326105873	18.069300620664396	0	0
+30.462994492064055	16.974220351889141	0	0
+30.054609529166232	15.91750946483084	0	0
+24.522129085852544	15.951242259881642	0	0
+26.075245561903674	13.261165613288753	0	0
+25.298687323878109	14.606203936585198	0	0
+30.19729888613346	17.434418640708735	0	0
+26.36950735056902	22.820325853639755	0	0
+25.236848044153842	22.797985926610213	0	0
+27.052650724330402	22.006187283702697	0	0
+26.8339659665135	20.894614904841493	0	0
+21.37967869416158	19.967130075978936	0	0
+23.376326748572954	17.587617583987942	0	0
+22.378002721367267	18.777373829983439	0	0
+26.711079037449711	22.413256568671226	0	0
+22.006187283702701	27.052650724330402	0	0
+20.894614904841497	26.8339659665135	0	0
+22.820325853639758	26.36950735056902	0	0
+22.797985926610217	25.236848044153842	0	0
+17.587617583987946	23.376326748572954	0	0
+19.96713007597894	21.37967869416158	0	0
+18.777373829983443	22.378002721367267	0	0
+22.41325656867123	26.711079037449711	0	0
+16.974220351889148	30.462994492064052	0	0
+15.917509464830847	30.054609529166228	0	0
+17.894616929528336	29.931603280202861	0	0
+18.069300620664404	28.81227232610587	0	0
+13.261165613288759	26.075245561903674	0	0
+15.951242259881647	24.522129085852544	0	0
+14.606203936585203	25.298687323878109	0	0
+17.434418640708742	30.197298886133456	0	0
+11.426500324053384	32.947735587175337	0	0
+10.456758554379746	32.362058989641483	0	0
+12.425189125126275	32.584242590289811	0	0
+12.791588758866993	31.512250293142451	0	0
+8.5317798359033752	27.981881233546858	0	0
+11.450684019435897	26.919486994065927	0	0
+9.9912319276696362	27.450684113806393	0	0
+11.92584472458983	32.765989088732574	0	0
+5.5315918659594132	34.431376408828967	0	0
+4.6782843266289573	33.686203663708483	0	0
+6.5782282366063249	34.246826177693137	0	0
+7.1252109454876438	33.254744480989956	0	0
+3.5431602454929778	29.038301603423836	0	0
+6.6022025393852832	28.498909911882311	0	0
+5.0726813924391303	28.768605757653074	0	0
+6.0549100512828691	34.339101293261052	0	0
+-0.53139121186119154	34.868837281417477	0	0
+-1.2423372030603572	33.986810085495243	0	0
+0.53139121186119576	34.868837281417477	0	0
+1.2423372030603612	33.986810085495243	0	0
+-1.5531164760511287	29.212407873170399	0	0
+1.5531164760511322	29.212407873170399	0	0
+1.7887440898632533e-015	29.212407873170399	0	0
+2.1351004983338905e-015	34.868837281417477	0	0
+-6.5782282366063205	34.246826177693137	0	0
+-7.1252109454876402	33.254744480989956	0	0
+-5.5315918659594088	34.431376408828967	0	0
+-4.6782843266289538	33.686203663708483	0	0
+-6.6022025393852797	28.498909911882311	0	0
+-3.5431602454929743	29.038301603423836	0	0
+-5.0726813924391267	28.768605757653074	0	0
+-6.0549100512828646	34.339101293261052	0	0
+-12.425189125126272	32.584242590289819	0	0
+-12.79158875886699	31.512250293142454	0	0
+-11.42650032405338	32.947735587175345	0	0
+-10.456758554379743	32.362058989641483	0	0
+-11.450684019435894	26.919486994065931	0	0
+-8.5317798359033716	27.981881233546861	0	0
+-9.9912319276696326	27.450684113806396	0	0
+-11.925844724589826	32.765989088732582	0	0
+-17.894616929528325	29.931603280202864	0	0
+-18.069300620664393	28.812272326105873	0	0
+-16.974220351889137	30.462994492064055	0	0
+-15.917509464830836	30.054609529166232	0	0
+-15.951242259881637	24.522129085852544	0	0
+-13.261165613288748	26.075245561903674	0	0
+-14.606203936585192	25.298687323878109	0	0
+-17.434418640708731	30.19729888613346	0	0
+-22.820325853639758	26.36950735056902	0	0
+-22.797985926610217	25.236848044153842	0	0
+-22.006187283702701	27.052650724330402	0	0
+-20.894614904841497	26.8339659665135	0	0
+-19.96713007597894	21.37967869416158	0	0
+-17.587617583987946	23.376326748572954	0	0
+-18.777373829983443	22.378002721367267	0	0
+-22.41325656867123	26.711079037449711	0	0
+-27.052650724330398	22.006187283702708	0	0
+-26.833965966513492	20.8946149048415	0	0
+-26.369507350569016	22.820325853639758	0	0
+-25.236848044153835	22.79798592661022	0	0
+-23.37632674857295	17.587617583987949	0	0
+-21.379678694161576	19.967130075978943	0	0
+-22.378002721367263	18.777373829983446	0	0
+-26.711079037449707	22.413256568671233	0	0
+-30.462994492064055	16.974220351889141	0	0
+-30.054609529166232	15.91750946483084	0	0
+-29.931603280202864	17.894616929528329	0	0
+-28.812272326105873	18.069300620664396	0	0
+-26.075245561903674	13.261165613288753	0	0
+-24.522129085852544	15.951242259881642	0	0
+-25.298687323878109	14.606203936585198	0	0
+-30.19729888613346	17.434418640708735	0	0
+-32.947735587175337	11.426500324053386	0	0
+-32.362058989641483	10.456758554379748	0	0
+-32.584242590289811	12.425189125126277	0	0
+-31.512250293142451	12.791588758866995	0	0
+-27.981881233546858	8.531779835903377	0	0
+-26.919486994065927	11.450684019435899	0	0
+-27.450684113806393	9.991231927669638	0	0
+-32.765989088732574	11.925844724589831	0	0
+-34.431376408828967	5.5315918659594079	0	0
+-33.686203663708483	4.6782843266289529	0	0
+-34.246826177693137	6.5782282366063196	0	0
+-33.254744480989956	7.1252109454876393	0	0
+-29.038301603423836	3.5431602454929734	0	0
+-28.498909911882311	6.6022025393852788	0	0
+-28.768605757653074	5.0726813924391259	0	0
+-34.339101293261052	6.0549100512828637	0	0
+-34.868837281417477	-0.53139121186118943	0	0
+-33.986810085495243	-1.242337203060355	0	0
+-34.868837281417477	0.53139121186119787	0	0
+-33.986810085495243	1.2423372030603634	0	0
+-29.212407873170399	-1.5531164760511269	0	0
+-29.212407873170399	1.553116476051134	0	0
+-29.212407873170399	3.5774881797265067e-015	0	0
+-34.868837281417477	4.270200996667781e-015	0	0
+-34.246826177693137	-6.5782282366063267	0	0
+-33.254744480989956	-7.1252109454876456	0	0
+-34.431376408828967	-5.531591865959415	0	0
+-33.686203663708483	-4.6782843266289591	0	0
+-28.498909911882311	-6.602202539385285	0	0
+-29.038301603423836	-3.5431602454929796	0	0
+-28.768605757653074	-5.0726813924391321	0	0
+-34.339101293261052	-6.0549100512828709	0	0
+-32.584242590289819	-12.42518912512627	0	0
+-31.512250293142454	-12.791588758866988	0	0
+-32.947735587175345	-11.426500324053379	0	0
+-32.362058989641483	-10.456758554379741	0	0
+-26.919486994065931	-11.450684019435892	0	0
+-27.981881233546861	-8.5317798359033699	0	0
+-27.450684113806396	-9.9912319276696309	0	0
+-32.765989088732582	-11.925844724589824	0	0
+-29.931603280202861	-17.894616929528336	0	0
+-28.81227232610587	-18.069300620664404	0	0
+-30.462994492064052	-16.974220351889148	0	0
+-30.054609529166228	-15.917509464830847	0	0
+-24.522129085852544	-15.951242259881647	0	0
+-26.075245561903674	-13.261165613288759	0	0
+-25.298687323878109	-14.606203936585203	0	0
+-30.197298886133456	-17.434418640708742	0	0
+-26.36950735056902	-22.820325853639755	0	0
+-25.236848044153842	-22.797985926610213	0	0
+-27.052650724330402	-22.006187283702697	0	0
+-26.8339659665135	-20.894614904841493	0	0
+-21.37967869416158	-19.967130075978936	0	0
+-23.376326748572954	-17.587617583987942	0	0
+-22.378002721367267	-18.777373829983439	0	0
+-26.711079037449711	-22.413256568671226	0	0
+-22.006187283702708	-27.052650724330398	0	0
+-20.8946149048415	-26.833965966513492	0	0
+-22.820325853639758	-26.369507350569016	0	0
+-22.79798592661022	-25.236848044153835	0	0
+-17.587617583987949	-23.37632674857295	0	0
+-19.967130075978943	-21.379678694161576	0	0
+-18.777373829983446	-22.378002721367263	0	0
+-22.413256568671233	-26.711079037449707	0	0
+-16.974220351889162	-30.462994492064048	0	0
+-15.917509464830859	-30.054609529166225	0	0
+-17.894616929528343	-29.931603280202857	0	0
+-18.069300620664414	-28.812272326105866	0	0
+-13.261165613288767	-26.075245561903671	0	0
+-15.951242259881656	-24.522129085852541	0	0
+-14.606203936585212	-25.298687323878106	0	0
+-17.434418640708753	-30.197298886133453	0	0
+-11.426500324053375	-32.947735587175345	0	0
+-10.456758554379737	-32.362058989641483	0	0
+-12.425189125126266	-32.584242590289819	0	0
+-12.791588758866984	-31.512250293142458	0	0
+-8.5317798359033663	-27.981881233546861	0	0
+-11.450684019435888	-26.919486994065931	0	0
+-9.9912319276696273	-27.450684113806396	0	0
+-11.925844724589821	-32.765989088732582	0	0
+-5.5315918659594105	-34.431376408828967	0	0
+-4.6782843266289547	-33.686203663708483	0	0
+-6.5782282366063223	-34.246826177693137	0	0
+-7.1252109454876411	-33.254744480989956	0	0
+-3.5431602454929751	-29.038301603423836	0	0
+-6.6022025393852806	-28.498909911882311	0	0
+-5.0726813924391276	-28.768605757653074	0	0
+-6.0549100512828664	-34.339101293261052	0	0
+0.53139121186118721	-34.868837281417477	0	0
+1.242337203060353	-33.986810085495243	0	0
+-0.53139121186120009	-34.868837281417477	0	0
+-1.2423372030603654	-33.986810085495243	0	0
+1.5531164760511251	-29.212407873170399	0	0
+-1.5531164760511358	-29.212407873170399	0	0
+-5.36623226958976e-015	-29.212407873170399	0	0
+-6.4053014950016715e-015	-34.868837281417477	0	0
+6.5782282366063098	-34.246826177693144	0	0
+7.1252109454876296	-33.254744480989963	0	0
+5.5315918659593963	-34.431376408828974	0	0
+4.6782843266289413	-33.68620366370849	0	0
+6.6022025393852699	-28.498909911882315	0	0
+3.543160245492964	-29.038301603423839	0	0
+5.072681392439117	-28.768605757653077	0	0
+6.0549100512828531	-34.339101293261059	0	0
+12.42518912512628	-32.584242590289811	0	0
+12.791588758866999	-31.512250293142451	0	0
+11.426500324053389	-32.947735587175337	0	0
+10.456758554379752	-32.362058989641483	0	0
+11.450684019435903	-26.919486994065927	0	0
+8.5317798359033805	-27.981881233546858	0	0
+9.9912319276696415	-27.450684113806393	0	0
+11.925844724589835	-32.765989088732574	0	0
+17.894616929528336	-29.931603280202861	0	0
+18.069300620664404	-28.81227232610587	0	0
+16.974220351889148	-30.462994492064052	0	0
+15.917509464830847	-30.054609529166228	0	0
+15.951242259881647	-24.522129085852544	0	0
+13.261165613288759	-26.075245561903674	0	0
+14.606203936585203	-25.298687323878109	0	0
+17.434418640708742	-30.197298886133456	0	0
+22.820325853639755	-26.369507350569023	0	0
+22.797985926610213	-25.236848044153845	0	0
+22.006187283702697	-27.052650724330405	0	0
+20.894614904841493	-26.833965966513503	0	0
+19.967130075978936	-21.379678694161584	0	0
+17.587617583987942	-23.376326748572957	0	0
+18.777373829983439	-22.37800272136727	0	0
+22.413256568671226	-26.711079037449714	0	0
+27.052650724330395	-22.006187283702712	0	0
+26.833965966513489	-20.894614904841504	0	0
+26.369507350569013	-22.820325853639762	0	0
+25.236848044153831	-22.797985926610224	0	0
+23.376326748572946	-17.587617583987953	0	0
+21.379678694161573	-19.967130075978947	0	0
+22.37800272136726	-18.77737382998345	0	0
+26.711079037449704	-22.413256568671237	0	0
+30.462994492064045	-16.974220351889162	0	0
+30.054609529166221	-15.917509464830859	0	0
+29.931603280202854	-17.894616929528343	0	0
+28.812272326105862	-18.069300620664414	0	0
+26.075245561903667	-13.261165613288767	0	0
+24.522129085852537	-15.951242259881656	0	0
+25.298687323878102	-14.606203936585212	0	0
+30.197298886133449	-17.434418640708753	0	0
+32.947735587175345	-11.426500324053377	0	0
+32.362058989641483	-10.456758554379739	0	0
+32.584242590289819	-12.425189125126268	0	0
+31.512250293142454	-12.791588758866986	0	0
+27.981881233546861	-8.5317798359033681	0	0
+26.919486994065931	-11.45068401943589	0	0
+27.450684113806396	-9.9912319276696291	0	0
+32.765989088732582	-11.925844724589822	0	0
+34.431376408828967	-5.5315918659594123	0	0
+33.686203663708483	-4.6782843266289564	0	0
+34.246826177693137	-6.5782282366063241	0	0
+33.254744480989956	-7.1252109454876429	0	0
+29.038301603423836	-3.5431602454929769	0	0
+28.498909911882311	-6.6022025393852823	0	0
+28.768605757653074	-5.0726813924391294	0	0
+34.339101293261052	-6.0549100512828682	0	0
+36.219301058047336	0.5519718976193132	0	0
+35.764897404793238	5.7458294208794811	0	0
+35.573199576503335	6.8330018293202022	0	0
+34.223795441805827	11.86904661995483	0	0
+33.846224426734828	12.906414458102958	0	0
+31.64282077239525	17.631628843510235	0	0
+31.090848874775933	18.587672214537093	0	0
+28.100395005855347	22.858482946690277	0	0
+27.39079361248562	23.704152956548505	0	0
+23.704152956548509	27.39079361248562	0	0
+22.85848294669028	28.100395005855347	0	0
+18.587672214537097	31.090848874775933	0	0
+17.631628843510246	31.642820772395243	0	0
+12.906414458102967	33.846224426734821	0	0
+11.869046619954837	34.223795441805819	0	0
+6.8330018293202111	35.573199576503335	0	0
+5.7458294208794864	35.764897404793238	0	0
+0.55197189761932119	36.219301058047336	0	0
+-0.55197189761930865	36.219301058047336	0	0
+-5.7458294208794749	35.764897404793238	0	0
+-6.8330018293201986	35.573199576503335	0	0
+-11.869046619954824	34.223795441805827	0	0
+-12.906414458102956	33.846224426734828	0	0
+-17.631628843510239	31.642820772395247	0	0
+-18.587672214537093	31.090848874775936	0	0
+-22.858482946690277	28.100395005855351	0	0
+-23.704152956548509	27.390793612485616	0	0
+-27.390793612485623	23.704152956548501	0	0
+-28.100395005855344	22.85848294669028	0	0
+-31.090848874775933	18.587672214537097	0	0
+-31.64282077239525	17.631628843510232	0	0
+-33.846224426734828	12.906414458102955	0	0
+-34.223795441805827	11.869046619954833	0	0
+-35.573199576503335	6.8330018293202048	0	0
+-35.764897404793238	5.7458294208794891	0	0
+-36.219301058047336	0.55197189761932342	0	0
+-36.219301058047336	-0.55197189761931453	0	0
+-35.764897404793238	-5.7458294208794811	0	0
+-35.573199576503335	-6.8330018293201968	0	0
+-34.223795441805827	-11.869046619954823	0	0
+-33.846224426734828	-12.906414458102962	0	0
+-31.642820772395247	-17.631628843510239	0	0
+-31.090848874775936	-18.58767221453709	0	0
+-28.100395005855351	-22.858482946690277	0	0
+-27.39079361248562	-23.704152956548509	0	0
+-23.704152956548505	-27.390793612485623	0	0
+-22.858482946690284	-28.100395005855344	0	0
+-18.587672214537086	-31.090848874775936	0	0
+-17.631628843510249	-31.642820772395243	0	0
+-12.906414458102956	-33.846224426734828	0	0
+-11.869046619954849	-34.223795441805819	0	0
+-6.8330018293202066	-35.573199576503335	0	0
+-5.7458294208794758	-35.764897404793238	0	0
+-0.55197189761929344	-36.219301058047336	0	0
+0.55197189761931231	-36.219301058047336	0	0
+5.7458294208794936	-35.764897404793238	0	0
+6.8330018293201942	-35.573199576503335	0	0
+11.869046619954837	-34.223795441805819	0	0
+12.906414458102944	-33.846224426734835	0	0
+17.631628843510235	-31.642820772395247	0	0
+18.587672214537104	-31.090848874775929	0	0
+22.858482946690295	-28.100395005855329	0	0
+23.704152956548505	-27.39079361248562	0	0
+27.390793612485634	-23.704152956548491	0	0
+28.100395005855344	-22.858482946690284	0	0
+31.090848874775936	-18.58767221453709	0	0
+31.642820772395243	-17.631628843510249	0	0
+33.846224426734828	-12.906414458102958	0	0
+34.223795441805819	-11.869046619954851	0	0
+35.573199576503335	-6.8330018293202102	0	0
+35.764897404793238	-5.7458294208794776	0	0
+36.219301058047336	-0.55197189761929566	0	0
+27.5	0	0	0
+-27.5	3.3677786976552213e-015	0	0
+49.500000000000007	0	0	0
+-49.500000000000007	6.0620016557793993e-015	0	0
+[NumSegments] = 480
+4	0	-1	0	0	0
+5	6	-1	0	0	0
+7	9	-1	0	0	0
+8	10	-1	0	0	0
+11	13	-1	0	0	0
+12	14	-1	0	0	0
+15	17	-1	0	0	0
+16	18	-1	0	0	0
+19	21	-1	0	0	0
+20	22	-1	0	0	0
+23	25	-1	0	0	0
+24	26	-1	0	0	0
+27	29	-1	0	0	0
+28	30	-1	0	0	0
+31	33	-1	0	0	0
+32	34	-1	0	0	0
+35	37	-1	0	0	0
+36	38	-1	0	0	0
+39	41	-1	0	0	0
+40	42	-1	0	0	0
+43	45	-1	0	0	0
+44	46	-1	0	0	0
+47	49	-1	0	0	0
+48	50	-1	0	0	0
+51	53	-1	0	0	0
+52	54	-1	0	0	0
+55	57	-1	0	0	0
+56	58	-1	0	0	0
+59	61	-1	0	0	0
+60	62	-1	0	0	0
+63	65	-1	0	0	0
+64	66	-1	0	0	0
+67	69	-1	0	0	0
+68	70	-1	0	0	0
+71	73	-1	0	0	0
+72	74	-1	0	0	0
+75	77	-1	0	0	0
+76	78	-1	0	0	0
+79	81	-1	0	0	0
+80	82	-1	0	0	0
+83	85	-1	0	0	0
+84	86	-1	0	0	0
+87	1	-1	0	0	0
+88	89	-1	0	0	0
+90	92	-1	0	0	0
+91	93	-1	0	0	0
+94	96	-1	0	0	0
+95	97	-1	0	0	0
+98	100	-1	0	0	0
+99	101	-1	0	0	0
+102	104	-1	0	0	0
+103	105	-1	0	0	0
+106	108	-1	0	0	0
+107	109	-1	0	0	0
+110	112	-1	0	0	0
+111	113	-1	0	0	0
+114	116	-1	0	0	0
+115	117	-1	0	0	0
+118	120	-1	0	0	0
+119	121	-1	0	0	0
+122	124	-1	0	0	0
+123	125	-1	0	0	0
+126	128	-1	0	0	0
+127	129	-1	0	0	0
+130	132	-1	0	0	0
+131	133	-1	0	0	0
+134	136	-1	0	0	0
+135	137	-1	0	0	0
+138	140	-1	0	0	0
+139	141	-1	0	0	0
+142	144	-1	0	0	0
+143	145	-1	0	0	0
+146	148	-1	0	0	0
+147	149	-1	0	0	0
+150	152	-1	0	0	0
+151	153	-1	0	0	0
+154	156	-1	0	0	0
+155	157	-1	0	0	0
+158	160	-1	0	0	0
+159	161	-1	0	0	0
+162	164	-1	0	0	0
+163	165	-1	0	0	0
+166	168	-1	0	0	0
+167	169	-1	0	0	0
+170	171	-1	0	0	0
+172	173	-1	0	0	0
+171	174	-1	0	0	0
+173	175	-1	0	0	0
+174	176	-1	0	0	0
+175	176	-1	0	0	0
+176	177	-1	0	0	0
+177	170	-1	0	0	0
+177	172	-1	0	0	0
+178	179	-1	0	0	0
+180	181	-1	0	0	0
+179	182	-1	0	0	0
+181	183	-1	0	0	0
+182	184	-1	0	0	0
+183	184	-1	0	0	0
+184	185	-1	0	0	0
+185	178	-1	0	0	0
+185	180	-1	0	0	0
+186	187	-1	0	0	0
+188	189	-1	0	0	0
+187	190	-1	0	0	0
+189	191	-1	0	0	0
+190	192	-1	0	0	0
+191	192	-1	0	0	0
+192	193	-1	0	0	0
+193	186	-1	0	0	0
+193	188	-1	0	0	0
+194	195	-1	0	0	0
+196	197	-1	0	0	0
+195	198	-1	0	0	0
+197	199	-1	0	0	0
+198	200	-1	0	0	0
+199	200	-1	0	0	0
+200	201	-1	0	0	0
+201	194	-1	0	0	0
+201	196	-1	0	0	0
+202	203	-1	0	0	0
+204	205	-1	0	0	0
+203	206	-1	0	0	0
+205	207	-1	0	0	0
+206	208	-1	0	0	0
+207	208	-1	0	0	0
+208	209	-1	0	0	0
+209	202	-1	0	0	0
+209	204	-1	0	0	0
+210	211	-1	0	0	0
+212	213	-1	0	0	0
+211	214	-1	0	0	0
+213	215	-1	0	0	0
+214	216	-1	0	0	0
+215	216	-1	0	0	0
+216	217	-1	0	0	0
+217	210	-1	0	0	0
+217	212	-1	0	0	0
+218	219	-1	0	0	0
+220	221	-1	0	0	0
+219	222	-1	0	0	0
+221	223	-1	0	0	0
+222	224	-1	0	0	0
+223	224	-1	0	0	0
+224	225	-1	0	0	0
+225	218	-1	0	0	0
+225	220	-1	0	0	0
+226	227	-1	0	0	0
+228	229	-1	0	0	0
+227	230	-1	0	0	0
+229	231	-1	0	0	0
+230	232	-1	0	0	0
+231	232	-1	0	0	0
+232	233	-1	0	0	0
+233	226	-1	0	0	0
+233	228	-1	0	0	0
+234	235	-1	0	0	0
+236	237	-1	0	0	0
+235	238	-1	0	0	0
+237	239	-1	0	0	0
+238	240	-1	0	0	0
+239	240	-1	0	0	0
+240	241	-1	0	0	0
+241	234	-1	0	0	0
+241	236	-1	0	0	0
+242	243	-1	0	0	0
+244	245	-1	0	0	0
+243	246	-1	0	0	0
+245	247	-1	0	0	0
+246	248	-1	0	0	0
+247	248	-1	0	0	0
+248	249	-1	0	0	0
+249	242	-1	0	0	0
+249	244	-1	0	0	0
+250	251	-1	0	0	0
+252	253	-1	0	0	0
+251	254	-1	0	0	0
+253	255	-1	0	0	0
+254	256	-1	0	0	0
+255	256	-1	0	0	0
+256	257	-1	0	0	0
+257	250	-1	0	0	0
+257	252	-1	0	0	0
+258	259	-1	0	0	0
+260	261	-1	0	0	0
+259	262	-1	0	0	0
+261	263	-1	0	0	0
+262	264	-1	0	0	0
+263	264	-1	0	0	0
+264	265	-1	0	0	0
+265	258	-1	0	0	0
+265	260	-1	0	0	0
+266	267	-1	0	0	0
+268	269	-1	0	0	0
+267	270	-1	0	0	0
+269	271	-1	0	0	0
+270	272	-1	0	0	0
+271	272	-1	0	0	0
+272	273	-1	0	0	0
+273	266	-1	0	0	0
+273	268	-1	0	0	0
+274	275	-1	0	0	0
+276	277	-1	0	0	0
+275	278	-1	0	0	0
+277	279	-1	0	0	0
+278	280	-1	0	0	0
+279	280	-1	0	0	0
+280	281	-1	0	0	0
+281	274	-1	0	0	0
+281	276	-1	0	0	0
+282	283	-1	0	0	0
+284	285	-1	0	0	0
+283	286	-1	0	0	0
+285	287	-1	0	0	0
+286	288	-1	0	0	0
+287	288	-1	0	0	0
+288	289	-1	0	0	0
+289	282	-1	0	0	0
+289	284	-1	0	0	0
+290	291	-1	0	0	0
+292	293	-1	0	0	0
+291	294	-1	0	0	0
+293	295	-1	0	0	0
+294	296	-1	0	0	0
+295	296	-1	0	0	0
+296	297	-1	0	0	0
+297	290	-1	0	0	0
+297	292	-1	0	0	0
+298	299	-1	0	0	0
+300	301	-1	0	0	0
+299	302	-1	0	0	0
+301	303	-1	0	0	0
+302	304	-1	0	0	0
+303	304	-1	0	0	0
+304	305	-1	0	0	0
+305	298	-1	0	0	0
+305	300	-1	0	0	0
+306	307	-1	0	0	0
+308	309	-1	0	0	0
+307	310	-1	0	0	0
+309	311	-1	0	0	0
+310	312	-1	0	0	0
+311	312	-1	0	0	0
+312	313	-1	0	0	0
+313	306	-1	0	0	0
+313	308	-1	0	0	0
+314	315	-1	0	0	0
+316	317	-1	0	0	0
+315	318	-1	0	0	0
+317	319	-1	0	0	0
+318	320	-1	0	0	0
+319	320	-1	0	0	0
+320	321	-1	0	0	0
+321	314	-1	0	0	0
+321	316	-1	0	0	0
+322	323	-1	0	0	0
+324	325	-1	0	0	0
+323	326	-1	0	0	0
+325	327	-1	0	0	0
+326	328	-1	0	0	0
+327	328	-1	0	0	0
+328	329	-1	0	0	0
+329	322	-1	0	0	0
+329	324	-1	0	0	0
+330	331	-1	0	0	0
+332	333	-1	0	0	0
+331	334	-1	0	0	0
+333	335	-1	0	0	0
+334	336	-1	0	0	0
+335	336	-1	0	0	0
+336	337	-1	0	0	0
+337	330	-1	0	0	0
+337	332	-1	0	0	0
+338	339	-1	0	0	0
+340	341	-1	0	0	0
+339	342	-1	0	0	0
+341	343	-1	0	0	0
+342	344	-1	0	0	0
+343	344	-1	0	0	0
+344	345	-1	0	0	0
+345	338	-1	0	0	0
+345	340	-1	0	0	0
+346	347	-1	0	0	0
+348	349	-1	0	0	0
+347	350	-1	0	0	0
+349	351	-1	0	0	0
+350	352	-1	0	0	0
+351	352	-1	0	0	0
+352	353	-1	0	0	0
+353	346	-1	0	0	0
+353	348	-1	0	0	0
+354	355	-1	0	0	0
+356	357	-1	0	0	0
+355	358	-1	0	0	0
+357	359	-1	0	0	0
+358	360	-1	0	0	0
+359	360	-1	0	0	0
+360	361	-1	0	0	0
+361	354	-1	0	0	0
+361	356	-1	0	0	0
+362	363	-1	0	0	0
+364	365	-1	0	0	0
+363	366	-1	0	0	0
+365	367	-1	0	0	0
+366	368	-1	0	0	0
+367	368	-1	0	0	0
+368	369	-1	0	0	0
+369	362	-1	0	0	0
+369	364	-1	0	0	0
+370	371	-1	0	0	0
+372	373	-1	0	0	0
+371	374	-1	0	0	0
+373	375	-1	0	0	0
+374	376	-1	0	0	0
+375	376	-1	0	0	0
+376	377	-1	0	0	0
+377	370	-1	0	0	0
+377	372	-1	0	0	0
+378	379	-1	0	0	0
+380	381	-1	0	0	0
+379	382	-1	0	0	0
+381	383	-1	0	0	0
+382	384	-1	0	0	0
+383	384	-1	0	0	0
+384	385	-1	0	0	0
+385	378	-1	0	0	0
+385	380	-1	0	0	0
+386	387	-1	0	0	0
+388	389	-1	0	0	0
+387	390	-1	0	0	0
+389	391	-1	0	0	0
+390	392	-1	0	0	0
+391	392	-1	0	0	0
+392	393	-1	0	0	0
+393	386	-1	0	0	0
+393	388	-1	0	0	0
+394	395	-1	0	0	0
+396	397	-1	0	0	0
+395	398	-1	0	0	0
+397	399	-1	0	0	0
+398	400	-1	0	0	0
+399	400	-1	0	0	0
+400	401	-1	0	0	0
+401	394	-1	0	0	0
+401	396	-1	0	0	0
+402	403	-1	0	0	0
+404	405	-1	0	0	0
+403	406	-1	0	0	0
+405	407	-1	0	0	0
+406	408	-1	0	0	0
+407	408	-1	0	0	0
+408	409	-1	0	0	0
+409	402	-1	0	0	0
+409	404	-1	0	0	0
+410	411	-1	0	0	0
+412	413	-1	0	0	0
+411	414	-1	0	0	0
+413	415	-1	0	0	0
+414	416	-1	0	0	0
+415	416	-1	0	0	0
+416	417	-1	0	0	0
+417	410	-1	0	0	0
+417	412	-1	0	0	0
+418	419	-1	0	0	0
+420	421	-1	0	0	0
+419	422	-1	0	0	0
+421	423	-1	0	0	0
+422	424	-1	0	0	0
+423	424	-1	0	0	0
+424	425	-1	0	0	0
+425	418	-1	0	0	0
+425	420	-1	0	0	0
+426	427	-1	0	0	0
+428	429	-1	0	0	0
+427	430	-1	0	0	0
+429	431	-1	0	0	0
+430	432	-1	0	0	0
+431	432	-1	0	0	0
+432	433	-1	0	0	0
+433	426	-1	0	0	0
+433	428	-1	0	0	0
+434	435	-1	0	0	0
+436	437	-1	0	0	0
+435	438	-1	0	0	0
+437	439	-1	0	0	0
+438	440	-1	0	0	0
+439	440	-1	0	0	0
+440	441	-1	0	0	0
+441	434	-1	0	0	0
+441	436	-1	0	0	0
+442	443	-1	0	0	0
+444	445	-1	0	0	0
+443	446	-1	0	0	0
+445	447	-1	0	0	0
+446	448	-1	0	0	0
+447	448	-1	0	0	0
+448	449	-1	0	0	0
+449	442	-1	0	0	0
+449	444	-1	0	0	0
+450	451	-1	0	0	0
+452	453	-1	0	0	0
+451	454	-1	0	0	0
+453	455	-1	0	0	0
+454	456	-1	0	0	0
+455	456	-1	0	0	0
+456	457	-1	0	0	0
+457	450	-1	0	0	0
+457	452	-1	0	0	0
+458	170	-1	0	0	0
+459	180	-1	0	0	0
+460	178	-1	0	0	0
+461	188	-1	0	0	0
+462	186	-1	0	0	0
+463	196	-1	0	0	0
+464	194	-1	0	0	0
+465	204	-1	0	0	0
+466	202	-1	0	0	0
+467	212	-1	0	0	0
+468	210	-1	0	0	0
+469	220	-1	0	0	0
+470	218	-1	0	0	0
+471	228	-1	0	0	0
+472	226	-1	0	0	0
+473	236	-1	0	0	0
+474	234	-1	0	0	0
+475	244	-1	0	0	0
+476	242	-1	0	0	0
+477	252	-1	0	0	0
+478	250	-1	0	0	0
+479	260	-1	0	0	0
+480	258	-1	0	0	0
+481	268	-1	0	0	0
+482	266	-1	0	0	0
+483	276	-1	0	0	0
+484	274	-1	0	0	0
+485	284	-1	0	0	0
+486	282	-1	0	0	0
+487	292	-1	0	0	0
+488	290	-1	0	0	0
+489	300	-1	0	0	0
+490	298	-1	0	0	0
+491	308	-1	0	0	0
+492	306	-1	0	0	0
+493	316	-1	0	0	0
+494	314	-1	0	0	0
+495	324	-1	0	0	0
+496	322	-1	0	0	0
+497	332	-1	0	0	0
+498	330	-1	0	0	0
+499	340	-1	0	0	0
+500	338	-1	0	0	0
+501	348	-1	0	0	0
+502	346	-1	0	0	0
+503	356	-1	0	0	0
+504	354	-1	0	0	0
+505	364	-1	0	0	0
+506	362	-1	0	0	0
+507	372	-1	0	0	0
+508	370	-1	0	0	0
+509	380	-1	0	0	0
+510	378	-1	0	0	0
+511	388	-1	0	0	0
+512	386	-1	0	0	0
+513	396	-1	0	0	0
+514	394	-1	0	0	0
+515	404	-1	0	0	0
+516	402	-1	0	0	0
+517	412	-1	0	0	0
+518	410	-1	0	0	0
+519	420	-1	0	0	0
+520	418	-1	0	0	0
+521	428	-1	0	0	0
+522	426	-1	0	0	0
+523	436	-1	0	0	0
+524	434	-1	0	0	0
+525	444	-1	0	0	0
+526	442	-1	0	0	0
+527	452	-1	0	0	0
+528	450	-1	0	0	0
+529	172	-1	0	0	0
+[NumArcSegments] = 168
+0	6	6.9500749153858425	1	0	0	0	1
+2	3	180	1	0	0	0	1
+1	89	6.9500749153858381	1	0	0	0	1
+3	2	180	1	0	0	0	1
+4	5	6.9500749153858408	1	0	0	0	1
+6	9	1.6213536560427315	1	0	0	0	1
+7	8	6.950074915385839	1	0	0	0	1
+9	10	6.9500749153858425	1	0	0	0	1
+10	13	1.6213536560427342	1	0	0	0	1
+11	12	6.9500749153858408	1	0	0	0	1
+13	14	6.9500749153858363	1	0	0	0	1
+14	17	1.6213536560427306	1	0	0	0	1
+15	16	6.9500749153858443	1	0	0	0	1
+17	18	6.950074915385847	1	0	0	0	1
+18	21	1.621353656042728	1	0	0	0	1
+19	20	6.9500749153858381	1	0	0	0	1
+21	22	6.9500749153858399	1	0	0	0	1
+22	25	1.6213536560427311	1	0	0	0	1
+23	24	6.9500749153858381	1	0	0	0	1
+25	26	6.9500749153858354	1	0	0	0	1
+26	29	1.6213536560427337	1	0	0	0	1
+27	28	6.9500749153858381	1	0	0	0	1
+29	30	6.950074915385847	1	0	0	0	1
+30	33	1.6213536560427217	1	0	0	0	1
+31	32	6.9500749153858505	1	0	0	0	1
+33	34	6.9500749153858523	1	0	0	0	1
+34	37	1.6213536560427306	1	0	0	0	1
+35	36	6.9500749153858381	1	0	0	0	1
+37	38	6.9500749153858425	1	0	0	0	1
+38	41	1.621353656042726	1	0	0	0	1
+39	40	6.9500749153858381	1	0	0	0	1
+41	42	6.9500749153858417	1	0	0	0	1
+42	45	1.6213536560427304	1	0	0	0	1
+43	44	6.9500749153858381	1	0	0	0	1
+45	46	6.9500749153858399	1	0	0	0	1
+46	49	1.6213536560427304	1	0	0	0	1
+47	48	6.9500749153858381	1	0	0	0	1
+49	50	6.9500749153858417	1	0	0	0	1
+50	53	1.6213536560427415	1	0	0	0	1
+51	52	6.9500749153858505	1	0	0	0	1
+53	54	6.9500749153858523	1	0	0	0	1
+54	57	1.6213536560427344	1	0	0	0	1
+55	56	6.9500749153858381	1	0	0	0	1
+57	58	6.950074915385847	1	0	0	0	1
+58	61	1.6213536560427146	1	0	0	0	1
+59	60	6.950074915385863	1	0	0	0	1
+61	62	6.9500749153858665	1	0	0	0	1
+62	65	1.6213536560426929	1	0	0	0	1
+63	64	6.950074915385863	1	0	0	0	1
+65	66	6.9500749153858603	1	0	0	0	1
+66	69	1.6213536560427408	1	0	0	0	1
+67	68	6.9500749153858381	1	0	0	0	1
+69	70	6.9500749153858425	1	0	0	0	1
+70	73	1.6213536560427471	1	0	0	0	1
+71	72	6.9500749153858381	1	0	0	0	1
+73	74	6.9500749153858354	1	0	0	0	1
+74	77	1.6213536560427149	1	0	0	0	1
+75	76	6.9500749153858381	1	0	0	0	1
+77	78	6.950074915385839	1	0	0	0	1
+78	81	1.6213536560427435	1	0	0	0	1
+79	80	6.9500749153858381	1	0	0	0	1
+81	82	6.9500749153858363	1	0	0	0	1
+82	85	1.6213536560427151	1	0	0	0	1
+83	84	6.9500749153858381	1	0	0	0	1
+85	86	6.9500749153858399	1	0	0	0	1
+86	1	1.6213536560427424	1	0	0	0	1
+87	88	6.9500749153858381	1	0	0	0	1
+89	92	1.621353656042716	1	0	0	0	1
+90	91	6.9500749153858381	1	0	0	0	1
+92	93	6.9500749153858425	1	0	0	0	1
+93	96	1.6213536560427437	1	0	0	0	1
+94	95	6.9500749153858381	1	0	0	0	1
+96	97	6.950074915385847	1	0	0	0	1
+97	100	1.6213536560427406	1	0	0	0	1
+98	99	6.950074915385863	1	0	0	0	1
+100	101	6.9500749153858665	1	0	0	0	1
+101	104	1.621353656042718	1	0	0	0	1
+102	103	6.9500749153858381	1	0	0	0	1
+104	105	6.9500749153858337	1	0	0	0	1
+105	108	1.6213536560427466	1	0	0	0	1
+106	107	6.9500749153858381	1	0	0	0	1
+108	109	6.9500749153858363	1	0	0	0	1
+109	112	1.6213536560427155	1	0	0	0	1
+110	111	6.9500749153858381	1	0	0	0	1
+112	113	6.9500749153858399	1	0	0	0	1
+113	116	1.6213536560427209	1	0	0	0	1
+114	115	6.9500749153858381	1	0	0	0	1
+116	117	6.9500749153858319	1	0	0	0	1
+117	120	1.6213536560427178	1	0	0	0	1
+118	119	6.9500749153858887	1	0	0	0	1
+120	121	6.9500749153858878	1	0	0	0	1
+121	124	1.6213536560426653	1	0	0	0	1
+122	123	6.9500749153858381	1	0	0	0	1
+124	125	6.9500749153858443	1	0	0	0	1
+125	128	1.6213536560428194	1	0	0	0	1
+126	127	6.9500749153858381	1	0	0	0	1
+128	129	6.9500749153858399	1	0	0	0	1
+129	132	1.6213536560427178	1	0	0	0	1
+130	131	6.9500749153858381	1	0	0	0	1
+132	133	6.9500749153858381	1	0	0	0	1
+133	136	1.6213536560427195	1	0	0	0	1
+134	135	6.9500749153858381	1	0	0	0	1
+136	137	6.9500749153858381	1	0	0	0	1
+137	140	1.6213536560427657	1	0	0	0	1
+138	139	6.9500749153857866	1	0	0	0	1
+140	141	6.9500749153857893	1	0	0	0	1
+141	144	1.6213536560427726	1	0	0	0	1
+142	143	6.9500749153857866	1	0	0	0	1
+144	145	6.9500749153857937	1	0	0	0	1
+145	148	1.6213536560427693	1	0	0	0	1
+146	147	6.9500749153857866	1	0	0	0	1
+148	149	6.9500749153857884	1	0	0	0	1
+149	152	1.6213536560427717	1	0	0	0	1
+150	151	6.9500749153857866	1	0	0	0	1
+152	153	6.9500749153857981	1	0	0	0	1
+153	156	1.6213536560428168	1	0	0	0	1
+154	155	6.9500749153858887	1	0	0	0	1
+156	157	6.9500749153858878	1	0	0	0	1
+157	160	1.6213536560426607	1	0	0	0	1
+158	159	6.9500749153858887	1	0	0	0	1
+160	161	6.9500749153858932	1	0	0	0	1
+161	164	1.62135365604267	1	0	0	0	1
+162	163	6.9500749153858887	1	0	0	0	1
+164	165	6.9500749153858923	1	0	0	0	1
+165	168	1.6213536560427166	1	0	0	0	1
+166	167	6.9500749153858381	1	0	0	0	1
+168	169	6.9500749153858399	1	0	0	0	1
+169	0	1.6213536560427313	1	0	0	0	1
+458	459	8.2537922478692316	1	0	0	0	1
+460	461	8.2537922478692334	1	0	0	0	1
+462	463	8.2537922478692298	1	0	0	0	1
+464	465	8.2537922478692298	1	0	0	0	1
+466	467	8.2537922478692298	1	0	0	0	1
+468	469	8.2537922478692298	1	0	0	0	1
+470	471	8.2537922478692298	1	0	0	0	1
+472	473	8.2537922478692298	1	0	0	0	1
+474	475	8.2537922478692298	1	0	0	0	1
+476	477	8.2537922478692298	1	0	0	0	1
+478	479	8.2537922478692298	1	0	0	0	1
+480	481	8.2537922478692423	1	0	0	0	1
+482	483	8.2537922478692298	1	0	0	0	1
+484	485	8.2537922478692298	1	0	0	0	1
+486	487	8.2537922478692298	1	0	0	0	1
+488	489	8.2537922478692298	1	0	0	0	1
+490	491	8.2537922478692298	1	0	0	0	1
+492	493	8.2537922478692298	1	0	0	0	1
+494	495	8.2537922478692298	1	0	0	0	1
+496	497	8.2537922478692298	1	0	0	0	1
+498	499	8.2537922478692298	1	0	0	0	1
+500	501	8.2537922478692298	1	0	0	0	1
+502	503	8.2537922478692298	1	0	0	0	1
+504	505	8.2537922478692547	1	0	0	0	1
+506	507	8.2537922478692547	1	0	0	0	1
+508	509	8.2537922478692547	1	0	0	0	1
+510	511	8.2537922478692547	1	0	0	0	1
+512	513	8.2537922478692547	1	0	0	0	1
+514	515	8.2537922478692547	1	0	0	0	1
+516	517	8.2537922478692547	1	0	0	0	1
+518	519	8.2537922478692547	1	0	0	0	1
+520	521	8.2537922478692547	1	0	0	0	1
+522	523	8.2537922478692547	1	0	0	0	1
+524	525	8.2537922478692547	1	0	0	0	1
+526	527	8.2537922478692547	1	0	0	0	1
+528	529	8.2537922478692547	1	0	0	0	1
+530	531	180	1	0	0	0	1
+531	530	180	1	0	0	0	1
+532	533	180	1	1	0	0	1
+533	532	180	1	1	0	0	1
+[NumHoles] = 0
+[NumBlockLabels] = 119
+2.6555173834070436e-015	43.367889994991508	117	1	0	90	0	1	0
+39.365766457852352	2.3904988993375973	43	1	0	3.4750374576929204	0	1	0
+38.569797998254671	8.2309620443626077	43	1	0	192.04646602912149	0	1	0
+36.912243986048594	13.887559098571906	43	1	0	20.617894600550066	0	1	0
+34.430131438841258	19.233931031019704	43	1	0	209.18932317197863	0	1	0
+31.178906649369754	24.150648727348802	43	1	0	37.760751743407205	0	1	0
+27.231196606943637	28.527880838854628	43	1	0	226.33218031483577	0	1	0
+22.67518663051624	32.267847233324467	43	1	0	54.903608886264344	0	1	0
+17.612650454381075	35.287003241614293	43	1	0	243.47503745769293	0	1	0
+12.15667677112382	37.517905907504037	43	1	0	72.04646602912149	0	1	0
+6.4291430171033124	38.910720551893405	43	1	0	260.61789460055007	0	1	0
+0.55799283191974958	39.43433399718365	43	1	0	89.189323171978629	0	1	0
+-5.3256219910735014	39.077049584252165	43	1	0	277.76075174340718	0	1	0
+-11.090271219111607	37.846848456489113	43	1	0	106.33218031483578	0	1	0
+-16.607182114236288	35.77121127424256	43	1	0	294.90360888626435	0	1	0
+-21.753116003471266	32.8965043422767	43	1	0	123.47503745769291	0	1	0
+-26.413121227130834	29.286943863141445	43	1	0	312.04646602912146	0	1	0
+-30.483100968945287	25.023161453321496	43	1	0	140.61789460055007	0	1	0
+-33.872138606921517	20.200402966163935	43	1	0	329.18932317197869	0	1	0
+-36.504528640443255	14.926400856903379	43	1	0	157.76075174340718	0	1	0
+-38.321467826055247	9.3189676176344829	43	1	0	346.3321803148358	0	1	0
+-39.282368744752517	3.5033640409181053	43	1	0	174.90360888626435	0	1	0
+-39.365766457852352	-2.3904988993375742	43	1	0	363.47503745769291	0	1	0
+-38.569797998254671	-8.2309620443625899	43	1	0	192.04646602912146	0	1	0
+-36.912243986048601	-13.887559098571892	43	1	0	380.61789460055002	0	1	0
+-34.430131438841251	-19.233931031019715	43	1	0	209.18932317197866	0	1	0
+-31.178906649369754	-24.150648727348802	43	1	0	397.76075174340724	0	1	0
+-27.231196606943634	-28.527880838854632	43	1	0	226.3321803148358	0	1	0
+-22.675186630516258	-32.267847233324453	43	1	0	414.90360888626435	0	1	0
+-17.612650454381079	-35.287003241614293	43	1	0	243.47503745769293	0	1	0
+-12.156676771123831	-37.517905907504037	43	1	0	432.04646602912146	0	1	0
+-6.4291430171033337	-38.910720551893398	43	1	0	260.61789460055002	0	1	0
+-0.55799283191974569	-39.43433399718365	43	1	0	449.18932317197863	0	1	0
+5.3256219910735325	-39.077049584252158	43	1	0	277.76075174340724	0	1	0
+11.090271219111587	-37.84684845648912	43	1	0	466.33218031483574	0	1	0
+16.607182114236284	-35.771211274242567	43	1	0	294.90360888626435	0	1	0
+21.753116003471263	-32.896504342276707	43	1	0	483.47503745769291	0	1	0
+26.41312122713083	-29.286943863141449	43	1	0	312.04646602912146	0	1	0
+30.483100968945259	-25.023161453321528	43	1	0	500.61789460055002	0	1	0
+33.872138606921524	-20.200402966163924	43	1	0	329.18932317197869	0	1	0
+36.504528640443276	-14.926400856903317	43	1	0	517.76075174340735	0	1	0
+38.321467826055247	-9.31896761763449	43	1	0	346.3321803148358	0	1	0
+39.282368744752524	-3.5033640409180751	43	1	0	534.90360888626446	0	1	0
+31.599988550677054	0.4815748823289453	115	1	1	0	0	18	0
+31.20353832053036	5.0130217483474464	115	1	2	0	0	18	0
+31.036289119077185	5.9615391038944203	115	1	3	0	0	18	0
+29.858984368266608	10.355300249911705	115	1	4	0	0	18	0
+29.529567747714236	11.260364976472408	115	1	5	0	0	18	0
+27.607180285348207	15.382938193417161	115	1	6	0	0	18	0
+27.125605403019261	16.217050357259893	115	1	7	0	0	18	0
+24.516545999366787	19.943173344057946	115	1	8	0	0	18	0
+23.897445264372188	20.680988869165478	115	1	9	0	0	18	0
+20.680988869165482	23.897445264372188	115	1	10	0	0	18	0
+19.94317334405795	24.516545999366787	115	1	11	0	0	18	0
+16.217050357259897	27.125605403019261	115	1	12	0	0	18	0
+15.382938193417164	27.607180285348203	115	1	13	0	0	18	0
+11.260364976472417	29.529567747714232	115	1	14	0	0	18	0
+10.355300249911711	29.858984368266604	115	1	15	0	0	18	0
+5.9615391038944283	31.036289119077182	115	1	16	0	0	18	0
+5.0130217483474517	31.20353832053036	115	1	17	0	0	18	0
+0.48157488232895213	31.599988550677054	115	1	18	0	0	18	0
+-0.48157488232894119	31.599988550677054	115	1	19	0	0	18	0
+-5.0130217483474411	31.20353832053036	115	1	20	0	0	18	0
+-5.9615391038944177	31.036289119077185	115	1	21	0	0	18	0
+-10.3553002499117	29.858984368266608	115	1	22	0	0	18	0
+-11.260364976472406	29.529567747714236	115	1	23	0	0	18	0
+-15.382938193417161	27.607180285348207	115	1	24	0	0	18	0
+-16.217050357259879	27.125605403019271	115	1	25	0	0	18	0
+-19.943173344057946	24.516545999366791	115	1	26	0	0	18	0
+-20.680988869165471	23.897445264372195	115	1	27	0	0	18	0
+-23.897445264372191	20.680988869165475	115	1	28	0	0	18	0
+-24.516545999366777	19.943173344057961	115	1	29	0	0	18	0
+-27.125605403019261	16.217050357259897	115	1	30	0	0	18	0
+-27.607180285348203	15.382938193417166	115	1	31	0	0	18	0
+-29.529567747714236	11.260364976472404	115	1	32	0	0	18	0
+-29.858984368266604	10.355300249911719	115	1	33	0	0	18	0
+-31.036289119077185	5.961539103894423	115	1	34	0	0	18	0
+-31.203538320530356	5.0130217483474677	115	1	35	0	0	18	0
+-31.599988550677054	0.48157488232895401	115	1	36	0	0	18	0
+-31.599988550677054	-0.48157488232893225	115	1	37	0	0	18	0
+-31.20353832053036	-5.0130217483474464	115	1	38	0	0	18	0
+-31.036289119077189	-5.9615391038944026	115	1	39	0	0	18	0
+-29.858984368266611	-10.355300249911698	115	1	40	0	0	18	0
+-29.529567747714239	-11.260364976472399	115	1	41	0	0	18	0
+-27.607180285348207	-15.382938193417159	115	1	42	0	0	18	0
+-27.125605403019271	-16.217050357259879	115	1	43	0	0	18	0
+-24.516545999366791	-19.943173344057946	115	1	44	0	0	18	0
+-23.897445264372195	-20.680988869165471	115	1	45	0	0	18	0
+-20.680988869165478	-23.897445264372191	115	1	46	0	0	18	0
+-19.943173344057953	-24.516545999366784	115	1	47	0	0	18	0
+-16.217050357259911	-27.12560540301925	115	1	48	0	0	18	0
+-15.382938193417168	-27.607180285348203	115	1	49	0	0	18	0
+-11.260364976472433	-29.529567747714225	115	1	50	0	0	18	0
+-10.355300249911721	-29.858984368266601	115	1	51	0	0	18	0
+-5.9615391038944532	-31.036289119077178	115	1	52	0	0	18	0
+-5.013021748347442	-31.20353832053036	115	1	53	0	0	18	0
+-0.48157488232895596	-31.599988550677054	115	1	54	0	0	18	0
+0.48157488232894441	-31.599988550677054	115	1	55	0	0	18	0
+5.0130217483474304	-31.203538320530363	115	1	56	0	0	18	0
+5.9615391038944132	-31.036289119077185	115	1	57	0	0	18	0
+10.355300249911684	-29.858984368266615	115	1	58	0	0	18	0
+11.260364976472397	-29.529567747714239	115	1	59	0	0	18	0
+15.382938193417134	-27.607180285348221	115	1	60	0	0	18	0
+16.2170503572599	-27.125605403019257	115	1	61	0	0	18	0
+19.943173344057943	-24.516545999366791	115	1	62	0	0	18	0
+20.680988869165478	-23.897445264372188	115	1	63	0	0	18	0
+23.897445264372177	-20.680988869165489	115	1	64	0	0	18	0
+24.516545999366784	-19.943173344057953	115	1	65	0	0	18	0
+27.12560540301925	-16.217050357259915	115	1	66	0	0	18	0
+27.607180285348203	-15.38293819341717	115	1	67	0	0	18	0
+29.529567747714225	-11.260364976472435	115	1	68	0	0	18	0
+29.858984368266601	-10.355300249911723	115	1	69	0	0	18	0
+31.036289119077178	-5.961539103894455	115	1	70	0	0	18	0
+31.20353832053036	-5.0130217483474437	115	1	71	0	0	18	0
+31.599988550677054	-0.48157488232895795	115	1	72	0	0	18	0
+2.246133570771615e-015	36.682144963518638	119	1	0	90	0	1	0
+1.7364406808733258e-015	28.35822838196782	117	1	0	90	0	1	0
+0	0	119	1	0	0	0	1	0
+2.8932280629856218e-015	47.25	119	1	0	0	0	1	0

@@ -59,7 +59,7 @@ if __name__ == "__main__":
     r_ext = 90/2
     n_r = 80
     n_a = 240
-    n_samples = 10
+    n_samples = 5000
 
     temp_path = 'data_gen/temp/'
 

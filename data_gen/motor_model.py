@@ -107,7 +107,7 @@ class BLDC_Process:
             stack_length = rng.triangular(left=min,right=max,mode=mode)
 
             # stator outer diameter
-            min_rotor = 3.5 # min rotor thickness
+            min_rotor = 4 # min rotor thickness
             min_gap = 0.5
             max_gap = 2
 

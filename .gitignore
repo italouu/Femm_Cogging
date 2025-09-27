@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+/data_gen/torch_data/
 /data_gen/temp/
 /data_gen/rawdata/
 /data_gen/rawdata/*.csv

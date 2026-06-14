@@ -1,0 +1,756 @@
+# Instruções para o Claude Code
+
+## Regras obrigatórias
+- Sempre, antes de propor código explique a proposta e resuma o que pretende fazer
+- NUNCA mova, renomeie ou delete um arquivo sem confirmar comigo antes
+- NUNCA delete código — se precisar remover algo, comente com `# [REMOVIDO]` e explique o motivo
+- Trabalharemos por métodos
+    | - Comentar código antigo
+    | - Inserir código novo
+    | - Realizar testes
+    | - Confirmar atualização e remover código antigo
+
+## Contexto do projeto
+Predição de campos eletromagnéticos (B-field) em motores BLDC usando Neural Operators (FNO).
+Pipeline: simulação FEM → dados em grade/quadtree → treino de FNO2d ou FNO_GNN.
+
+### Estrutura
+```
+src/configs/      __init__.py  (re-exporta DatagenConfig, NnCfg, FNOConfig, MaskedFNO2dConfig, FNO_GNNConfig, MaskedFNO_GNNConfig, FNORefConfig, MonitorCfg, EvalCfg)
+                  datagen.py   (DatagenConfig — geometria, simulação, qtree, chunks)
+                  training.py  (NnCfg, FNOConfig, FNO_GNNConfig, MaskedFNO2dConfig, MaskedFNO_GNNConfig, FNORefConfig — tabela arch×loss documentada; NnCfg valida arch↔arch_cfg em __post_init__)
+                  monitor.py   (MonitorCfg)
+                  eval.py      (EvalCfg)
+src/training/     model_manager.py (ModelManager — run_id, diretórios, config.json, metrics.jsonl, status.txt)
+src/data_gen/     motor_model.py (BLDC_Process, BLDC_FEMM_Model, BLDC_Shapely_Model)
+                  data_utils.py  (quadtree utils, geração, csv→pt, check_data,
+                                  combine_grids, match_data_to_depth, compute_cells,
+                                  _read_grid_hw,
+                                  QtreeSampleUnifier, GridSampleUnifier,
+                                  save_qtree_chunks [REMOVIDO],
+                                  build_node_x_motor [lazy], build_graph_edges_motor [lazy])
+                  parsers/       sistema de parsers por arquitetura
+                      __init__.py    (re-exporta tudo + PARSER_REGISTRY dict {nome→parser})
+                      _base.py       (MotorQtreeParserConfig, apply_parser_config)
+                      fno_gnn.py     (FNO_GNN_PARSER — build_graph=True, node_x [S,5])
+                      fno2d.py       (FNO2D_PARSER  — build_graph=False, apenas x_hw/y_hw)
+                      masked_fno2d.py (MASKED_FNO2D_PARSER — build_graph=False, x_hw_cols=[0,1])
+                      masked_fno_gnn.py (MASKED_FNO_GNN_PARSER — build_graph=True, idêntico ao FNO_GNN_PARSER)
+src/neural_op/    models.py [REMOVIDO] — migrado para archs/
+                  training_utils.py
+                  losses.py    (LOSS_REGISTRY — mse, mae, relative_l2, masked_fno_loss, masked_fno_gnn_loss;
+                               helpers internos: masked_gnn_node_loss)
+                  monitor.py   (TrainingMonitor)
+                  archs/
+                      _blocks.py      (NodeMLP, MLP, SpectralConv, FNO_Blocks, EdgeConvLayer, GNN)
+                      fno.py          (FNO2d, fno_step_fn)
+                      fno_gnn.py      (FNO_GNN, make_fno_gnn_step)
+                      fno_mat.py      (MaskedFNO2d, masked_fno_step_fn, _make_material_masks)
+                      masked_fno_gnn.py (MaskedFNO_GNN, make_masked_fno_gnn_step, _material_ids_from_mu)
+                      phi_deeponet.py [REMOVIDO] — código comentado para referência
+                      eval.py         (fno_eval_fn, fno_gnn_eval_fn, masked_fno_eval_fn,
+                                       masked_fno_gnn_eval_fn, helpers de plot)
+                      __init__.py     (ArchEntry, ARCH_REGISTRY)
+                  dataloaders/grid_loader.py (ChunkStreamDataset, ChunkQtreeDataset,
+                                              CUDAPrefetcher, qtree_collate, build_loaders)
+src/utils/        visualization.py
+src/config.py     [REMOVIDO] — conteúdo migrado para src/configs/
+src/bench/        datasets/__init__.py (DATASET_REGISTRY, DatasetEntry)
+                  datasets/darcy.py
+                  metrics.py [a implementar]
+                  eval_manager.py [a implementar]
+scripts/          generate_data.py, prepare_qtree_data.py, build_data_chunks.py
+                  train.py     (único script de treino — configurado por NnCfg)
+                  eval.py      (único script de avaliação — configurado por EvalCfg)
+                  parsers/darcy.py  (HDF5 → data_chunks)
+                  bench_eval.py [a implementar]
+                  fno_training.py [REMOVIDO], fno_gnn_training.py [REMOVIDO]
+                  eval_fno.py [REMOVIDO], eval_fno_gnn.py [REMOVIDO]
+tests/            gen_test.py, test_chunk_plot.py, test_graph_plot.py (manuais, abrem plot)
+                  smoke_test_refactor.py (33/33 OK — rodar da raiz: python -m tests.smoke_test_refactor)
+data/raw/         CSVs gerados — fonte única; parsers por arquitetura lêem daqui
+                  (Mag_Bx, Mag_By, Mu_r, Frac_dom, Mag_M, Magnetization, Material)
+data/torch/       tensores .pt (data_test.pt, data_chunks/)
+data/external/    dados brutos de terceiros (gitignore conteúdo)
+data/temp/        temp FEMM (gitignore)
+data/models/      pesos salvos .pth (gitignore)
+docs/             historico_implementacao.txt (registro histórico de sessões)
+```
+
+### Configs — `src/configs/`
+
+#### `DatagenConfig` (`datagen.py`)
+Parâmetros exclusivos do motor e da simulação. Importado por `generate_data.py`,
+`build_data_chunks.py`, `motor_model.py`, `data_utils.py` e scripts auxiliares.
+
+| Campo | Padrão | Descrição |
+|---|---|---|
+| `dataset` | `'motor_uniform'` | nome do dataset — define subdiretórios em data/ |
+| `n_r`, `n_a` | `80`, `240` | células radiais e angulares |
+| `ang_1`, `ang_2` | `0`, `120` | ângulo inicial e final (graus) |
+| `mode` | `'qtree'` | `'grid'` ou `'qtree'` |
+| `distribution` | `'uniform'` | distribuição de amostras |
+| `n_samples`, `n_phases`, `max_depth` | `4000`, `2`, `1` | parâmetros de geração |
+| `datagen_seed` | `12` | semente para `BLDC_Process.generate_samples` |
+| `refinement_ref_factor` | `1.2` | fator do disco grande em `_make_compute_fn` (legado; substituído por retângulo polar na próxima sessão) |
+| `cascade_buffer` | `None` | camadas adjacentes arrastadas ao refinamento |
+| `homogeneity_threshold` | `0.90` | frac_dom ≥ threshold → célula homogênea, não refina (adicionado na próxima sessão) |
+| `chunk_size` | `32` | amostras por arquivo `.pt` |
+| `npz_parser` | `'MaskedFNO2d'` | parser para gen_npz_structures — chave em `PARSER_REGISTRY` |
+| `npz_samples_per_worker` | `2` | amostras por processo paralelo |
+| `npz_max_workers` | `12` | limite de workers (segurança térmica — i9-13900KF) |
+| `npz_max_samples` | `None` | limite de amostras a processar; None = todas |
+
+#### `NnCfg` + arch configs (`training.py`)
+Treino completamente independente do datagen — `NnCfg.dataset` é a fonte de verdade
+para os scripts de treino; `DatagenConfig` não é importado por eles.
+
+**`NnCfg`**
+
+| Campo | Padrão | Descrição |
+|---|---|---|
+| `dataset` | `'motor_uniform'` | dataset a treinar (independente do DatagenConfig) |
+| `arch` | `'FNO_GNN'` | chave de arquitetura em ARCH_REGISTRY |
+| `loss` | `'mse'` | função custo |
+| `problem` | `'motor'` | identificação do problema (para diretórios de log) |
+| `lr` | `1e-3` | learning rate |
+| `n_epochs` | `500` | épocas de treino |
+| `scheduler` | `'step'` | tipo de scheduler (`'step'` → StepLR) |
+| `scheduler_step` | `100` | passo do StepLR |
+| `scheduler_gamma` | `0.5` | fator de decaimento do StepLR |
+| `batch_size` | `32` | amostras por mini-lote |
+| `train_split` | `0.70` | fração de chunks para treino |
+| `buffer_size` | `64` | amostras no reservatório de shuffle |
+| `num_workers` | `2` | workers de leitura |
+| `prefetch_factor` | `2` | batches pré-buscados por worker |
+| `split_seed` | `12` | semente para split treino/teste |
+| `resume_run` | `None` | caminho para `run_XXXX/` existente a retomar; `None` = treino do zero |
+| `resume_checkpoint` | `'latest'` | qual checkpoint carregar: `'latest'` ou `'best'` |
+| `resume_modified` | `False` | `False` = carrega model+optimizer+scheduler; `True` = só pesos |
+| `arch_cfg` | `None` → auto-instanciado | instância da config de arquitetura; se `None`, `__post_init__` cria `ARCH_REGISTRY[arch].cfg_cls()` automaticamente; se passado explicitamente, tipo é validado contra o arch |
+| `monitor_cfg` | `MonitorCfg()` | checkpointing, early stop e logging |
+
+**`MonitorCfg`** (`monitor.py`)
+
+| Campo | Padrão | Descrição |
+|---|---|---|
+| `checkpoint_every` | `50` | heartbeat — salva checkpoint a cada N épocas |
+| `early_stop_patience` | `None` | heartbeats sem melhora antes de parar (`None` = desativado) |
+| `early_stop_min_delta` | `1e-6` | melhora mínima em `test_loss` para resetar patience |
+| `save_best` | `True` | salva `*_best.pth` sempre que `test_loss` melhora |
+
+`patience` conta em **heartbeats**, não em épocas: `patience=3, checkpoint_every=50` → para após 150 épocas sem melhora.
+
+**Arch configs** — campos batem 1:1 com os `__init__` de cada modelo;
+`entry.model_kwargs(arch_cfg)` filtra campos não-construtores (ex: `lambda_loss`).
+
+- **`FNOConfig`**: `in_channels=2`, `out_channels=2`, `modes1/2=240`, `conv_width=8`,
+  `conv_layers=4`, `lift_width/proj_width=64`, `lift_layers/proj_layers=3`, `data_res=(80,240)`
+- **`FNO_GNNConfig`**: mesmos campos FNO com prefixo `fno_`, mais `data_res=(80,240)`,
+  `gnn_node_width=32`, `gnn_n_layers=3`, `lambda_loss=0.5`
+- **`MaskedFNO_GNNConfig`**: idêntico a `FNO_GNNConfig`; FNO tem `out_channels=8` hardcoded no modelo;
+  `lambda_loss` filtrado de `model_kwargs` (igual ao `FNO_GNNConfig`)
+- **`FNORefConfig`**: `in_channels=1`, `out_channels=1`, `n_modes=(12,12)`, `hidden_channels=64`,
+  `n_layers=4`, `lifting_channel_ratio=2.0`, `projection_channel_ratio=2.0`, `data_res=(128,128)`;
+  `data_res` não é passado ao construtor (`model_kwargs` o filtra); parâmetros mapeiam direto para API `neuralop.models.FNO`
+- **`PhiDeepONetConfig`**: [REMOVIDO] — removida do escopo ativo (2026-05-27); código comentado em `configs/training.py`
+
+**Uso típico:**
+```python
+from src.configs.training import NnCfg, FNO_GNNConfig
+
+# arch_cfg auto-instanciado — basta mudar arch
+nn = NnCfg(arch='FNO_GNN', n_epochs=100)
+
+# arch_cfg explícito — para sobrescrever campos específicos
+nn = NnCfg(arch='FNO_GNN', arch_cfg=FNO_GNNConfig(gnn_n_layers=5), n_epochs=100)
+```
+
+#### `EvalCfg` (`eval.py`)
+Config de avaliação, independente de datagen e treino. `arch` e `dataset` são lidos
+automaticamente de `run_dir/config.json`.
+
+| Campo | Padrão | Descrição |
+|---|---|---|
+| `run_dir` | `''` | caminho para `run_XXXX/` (ex: `data/logs/darcy_beta1/FNO2d/run_0002`) |
+| `checkpoint` | `'best'` | qual checkpoint carregar: `'best'`, `'latest'` ou `'final'` |
+| `chunk_name` | `'data_chunk_0000'` | chunk a usar sem extensão .pt; `dataset` lido de `config.json` |
+| `sample_idx` | `0` | índice da amostra no chunk |
+| `irrelevance_threshold` | `0.05` | limiar \|y\| para máscara de relevância |
+| `show_qtree_overlay` | `False` | exibe cruzes nas células refinadas (FNO_GNN) |
+
+**Uso típico:**
+```python
+from src.configs.eval import EvalCfg
+_eval = EvalCfg(run_dir='data/logs/darcy_beta1/FNO2d/run_0002', checkpoint='best')
+```
+
+### ARCH_REGISTRY — `src/neural_op/archs/__init__.py`
+
+Registro central de arquiteturas. Cada entrada é um `ArchEntry` (dataclass):
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `cls` | `type` | classe do modelo (FNO2d, FNO_GNN, …) |
+| `cfg_cls` | `type` | dataclass de config correspondente |
+| `loader_mode` | `str` | `'grid'` ou `'qtree'` — passado direto ao `build_loaders` |
+| `model_kwargs` | `callable` | `(arch_cfg) -> dict` com kwargs do construtor (filtra campos extras) |
+| `make_step_fn` | `callable` | `(arch_cfg) -> step_fn(batch, model, loss_fn, device)` |
+| `eval_fn` | `callable` | `(model, chunk_data, eval_cfg) -> None` — inferência + plot |
+
+`ArchEntry.make_model(arch_cfg)` é atalho para `cls(**model_kwargs(arch_cfg))`.
+
+```python
+# Adicionar nova arquitetura:
+ARCH_REGISTRY['MinhaArch'] = ArchEntry(
+    cls=MinhaArch, cfg_cls=MinhaConfig, loader_mode='grid',
+    model_kwargs=lambda cfg: asdict(cfg),
+    make_step_fn=lambda cfg: minha_step_fn,
+    eval_fn=minha_eval_fn,
+)
+```
+
+### Convenções
+- Todos os imports usam prefixo `src.` (ex: `from src.data_gen.motor_model import BLDC_Process`)
+- Scripts executados a partir da raiz do projeto
+- `motor_model.py` resolve DATA_DIR via `Path(__file__).parents[2] / "data" / "raw"`
+
+### Formatos de dados
+- Grade regular: `[B, C, H=80, W=240]` (80 radial × 240 angular, 0°–120°)
+
+#### Chunks de dados — gerados por `build_data_chunks.py`
+
+**`data/torch/data_chunks/<dataset>/data_chunk_XXXX.pt`**
+
+Conteúdo varia conforme o parser/modo de `gen_npz_structures`. Campos legados de stream
+(`x`, `y`, `depth`, `cells`) são sempre descartados por `_DROP_KEYS`. A detecção de modo
+é automática pelo primeiro `.npz` (`has_graph = 'edge_index' in files`).
+
+**Modo grid** (`GridSampleUnifier` — FNO2d, MaskedFNO2d):
+```
+x_hw:  [B, Cx, H, W]  float32  entrada na grade base (point query — fronteiras nítidas)
+y_hw:  [B, Cy, H, W]  float32  saída na grade base
+dim:   (H, W)
+```
+
+**Modo qtree** (`QtreeSampleUnifier` — FNO_GNN):
+```
+x_hw:       [B, Cx, H, W]  float32  entrada na grade baixa (média ponderada qtree)
+y_hw:       [B, Cy, H, W]  float32  saída na grade baixa
+x_hw_grid:  [B, Cx, H, W]  float32  entrada na grade base (point query — fronteiras nítidas)
+y_hw_grid:  [B, Cy, H, W]  float32  saída na grade base (point query — fronteiras nítidas)
+node_x:     [S_tot, N_x]   float32  features de entrada por nó (colunas do parser)
+node_y:     [S_tot, N_y]   float32  features de saída por nó   (colunas do parser)
+edge_index: [2, E_tot]     int64    arestas bidirecionais; índices globais no chunk
+edge_attr:  [E_tot, N_ea]  float32  features de aresta (colunas do parser)
+L:          [B]            int64    nós por amostra
+E_L:        [B]            int64    arestas (bidirecionais) por amostra
+dim:        (H, W)
+```
+
+#### CSVs raw — motor quadtree (fonte única; parsers constroem o que precisam)
+
+**Um único arquivo de depth por amostra** — `depth_qt_` — gerado pelo DFS de `save_material_mu_qtree`.
+M e B são amostrados a posteriori sobre essa estrutura; não geram depth próprio.
+
+| Campo | Prefixo CSV | Depth compartilhado | Origem | Observação |
+|-------|-------------|---------------------|--------|------------|
+| mu_r | `Mu_r_qt_` | `depth_qt_` | Shapely | permeabilidade no ponto central (point query) |
+| frac_dom | `Frac_dom_qt_` | `depth_qt_` | Shapely | fração do material dominante na bbox cartesiana |
+| M | `Mag_M_qt_` | `depth_qt_` | Shapely | M no ponto central, sem average |
+| Bx | `Mag_Bx_qt_` | `depth_qt_` | FEMM | campo radial |
+| By | `Mag_By_qt_` | `depth_qt_` | FEMM | campo angular |
+
+Campos derivados em tempo de parse (não salvos como CSV): `material_id`, `cell_area`, `r_base`, `c_base`.
+`normal_x` / `normal_y` — pós-processamento futuro (gradiente de frac_dom); placeholder zeros por enquanto.
+
+#### Referência de features por nó — motor quadtree
+> Tabela de referência: todos os campos disponíveis a partir dos CSVs raw.
+> Cada parser de arquitetura seleciona e constrói o subconjunto relevante.
+
+| Índice | Feature | Detalhes |
+|--------|---------|---------|
+| `[:,0]` | material_id | categórico: ferro=0, ar=1, ima=2, bobina=3 (derivado de mu_r) |
+| `[:,1]` | mu_r | permeabilidade do material no ponto central da célula |
+| `[:,2]` | M | magnetização no ponto central da célula (sem média) |
+| `[:,3]` | cell_area | área da célula em unidades de célula base = (1/2^depth)² |
+| `[:,4]` | r_base | coordenada radial normalizada [0,1] do centro da célula base |
+| `[:,5]` | c_base | coordenada angular normalizada [0,1] do centro da célula base |
+| `[:,6]` | frac_dom | fração de área do material dominante na célula |
+| `[:,7]` | normal_x | normal à interface mais próxima, zero em homogêneas *(pós-processamento)* |
+| `[:,8]` | normal_y | normal à interface mais próxima, zero em homogêneas *(pós-processamento)* |
+
+**`node_y` (saída por nó):**
+| `[:,0]` | Bx | campo radial (T) |
+| `[:,1]` | By | campo angular (T) |
+
+#### Referência de features por aresta — motor quadtree
+
+| Índice | Feature | Detalhe | Custo lazy |
+|--------|---------|---------|------------|
+| `[:,0]` | delta_r | diferença radial j−i em unidades de célula base | inevitável (loop de adjacência) |
+| `[:,1]` | delta_c | diferença angular com wrap | inevitável |
+| `[:,2]` | shared_length | comprimento da fronteira compartilhada = min(side_i, side_j) | inevitável |
+| `[:,3]` | center_dist | distância euclidiana entre centros = √(Δr²+Δc²) | inevitável |
+| `[:,4]` | delta_mu | mu_r[j] − mu_r[i] | **lazy** — só computado se 4 ∈ `edge_attr_cols` |
+
+**`x_hw` e `y_hw` — `[B, 2, H, W]`**
+| Dimensão | Significado |
+|----------|-------------|
+| `B` | amostras no chunk |
+| canal 0 | Mu_r (em x_hw) / Bx (em y_hw) |
+| canal 1 | M (em x_hw) / By (em y_hw) |
+| `H=80` | grade radial |
+| `W=240` | grade angular |
+
+#### Convenções do grafo
+- **Nós**: cada folha do stream quadtree é um nó (S nós por amostra)
+- **Arestas**: adjacência física — dois nós conectados sse regiões compartilham fronteira de comprimento positivo (não apenas ponto)
+- **Bidirecional**: par (i,j) e (j,i) ambos presentes; delta_r/delta_c/delta_mu invertidos no par reverso; shared_length e center_dist idênticos
+- **Wrap angular**: coluna 0 conecta com coluna W−1 (topologia de anel); radial sem wrap
+- **Slicing por amostra**: nós via `cumsum(L)`, arestas via `cumsum(E_L)`; índices em `edge_index` globais no chunk
+
+#### Mapeamento de canais quadtree — CSVs de origem
+Todos os campos compartilham o mesmo `depth_qt_` (único DFS em `save_material_mu_qtree`).
+
+| Canal | Tensor | Índice | Prefixo CSV | Depth |
+|-------|--------|--------|-------------|-------|
+| Mu_r  | x_hw   | 0      | `Mu_r_qt_`    | `depth_qt_` |
+| M     | x_hw   | 1      | `Mag_M_qt_`   | `depth_qt_` |
+| Bx    | y_hw   | 0      | `Mag_Bx_qt_`  | `depth_qt_` |
+| By    | y_hw   | 1      | `Mag_By_qt_`  | `depth_qt_` |
+
+### Modelos — `src/neural_op/archs/`
+
+Blocos de baixo nível compartilhados em `_blocks.py`:
+- **`NodeMLP`** — MLP sobre features de nó `[N, in_ch] → [N, out_ch]`
+- **`MLP`** — MLP sobre grade `[B, C, H, W] → [B, C', H, W]`; usado por FNO para lift/proj
+- **`SpectralConv`** — convolução espectral 2D via rfft2/irfft2
+- **`FNO_Blocks`** — sequência SpectralConv + bypass linear com ativação
+- **`EdgeConvLayer`** — message passing com gate escalar por aresta
+- **`GNN`** — N camadas EdgeConvLayer com lift/proj linear
+
+Arquiteturas de alto nível:
+- **`FNO2d`** (`archs/fno.py`): Lift(MLP) → FNO_Blocks → Proj(MLP). Entrada `[B,C,H,W]`.
+- **`FNO_GNN`** (`archs/fno_gnn.py`): FNO2d na grade → interpolação bilinear nos nós quadtree
+  → GNN correção residual (ΔBx, ΔBy). Saídas: `y_hw_fno [B,2,H,W]` + `y_nodes [S_tot,2]`.
+- **`FNORef`** (`archs/fno_ref.py`): wrapper fino sobre `neuralop.models.FNO` (biblioteca `neuraloperator`). Registrado condicionalmente via `try/except ImportError`.
+- **`MaskedFNO2d`** (`archs/fno_mat.py`): FNO2d com 8 canais de saída (4 materiais × Bx, By).
+  `forward → [B,8,H,W]`; `assemble(pred, masks) → [B,2,H,W]`. Máscara de material derivada
+  on-the-fly de `x[:,0]` (Mu_r) por `_make_material_masks`. Loss: `'material_masked'` —
+  ponderada pela parcela de domínio de cada material, 50/50 Bx/By.
+- **`PhiDeepONet`** (`archs/phi_deeponet.py`): [REMOVIDO] do escopo ativo (2026-05-27). Código comentado no arquivo para referência futura.
+
+### Dataloader de treino (streaming)
+`build_loaders` aceita `mode='grid'` ou `mode='qtree'`. O modo é determinado pelo
+`loader_mode` do `ArchEntry` — `scripts/train.py` não precisa saber qual usar.
+
+#### mode='grid' — `ChunkStreamDataset` + `CUDAPrefetcher`
+- **Chunk**: unidade de I/O — 1 arquivo `data_chunk_*.pt` por vez em RAM. Grafos
+  (`edge_index`, `node_x`, …) liberados via `del d` imediatamente após `torch.load`.
+  Apenas `x_hw` e `y_hw` são mantidos; cada amostra entra no buffer como view.
+- **Batch emitido**: tuple `(x, y)` com shape `[B, 2, H, W]` cada.
+- **Buffer**: reservatório de `BUFFER_SIZE` amostras em RAM. Shuffle por substituição O(1).
+- **CUDAPrefetcher**: agnóstico ao tipo de batch — usa `_to_device` / `_record_stream`
+  recursivos (suportam tensor, dict, list, tuple). Transfere batch N+1 para GPU em stream
+  CUDA separado enquanto batch N é processado. No-op em CPU.
+- **Split**: feito ao nível de chunk antes de qualquer carregamento.
+- `training_utils.train_epoch` / `eval_epoch` usam contador de batches em vez de
+  `len(loader)` — necessário pois `IterableDataset` não implementa `__len__`.
+- **Windows**: `NUM_WORKERS=0` por padrão — com workers > 0 o script precisa de
+  guard `if __name__ == '__main__':` (spawn no Windows).
+
+#### mode='qtree' — `ChunkQtreeDataset` + `qtree_collate`
+Usado pelo pipeline FNO+GNN (FNO na grade → GNN refina nos nós quadtree).
+- Preserva todos os campos do chunk (grade + grafo); grafos **não** são descartados.
+- Cada amostra é emitida como dict com `edge_index` de índices **locais** (0..L[i]-1).
+  A subtração de offset durante a iteração cria tensor independente; demais campos são views.
+- `qtree_collate` remonta o batch: stack para grade, cat para nós/arestas,
+  re-offset acumulado de `edge_index` para índices globais no batch.
+- **Batch emitido** (dict já no device via CUDAPrefetcher):
+  ```
+  x_hw        [B, 2, H, W]   grade de entrada  (canal 0=Mu_r, canal 1=M)
+  y_hw        [B, 2, H, W]   grade alvo         (canal 0=Bx,   canal 1=By)
+  node_x      [S_tot, 5]     features de nó (entrada) — formato legado; atualizar c/ parser
+  node_y      [S_tot, 5]     features de nó (alvo)    — formato legado; atualizar c/ parser
+  edge_index  [2, E_tot]     arestas com índices globais no batch
+  edge_attr   [E_tot, 4]     features de aresta — formato legado; atualizar c/ parser
+  L           [B]            nós por amostra
+  E_L         [B]            arestas por amostra
+  ```
+
+### Dependências principais
+`pyfemm`, `shapely`, `torch`, `numpy`, `pandas`, `matplotlib`. Windows-only (pyfemm + pywin32).
+
+---
+
+## Reestruturação (concluída 2026-05-18)
+
+Objetivo: suporte a múltiplas arquiteturas, funções custo selecionáveis, log de desempenho
+por run e versionamento explícito de modelos.
+
+✓ Pipeline base completamente implementado e testado (smoke test 33/33 OK).
+Histórico detalhado em `docs/historico_implementacao.txt` — Parte 1.
+
+### Estrutura de diretórios de log
+
+```
+data/
+    logs/
+        motor/
+            FNO2d/
+                run_0001/
+                    config.json      # asdict(NnCfg) + n_params, device, start_time [+ resumed_from se resume]
+                    metrics.jsonl    # {"epoch":50,"train_loss":...,"test_loss":...,"lr":...,"train_time_s":...,"eval_time_s":...,"samples_per_s":...}
+                    status.txt       # running → done / stopped / failed
+                    notes.txt        # vazio; edição manual
+                    checkpoints/
+                        best.pth     # model_state_dict + optimizer_state_dict + epoch
+                        latest.pth   # idem — para resume
+                    model_final.pth  # idem
+```
+
+Não há `registry.csv` persistente — gerar sob demanda varrendo os diretórios `run_XXXX/`.
+`status.txt = running` + ausência de `model_final.pth` indica interrupção abrupta.
+
+#### Git — o que é rastreado em `data/logs/`
+
+Apenas os `.gitkeep` de cada nível são commitados; todo conteúdo de `run_*/` é ignorado.
+
+```
+data/logs/.gitkeep                    # rastreado
+data/logs/motor/.gitkeep              # rastreado
+data/logs/motor/FNO2d/.gitkeep        # rastreado
+data/logs/motor/FNO_GNN/.gitkeep      # rastreado
+data/logs/motor/FNO2d/run_*/          # IGNORADO (.gitignore)
+```
+
+Para adicionar nova arquitetura ao log, acrescente no `.gitignore`:
+```
+!/data/logs/motor/MinhaArch/
+/data/logs/motor/MinhaArch/*
+!/data/logs/motor/MinhaArch/.gitkeep
+```
+e crie `data/logs/motor/MinhaArch/.gitkeep`.
+
+---
+
+## MaskedFNO_GNN — concluída (2026-05-28)
+
+Extensão de `MaskedFNO2d` ao pipeline FNO+GNN: mascaramento por material em ambas as
+saídas (grade e nós quadtree), com losses estruturalmente separadas por arquitetura.
+
+### O que foi implementado
+
+**`src/data_gen/parsers/masked_fno_gnn.py`** (novo)
+
+`MASKED_FNO_GNN_PARSER` — formato idêntico ao `FNO_GNN_PARSER` (`build_graph=True`,
+`node_x_cols=[1,2,3,4,5]`); chunks são intercambiáveis entre as duas arquiteturas.
+Registrado em `PARSER_REGISTRY` como `'MaskedFNO_GNN'`.
+
+**`src/neural_op/archs/masked_fno_gnn.py`** (novo)
+
+| Símbolo | Detalhe |
+|---------|---------|
+| `_material_ids_from_mu(mu_r_nodes)` | deriva `material_id` por nó a partir de `mu_r`; thresholds idênticos a `_make_material_masks` |
+| `MaskedFNO_GNN` | FNO2d com `out_channels=8` + GNN com `in=13 (5+8), out=8`; `forward → (y_hw_8 [B,8,H,W], y_nodes_8 [S_tot,8])`; `assemble_grid(pred8, masks)→[B,2,H,W]`; `assemble_nodes(y_nodes_8, material_ids)→[S_tot,2]` |
+| `make_masked_fno_gnn_step(lambda_loss)` | step_fn que monta masks e material_ids on-the-fly e delega tudo a `loss_fn` (deve ser `'masked_fno_gnn_loss'`) |
+
+**`src/neural_op/losses.py`**
+
+| Função | Chave no registry | Assinatura | Usada por |
+|--------|-------------------|------------|-----------|
+| `masked_fno_loss` | `'masked_fno_loss'` | `(pred8, y, masks)` | `MaskedFNO2d` |
+| `masked_gnn_node_loss` | — (helper interno) | `(y_nodes_8, node_y, material_ids)` | `masked_fno_gnn_loss` |
+| `masked_fno_gnn_loss` | `'masked_fno_gnn_loss'` | `(y_hw_8, y_hw, masks, y_nodes_8, node_y, material_ids, lambda_loss)` | `MaskedFNO_GNN` |
+
+`masked_fno_gnn_loss` chama `masked_fno_loss` para a parcela de grade e `masked_gnn_node_loss`
+para a parcela de nós — sem duplicação de código.
+
+**`src/configs/training.py`**
+- `MaskedFNO_GNNConfig` adicionada: campos idênticos a `FNO_GNNConfig`; `lambda_loss` filtrado de `model_kwargs`.
+- Tabela de referência `arch × loss × loader_mode × arch_cfg` documentada acima de `NnCfg`.
+
+**`src/neural_op/archs/eval.py`**
+- `masked_fno_gnn_eval_fn` — plot 4×4: entradas + mapa de materiais, GT, FNO assembled, GNN assembled (nós → grade).
+
+**`src/neural_op/archs/__init__.py`**
+- `'MaskedFNO_GNN'` registrado em `ARCH_REGISTRY`: `loader_mode='qtree'`, `make_step_fn=make_masked_fno_gnn_step`.
+
+### Canais e assemble
+
+| Saída | Shape | Canal layout |
+|-------|-------|-------------|
+| `y_hw_8` (FNO, grade) | `[B, 8, H, W]` | `[:,2m:2m+2]` = (Bx_m, By_m) do material m |
+| `y_nodes_8` (GNN, nós) | `[S_tot, 8]` | mesmo layout por coluna |
+| `assemble_grid(pred8, masks)` | `[B, 2, H, W]` | seleciona canais pelo pixel mask da grade |
+| `assemble_nodes(y_nodes_8, ids)` | `[S_tot, 2]` | seleciona canais pelo `material_id` do nó |
+
+Material ID nos nós derivado de `node_x[:,0]` (mu_r) via `_material_ids_from_mu` —
+mesmos thresholds de `_make_material_masks` (grade).
+
+### Uso típico
+
+```python
+from src.configs.training import NnCfg
+
+nn = NnCfg(arch='MaskedFNO_GNN', loss='masked_fno_gnn_loss')
+# DatagenConfig: npz_parser='MaskedFNO_GNN' (chunks intercambiáveis com FNO_GNN)
+```
+
+### Decisões de escopo
+
+- `DatagenConfig` é exclusivo do motor. Outros datasets serão apenas importados.
+- `training_utils.py` mantido como hot loop puro; `ModelManager` cuida do bookkeeping.
+- Losses dependentes de dataset/formato de dados entram no `LOSS_REGISTRY` com assinatura estendida documentada.
+
+---
+
+## Benchmark comparativo — FNO + GNN vs. baselines
+
+Objetivo: validar o modelo proposto (FNO_GNN) contra baselines da literatura em datasets
+com descontinuidades de coeficiente — proxy do problema EM do motor.
+
+### Decisões de arquitetura
+
+**Princípio geral:** máxima reutilização do pipeline existente. `ModelManager`, `fit()`,
+`build_loaders`, `train.py` e `ARCH_REGISTRY` não são modificados — apenas recebem
+conteúdo novo (entradas de registro, parâmetros diferentes).
+
+**Datasets externos → chunks:**
+Datasets externos (HDF5, NPZ) são convertidos para `data_chunk_*.pt` por parsers
+dedicados. O formato de saída é `{x_hw: [B, C, H, W], y_hw: [B, C, H, W]}` — idêntico
+ao do motor, com `C` variável por dataset (ex: `C=1` para Darcy). A partir dos chunks,
+todo o pipeline (`ChunkStreamDataset`, `CUDAPrefetcher`, `build_loaders`) funciona sem
+modificação.
+
+**Logs de treino e de eval são completamente independentes:**
+- `ModelManager` escreve `config.json` + `metrics.jsonl` + `status.txt` durante treino
+- `BenchEvalManager` (novo) escreve apenas `eval_results.jsonl` no mesmo `run_XXXX/`
+- Nunca há campos compartilhados ou compatibilidade forçada entre os dois arquivos
+- Um run pode ter `eval_results.jsonl` sem `metrics.jsonl` (modelo importado externamente)
+
+**IDs de run sem escopo global:**
+`run_0001` é número local a `data/logs/{problem}/{arch}/`. Não há ID global.
+
+**Modelos externos — dois casos:**
+1. Treinado por nós via `train.py` com wrapper `ArchEntry` → run normal com `metrics.jsonl`
+2. Importado já treinado → `BenchEvalManager` cria `run_XXXX/` leve (só `eval_config.json`
+   + `model_final.pth` + `eval_results.jsonl`); sem `metrics.jsonl`, sem `ModelManager`
+
+**Zero-shot:** `bench_eval.py` recebe `--run_dir` + `--eval_dataset` independentemente.
+O mesmo run pode acumular múltiplas entradas em `eval_results.jsonl`.
+
+### Estrutura de diretórios
+
+```
+data/
+    external/darcy/2D_DarcyFlow_beta1.0_Train.hdf5   # PDEBench — 10k amostras, 1.3 GB
+    torch/data_chunks/darcy_beta1/data_chunk_XXXX.pt  # {x_hw:[B,1,128,128], y_hw:[B,1,128,128]}
+    logs/darcy_beta1/FNO2d/ FNO_ref/                  # gitkeep
+
+scripts/parsers/darcy.py    # HDF5 → chunks (--file, --chunk-size, --dataset)
+scripts/bench_eval.py       # avalia run_XXXX/ em dataset arbitrário [a implementar]
+
+src/bench/datasets/__init__.py   # DATASET_REGISTRY: nome → DatasetEntry
+src/bench/datasets/darcy.py      # in_ch=1, out_ch=1, res=(128,128), has_interface=True
+src/bench/metrics.py             # interface_error, spectral_error, inference_time [a impl.]
+src/bench/eval_manager.py        # BenchEvalManager — escreve eval_results.jsonl [a impl.]
+```
+
+#### Dataset Darcy — referência
+- 10.000 amostras; HDF5: `nu [N,H,W]` + `tensor [N,1,H,W]`; chunks 313×32 = 10.000
+- `nu ∈ [0.1, 1.0]`, `u ∈ [0.0, 1.07]`; split treino/teste em runtime via `build_loaders`
+- `SpectralConv` em 128×128 limita `modes1 ≤ 64`, `modes2 ≤ 65`; paper FNO usa `modes=12`
+
+**`DatasetEntry`** (em `src/bench/datasets/__init__.py`):
+```python
+@dataclass
+class DatasetEntry:
+    in_channels  : int     # para ajustar arch_cfg automaticamente
+    out_channels : int
+    resolution   : tuple   # (H, W) dos chunks gerados
+    has_interface: bool    # tem máscara de descontinuidade? (para interface_error)
+    chunk_dir    : str     # subdir em data/torch/data_chunks/
+    description  : str
+```
+
+**`eval_results.jsonl`** — schema livre, cada linha auto-descritiva:
+```jsonl
+{"eval_dataset": "darcy_beta1", "resolution": [128, 128], "relative_l2": 0.031, "interface_error": 0.058, "timestamp": "..."}
+{"eval_dataset": "darcy_beta1_hires", "resolution": [256, 256], "relative_l2": 0.041}
+```
+
+### Plano de implementação — 4 fases
+
+✓ Fases A, B, C, C.5 concluídas (2026-05-20) — detalhes em `docs/historico_implementacao.txt` — Parte 2.
+
+**Fase D — Bench eval** _(bloqueada — aguardando definição de escopo abaixo)_
+10. `src/bench/metrics.py` — `interface_error`, `spectral_error`, `inference_time`
+11. `src/bench/eval_manager.py` — `BenchEvalManager`: cria/appenda `eval_results.jsonl`
+12. `scripts/bench_eval.py` — CLI `--run_dir`, `--eval_dataset`, `--import_weights`
+- **Teste:** avaliar os dois runs (darcy FNO2d + FNO_ref) e comparar `eval_results.jsonl`
+
+---
+
+## Atualização da aquisição de dados — concluída (2026-05-27)
+
+### O que foi implementado
+
+**`motor_model.py`**
+
+| Mudança | Detalhe |
+|---------|---------|
+| `MATERIAL_ID` remapeado | ferro=0, ar=1, ima=2 (N35p/N35n unificados), bobina=3 |
+| `_build_cell_rectangle(r0,r1,t0,t1)` | bbox cartesiana dos 4 cantos polares — Shapely simples |
+| `_make_material_compute_fn(geometries, max_depth, homogeneity_threshold)` | factory do `compute` para `_qtree_dfs`; refinamento por frac_dom; valor = point query → mu_r, frac_dom |
+| `save_material_mu_qtree(...)` | substitui `save_material_mu_avg_qtree` (body comentado `[REMOVIDO]`); DFS único; salva `Mu_r_qt_`, `depth_qt_`, `Frac_dom_qt_`; **retorna `leaves`** para reuso |
+| `save_magnetization_from_depth(leaves_or_depth, ...)` | aceita lista de leaves ou array de depth; point queries para M; salva apenas `Mag_M_qt_` (sem depth próprio) |
+| `save_B_grid_qtree_from_depth` | não gera mais `Mag_B_depth_qt_`; usa `depth_qt_` externo |
+| `save_magnetization_qtree` (DFS duplo) | body comentado `[REMOVIDO]` |
+
+**`data_utils.py`**
+
+| Mudança | Detalhe |
+|---------|---------|
+| `generate_one_batch` (qtree) | DFS único: `leaves = save_material_mu_qtree(...)` → `save_magnetization_from_depth(leaves, ...)` → `save_B_grid_qtree_from_depth(depth_qt_, ...)` |
+| `_PREFIXES['qtree']` | inclui agora também `"Mu_r_grid_", "Mag_M_grid_", "Mag_Bx_grid_", "Mag_By_grid_"` |
+| `_X_CHANNELS` / `_Y_CHANNELS` | usam `depth_qt_` para todos os campos |
+| `derive_material_id(mu_r_arr)` | thresholds: `mu>10→0` (ferro), `1.01<mu<10→2` (ima), `mu<0.9995→3` (cobre), else `1` (ar) |
+| `build_node_x_motor(..., cols=None)` | avaliação **lazy por feature**: só computa os índices em `cols`; cache dict evita recomputo; normal_x/y (7,8) nunca alocados a menos que pedidos |
+| `build_node_y_motor(Bx, By)` | `[S, 2]` |
+| `build_graph_edges_motor(..., mu_r=None, cols=None)` | avaliação **lazy por coluna**: col 4 (`delta_mu`) só computada se `4 ∈ cols`; `mu_r` não precisa ser passado se col 4 ausente; levanta `ValueError` se col 4 pedida sem `mu_r` |
+| `_read_grid_hw(raw_dir, code, H, W)` | helper: lê `Mu_r_grid_`, `Mag_M_grid_`, `Mag_Bx_grid_`, `Mag_By_grid_` → retorna `(x_hw [2,H,W], y_hw [2,H,W])` float32; usado por ambos os unifiers |
+| `QtreeSampleUnifier.__getitem__` | passa `cols=parser_cfg.node_x_cols` ao builder; passa `cols=parser_cfg.edge_attr_cols` e `mu_r` condicional ao grafo; aplica filtro inline (node_y, x_hw, y_hw, x_hw_grid, y_hw_grid) sem chamar `apply_parser_config`; delega leitura dos CSVs grid a `_read_grid_hw` |
+| `GridSampleUnifier` | para `mode='grid'`; lê apenas os 4 CSVs grid via `_read_grid_hw`; aplica `x_hw_cols`/`y_hw_cols` do parser; retorna `{'x_hw', 'y_hw', 'dim'}` — sem stream, sem grafo |
+
+**`src/data_gen/parsers/`** — sistema de parsers por arquitetura
+
+| Arquivo | Conteúdo |
+|---------|---------|
+| `_base.py` | `MotorQtreeParserConfig` (dataclass: `name`, `node_x_cols`, `node_y_cols`, `x_hw_cols`, `y_hw_cols`, `edge_attr_cols`, `build_graph`); `apply_parser_config` (uso externo — dict completo) |
+| `fno_gnn.py` | `FNO_GNN_PARSER`: node_x_cols=[1,2,3,4,5], node_y_cols=[0,1], x_hw_cols=[0,1], y_hw_cols=[0,1], edge_attr_cols=[0,1,2,3], build_graph=True |
+| `fno2d.py` | `FNO2D_PARSER`: node_x_cols=[1,2], node_y_cols=[0,1], x_hw_cols=[0,1], y_hw_cols=[0,1], edge_attr_cols=[], build_graph=False — poupa construção do grafo |
+| `masked_fno2d.py` | `MASKED_FNO2D_PARSER`: idêntico ao FNO2D_PARSER; chunks compatíveis com FNO2d e MaskedFNO2d |
+| `__init__.py` | re-exporta tudo + `PARSER_REGISTRY = {'FNO_GNN': …, 'FNO2D': …, 'MaskedFNO2d': …}` |
+
+**Lazy evaluation — resumo de custos**
+
+| Feature | Quando computada |
+|---------|-----------------|
+| node_x cols 0-6 | se pedida pelo parser |
+| node_x cols 7,8 (normal_x/y) | **nunca** computada a menos que `7` ou `8` ∈ `node_x_cols` |
+| edge_attr cols 0-3 (geometria) | sempre (custo inevitável do loop de adjacência) |
+| edge_attr col 4 (delta_mu) | só se `4 ∈ edge_attr_cols` **e** `build_graph=True` |
+| grafo inteiro | só se `build_graph=True` |
+
+### Pendente (datagen)
+
+- **Gerar dados** com o novo pipeline e validar visualmente (`tests/plot_qtree_field.py`)
+- **`normal_x` / `normal_y`** — pós-processamento via gradiente de frac_dom (sessão futura)
+- **Novos parsers** para futuras arquiteturas (GINO, MGNO)
+
+### Benchmark — escopo fechado
+
+Apenas os modelos já implementados participam do benchmark neste momento:
+- `FNO2d` (parser: `FNO2D_PARSER`, loader: grid), `FNO_GNN` (parser: `FNO_GNN_PARSER`, loader: qtree), `FNO_ref` (condicional, loader: grid) — ativos
+- `phi_DeepONet` — [REMOVIDO] do escopo ativo (2026-05-27)
+- **GINO e MGNO** serão incorporados em sessão futura, após consolidação do novo formato
+  de dados e definição dos parsers por arquitetura.
+
+> Outros modelos dos Grupos A, B e C (MeshGraphNet, Transolver, U-FNO etc.) foram
+> removidos do escopo ativo. Podem ser retomados após GINO/MGNO estarem estáveis.
+
+---
+
+---
+
+## MaskedFNO2d + grade base sem averaging — concluída (2026-05-28)
+
+### O que foi implementado
+
+**`src/neural_op/archs/fno_mat.py`** (novo)
+
+| Símbolo | Detalhe |
+|---------|---------|
+| `_make_material_masks(mu_r)` | `mu_r [B,H,W]` → `masks [B,4,H,W]` bool; ferro=0 (`mu>10`), ar=1 (default), ima=2 (`1.01<mu<10`), cobre=3 (`mu<0.9995`) |
+| `MaskedFNO2d` | subclasse de `FNO2d`; saída `[B,8,H,W]` (4 mat × 2 campos); `assemble(pred, masks)→[B,2,H,W]` para inferência |
+| `masked_fno_step_fn` | step de treino: calcula máscara on-the-fly de `x[:,0]`; chama `loss_fn(pred, y, masks)` |
+
+**`src/neural_op/losses.py`**
+
+| Adição | Detalhe |
+|--------|---------|
+| `material_masked_loss(pred, y, masks)` | peso proporcional à parcela de domínio de cada material (normalizado); 50% Bx + 50% By por material; evita viés de volume |
+| `'material_masked'` no `LOSS_REGISTRY` | assinatura estendida `(pred, y, masks)` — diferente da padrão `(out, y)` |
+
+**`src/neural_op/archs/eval.py`**
+- `masked_fno_eval_fn` — plot 3×4: campo verdadeiro, previsão montada e erro absoluto; overlay de máscara de material.
+
+**`src/neural_op/archs/__init__.py`**
+- `'MaskedFNO2d'` registrado em `ARCH_REGISTRY`: `loader_mode='grid'`, `make_step_fn=masked_fno_step_fn`, `eval_fn=masked_fno_eval_fn`.
+
+**`src/configs/training.py`**
+- `MaskedFNO2dConfig` adicionada: mesmos campos de `FNOConfig`, `out_channels=8` por padrão.
+
+**`motor_model.py`** — grade base sem averaging (ambos os modos)
+
+| Mudança | Detalhe |
+|---------|---------|
+| `save_magnetization` (avg. por disco) | body comentado `[REMOVIDO]`; média por disco abolida definitivamente |
+| `save_grid_mu(ang_1,ang_2,n_r,n_a,code)` | point queries Shapely nos centros H×W; salva `Mu_r_grid_*.csv` e `Mag_M_grid_*.csv` |
+| `save_B_grid_pts(ang_1,ang_2,n_r,n_a,code)` | point queries FEMM nos centros H×W; salva `Mag_Bx_grid_*.csv` e `Mag_By_grid_*.csv` |
+
+Ambos os métodos chamados em `generate_one_batch` fora do `if/else` de modo — gerados tanto para `grid` quanto para `qtree`.
+
+**`data_utils.py`**
+
+| Mudança | Detalhe |
+|---------|---------|
+| `_PREFIXES['grid']` | `["Material_", "Mu_r_grid_", "Mag_M_grid_", "Mag_Bx_grid_", "Mag_By_grid_"]` |
+| `_PREFIXES['qtree']` | inclui adicionalmente `"Mu_r_grid_", "Mag_M_grid_", "Mag_Bx_grid_", "Mag_By_grid_"` |
+| `QtreeSampleUnifier.__getitem__` | delega leitura dos CSVs grid a `_read_grid_hw`; expõe `x_hw_grid [2,H,W]` e `y_hw_grid [2,H,W]` com filtro de `x_hw_cols`/`y_hw_cols` do parser |
+
+**`src/configs/datagen.py`**
+- 4 novos campos na seção `# gen_npz_structures`: `npz_parser`, `npz_samples_per_worker`, `npz_max_workers`, `npz_max_samples`.
+
+**`src/data_gen/parsers/__init__.py`**
+- `PARSER_REGISTRY` dict: mapeia nome de string (`'FNO_GNN'`, `'FNO2D'`, `'MaskedFNO2d'`) para instância de parser.
+
+**`scripts/gen_npz_structures.py`**
+- Constantes `MODE`, `PARSER`, `SAMPLES_PER_WORKER`, `MAX_WORKERS`, `MAX_SAMPLES` derivadas de `DatagenConfig`.
+- `PARSER` obtido via `PARSER_REGISTRY[_dg.npz_parser]`.
+- Escolhe unifier em `run()`: `mode='grid'` → `GridSampleUnifier`; caso contrário → `QtreeSampleUnifier`.
+
+### Distinção x_hw vs x_hw_grid nos chunks NPZ
+
+| Campo | Origem | Fronteiras |
+|-------|--------|-----------|
+| `x_hw [2,H,W]` | `qtree_to_lowres_hw` — média ponderada por área das folhas qtree | **suavizadas** em células mistas (ex: Mu_r=2500 em ferro/ar) |
+| `x_hw_grid [2,H,W]` | point query Shapely no centro de cada célula base H×W | **nítidas** — sem mistura de materiais |
+| `y_hw [2,H,W]` | `qtree_to_lowres_hw` das folhas qtree | suavizadas |
+| `y_hw_grid [2,H,W]` | point query FEMM no centro de cada célula base H×W | nítidas |
+
+Para `MaskedFNO2d`: usar `x_hw_grid` como entrada para que `_make_material_masks` classifique corretamente sem pixels mistos.
+Para `FNO_GNN`: `x_hw` (média) ainda razoável — GNN corrige nas fronteiras.
+
+### Concluído (MaskedFNO2d + build_data_chunks — 2026-05-28)
+
+- **`gen_npz_structures`** ✓ — `GridSampleUnifier` com `mode='grid'` gera `.npz` com `x_hw`/`y_hw` de point query (fronteiras nítidas).
+- **`build_data_chunks`** ✓ — agnóstico ao conteúdo do `.npz`; detecta modo pelo primeiro arquivo; descarta `_DROP_KEYS = {'x','y','depth','cells'}` (stream legado); salva `data_chunk_*.pt` em `data/torch/data_chunks/`. `stream_chunks` e `quad_chunks` abolidos; `save_qtree_chunks` comentada `[REMOVIDO]`.
+- **`test_chunk_plot.py`** ✓ — reescrito; lê `data_chunks`, plota Mu_r/M/Bx/By em 2×2 imshow.
+- **Loader** ✓ — `ChunkStreamDataset` lê `x_hw`/`y_hw` do chunk; nenhuma mudança necessária.
+
+---
+
+### Gitignore — padrão para novos datasets no log
+
+Para cada novo `{problem}` e `{arch}` adicionados a `data/logs/`:
+```
+!/data/logs/{problem}/
+/data/logs/{problem}/*
+!/data/logs/{problem}/.gitkeep
+!/data/logs/{problem}/{arch}/
+/data/logs/{problem}/{arch}/*
+!/data/logs/{problem}/{arch}/.gitkeep
+```

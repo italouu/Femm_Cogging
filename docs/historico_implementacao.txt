@@ -1,0 +1,131 @@
+Histórico de implementação — FEMM_cogging
+==========================================
+Registro de o que foi feito, quando e com quais resultados de teste.
+Referenciado por CLAUDE.md; não precisa ser mantido atualizado durante o trabalho rotineiro.
+
+
+=============================================================
+PARTE 1 — Reestruturação do pipeline (2026-05-16 a 2026-05-18)
+=============================================================
+
+Objetivo: suporte a múltiplas arquiteturas, funções custo selecionáveis, log de
+desempenho por run e versionamento explícito de modelos.
+
+--- Implementado e testado (2026-05-17) ---
+- src/configs/datagen.py — DatagenConfig
+- src/configs/training.py — NnCfg + FNOConfig + FNO_GNNConfig
+  - NnCfg tem: dataset, arch, loss, problem, lr, n_epochs, scheduler*,
+    dataloader params, split_seed, arch_cfg, monitor_cfg
+  - datagen_seed (geração) e split_seed (split treino/teste) são distintos
+- src/configs/monitor.py — MonitorCfg; re-exportada em training.py por retrocompatibilidade
+- src/configs/eval.py — EvalCfg
+- src/config.py aposentado — conteúdo comentado com [REMOVIDO]
+- src/neural_op/archs/ — ARCH_REGISTRY + ArchEntry com cls, cfg_cls,
+  loader_mode, model_kwargs, make_step_fn, eval_fn
+- src/neural_op/archs/_blocks.py — blocos de baixo nível compartilhados
+- src/neural_op/archs/fno.py — FNO2d + fno_step_fn
+- src/neural_op/archs/fno_gnn.py — FNO_GNN + make_fno_gnn_step
+- src/neural_op/archs/eval.py — fno_eval_fn + fno_gnn_eval_fn + helpers de plot
+- src/neural_op/models.py aposentado — conteúdo migrado para archs/
+- scripts/train.py — script único de treino (substitui fno_training.py e fno_gnn_training.py)
+- scripts/eval.py — script único de avaliação (substitui eval_fno.py e eval_fno_gnn.py)
+
+--- Implementado e testado (2026-05-18) ---
+- src/neural_op/losses.py — LOSS_REGISTRY com mse, mae, relative_l2; NnCfg.loss funcional
+- src/neural_op/monitor.py — TrainingMonitor: heartbeat de checkpoint, best.pth, early stop;
+  aceita mgr=ModelManager; expõe stopped_early, last_epoch
+- src/configs/training.py — MonitorCfg separado de NnCfg; NnCfg.__post_init__ valida
+  arch in ARCH_REGISTRY e coerência arch <-> arch_cfg; campos resume_run,
+  resume_checkpoint, resume_modified
+- src/configs/monitor.py — MonitorCfg extraída de training.py; training.py re-exporta
+  para retrocompatibilidade
+- src/configs/__init__.py — re-exporta todas as configs (from src.configs import NnCfg, ...)
+- src/training/model_manager.py — ModelManager: run_id, diretórios, config.json,
+  metrics.jsonl, status.txt, notes.txt, model_final.pth; open(resumed_from=) registra
+  origem no config.json; load_run(run_dir, checkpoint) carrega .pth + reconstrói
+  prev_losses de metrics.jsonl
+- train_epoch retorna (avg_loss, n_samples) — usado para samples_per_s
+- save_checkpoint — formato unificado: model_state_dict + optimizer_state_dict + epoch
+- fit() — timing separado por fase (train/eval); aceita start_epoch e prev_losses para resume
+- scripts/train.py — integrado com ModelManager; branch if _nn.resume_run / else com IF
+  explícito para resume limpo vs. modificado; run de origem nunca é tocado
+
+--- Smoke test (2026-05-17) — dataset uniform, GPU ---
+- 250 chunks x 32 amostras = 8000 amostras em data/torch/quad_chunks/uniform/
+- FNO2d (mode='grid'): 2 épocas, convergência confirmada (loss 1.07e+04 -> 5.16e-01)
+- FNO_GNN (mode='qtree'): 2 épocas, convergência confirmada (loss 8.10e+03 -> 3.62e+00)
+- Imports, forward pass, dataloader, CUDAPrefetcher, fit: todos OK
+
+--- Smoke test (2026-05-18) — tests/smoke_test_refactor.py, 33/33 OK, GPU ---
+- NnCfg.__post_init__: arch inválido -> ValueError; arch_cfg incompatível -> TypeError
+- LOSS_REGISTRY: mse, mae, relative_l2 retornam scalar correto
+- ModelManager: todos os 6 arquivos criados (config.json, metrics.jsonl, status.txt,
+  latest.pth, best.pth, model_final.pth); n_params, device, start_time, arch, loss em config.json
+- TrainingMonitor: heartbeat a cada checkpoint_every épocas; best.pth atualizado;
+  samples_per_s em metrics.jsonl
+- Early stop: patience=1 disparou corretamente; status='stopped'; stopped_early=True
+- Resume limpo: load_run reconstrói prev_losses de metrics.jsonl; start_epoch correto;
+  resumed_from em config.json; prev_losses preservados em fit()
+- Resume modificado: pesos carregados; optimizer reiniciado sem estado anterior
+
+--- Correção (2026-05-17) ---
+- make_fno_gnn_step — adicionado .to(device) explícito em todos os tensores do batch,
+  tornando-o consistente com fno_step_fn (que já fazia isso). Antes dependia
+  silenciosamente do CUDAPrefetcher para mover os dados — agora é robusto sem ele.
+
+
+=============================================================
+PARTE 2 — Benchmark comparativo: Fases A–C (2026-05-20)
+=============================================================
+
+--- Fase A — Infraestrutura de dados (concluída 2026-05-20) ---
+1. Criar data/external/ + gitkeep/gitignore
+2. Criar data/logs/darcy_beta1/FNO2d/ + FNO_ref/ + gitkeep/gitignore
+3. scripts/parsers/darcy.py — conversão HDF5 -> chunks; aceita --file, --chunk-size, --dataset
+4. src/bench/datasets/__init__.py + darcy.py — DATASET_REGISTRY['darcy_beta1'] importa sem erro
+VERIFICADO: 313 chunks gerados; shape [B, 1, 128, 128]; 10.000 amostras; valores coerentes
+
+--- Fase B — Validação do pipeline sem modificação de código (concluída 2026-05-20) ---
+5. Treinar FNO2d no Darcy:
+   NnCfg(problem='darcy_beta1', dataset='darcy_beta1', arch='FNO2d',
+         arch_cfg=FNOConfig(in_channels=1, out_channels=1, modes1=12, modes2=12,
+         data_res=(128,128)), n_epochs=10)
+6. data/logs/darcy_beta1/FNO2d/run_0002/ criado com todos os artefatos; convergência confirmada
+VERIFICADO: pipeline rodou sem alteração em build_loaders, ModelManager, fit, CUDAPrefetcher
+- train loss: 2.06e-02 -> 9.59e-03 | test loss: 1.97e-02 -> 1.03e-02 (10 épocas, 83.625 params)
+- RESTRIÇÃO: SpectralConv com rfft2 em 128x128 limita modes1 <= 64, modes2 <= 65; paper usa modes=12
+- CORREÇÃO: '->' usado em print() de model_manager.py e monitor.py — cp1252 não suporta '→'
+
+--- Fase C — Wrapper de baseline externo (concluída 2026-05-20) ---
+7. src/neural_op/archs/fno_ref.py — FNORef wrapper fino sobre neuralop.models.FNO;
+   import de neuralop no topo do módulo (fail rápido se não instalado)
+8. FNORefConfig adicionada em src/configs/training.py; exportada em src/configs/__init__.py
+   - Campos: in_channels, out_channels, n_modes, hidden_channels, n_layers,
+     lifting_channel_ratio, projection_channel_ratio, data_res
+   - API real da neuralop: usa lifting/projection_channel_ratio, não projection_channels
+9. ARCH_REGISTRY['FNO_ref'] registrado em archs/__init__.py via try/except ImportError;
+   reutiliza fno_step_fn e fno_eval_fn; loader_mode='grid'; model_kwargs filtra data_res
+VERIFICADO: data/logs/darcy_beta1/FNO_ref/run_0001/ criado; todos os artefatos presentes
+- train loss: 6.4e-03 -> 4.1e-04 | test loss: 1.7e-03 -> 4.5e-04 (10 épocas, 1.4M params)
+- Sem neuraloperator: FNO_ref ausente do registry; NnCfg(arch='FNO_ref') lança ValueError claro
+
+--- Fase C.5 — Pipeline de avaliação visual atualizado (concluída 2026-05-20) ---
+- src/configs/eval.py — EvalCfg reformulada: run_dir + checkpoint substituem dataset, arch,
+  model_name; arch e dataset agora lidos de run_dir/config.json
+- scripts/eval.py — reescrito: lê config.json, reconstrói arch_cfg = entry.cfg_cls(**cfg_dict),
+  constrói modelo via entry.make_model(arch_cfg), carrega model_state_dict do checkpoint
+- src/neural_op/archs/eval.py — fno_eval_fn generalizada para N canais: detecta C_in/C_out
+  via shape do tensor; usa labels de motor quando C_in==2 and C_out==2, senão labels genéricos;
+  magnitude = sqrt(ch0^2+ch1^2) se C>=2, senão |ch0|; colunas do 2o canal ocultadas se C==1
+VERIFICADO: smoke test manual — darcy_beta1/FNO2d/run_0002, best.pth (epoch 9),
+  chunk quad_chunk_0000, forward pass [1,128,128] -> OK
+
+--- Correções adicionais (2026-05-20) ---
+- scripts/train.py e scripts/eval.py — instâncias _nn = NnCfg(...) e _eval = EvalCfg(...)
+  removidas dos scripts; agora definidas em src/configs/training.py e src/configs/eval.py;
+  scripts importam via from src.configs.X import _nn / _eval
+- neuralop.FNO.state_dict() inclui '_metadata' como chave real — corrigido com strip em
+  save_checkpoint (training_utils.py), ModelManager.close() e nos dois load sites
+  (scripts/eval.py, bloco resume de scripts/train.py)
+VERIFICADO: pipeline funcional em Linux (Ubuntu, Python 3.10) — scripts/train.py e
+  scripts/eval.py rodam sem erros; FNO_ref requer neuraloperator (ausência -> ValueError)

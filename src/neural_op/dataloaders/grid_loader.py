@@ -108,7 +108,11 @@ class ChunkStreamDataset(IterableDataset):
             for path in paths:
                 if stop.is_set():
                     break
-                d    = torch.load(path, map_location='cpu')
+                try:
+                    d = torch.load(path, map_location='cpu')
+                except Exception as e:
+                    print(f"\n  [WARNING] chunk corrompido ignorado: {path}\n  {e}", flush=True)
+                    continue
                 x_hw = d['x_hw']    # [B, C, H, W]
                 y_hw = d['y_hw']    # [B, C, H, W]
                 del d               # edge_index, node_x, etc. liberados aqui
@@ -301,7 +305,11 @@ class ChunkQtreeDataset(IterableDataset):
             for path in paths:
                 if stop.is_set():
                     break
-                d = torch.load(path, map_location='cpu')
+                try:
+                    d = torch.load(path, map_location='cpu')
+                except Exception as e:
+                    print(f"\n  [WARNING] chunk corrompido ignorado: {path}\n  {e}", flush=True)
+                    continue
                 payload = {
                     'x_hw':       d['x_hw'],        # [B, 2, H, W]
                     'y_hw':       d['y_hw'],         # [B, 2, H, W]

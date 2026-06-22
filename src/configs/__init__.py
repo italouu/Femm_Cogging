@@ -3,3 +3,4 @@ from src.configs.training import NnCfg, FNOConfig, MaskedFNO2dConfig, FNO_GNNCon
 # [REMOVIDO] PhiDeepONetConfig — removida (2026-05-27)
 from src.configs.monitor  import MonitorCfg
 from src.configs.eval     import EvalCfg
+from src.configs.bench    import BenchCfg

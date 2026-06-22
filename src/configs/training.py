@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any, Optional
 
 from src.configs.monitor import MonitorCfg  # noqa: F401  re-exportado daqui por retrocompatibilidade
@@ -112,6 +112,16 @@ class GNN_PostBaseConfig:
         if ckpt_path.exists():
             ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
             self.base_epoch = ckpt.get('epoch')
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        # Reconstrói a partir de um config.json já salvo (eval/resume) sem rechamar
+        # __post_init__ — evita depender de base_run_dir ainda existir; usa o snapshot
+        # (base_arch/base_arch_cfg/base_epoch) já gravado na própria run.
+        obj = cls.__new__(cls)
+        for f in fields(cls):
+            setattr(obj, f.name, d[f.name])
+        return obj
 
 
 @dataclass

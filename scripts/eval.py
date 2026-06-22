@@ -14,9 +14,14 @@ arch     = cfg_dict['arch']
 dataset  = cfg_dict['dataset']
 
 # ── Reconstruir e carregar modelo ─────────────────────────────────────────────
-entry    = ARCH_REGISTRY[arch]
-arch_cfg = entry.cfg_cls(**cfg_dict['arch_cfg'])
-model    = entry.make_model(arch_cfg)
+entry = ARCH_REGISTRY[arch]
+if hasattr(entry.cfg_cls, 'from_dict'):
+    # archs com campos init=False (ex: GNN_PostBaseConfig) — reconstrói direto do
+    # snapshot salvo, sem rechamar __post_init__ (que dependeria de base_run_dir existir)
+    arch_cfg = entry.cfg_cls.from_dict(cfg_dict['arch_cfg'])
+else:
+    arch_cfg = entry.cfg_cls(**cfg_dict['arch_cfg'])
+model = entry.make_model(arch_cfg)
 model.eval()
 
 if _eval.checkpoint == 'final':

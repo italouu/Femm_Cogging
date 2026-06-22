@@ -449,6 +449,26 @@ def qtree_collate(samples):
     }
 
 
+def split_chunk_paths(chunk_paths, train_split, seed=None):
+    """
+    Divide chunk_paths em treino/teste ao nível de chunk — mesmo shuffle
+    determinístico (via seed) usado por build_loaders, exposto separadamente
+    para que scripts/eval.py possa reproduzir o split de uma run sem duplicar
+    a lógica.
+
+    Returns
+    -------
+    train_paths, test_paths : list[str]
+    """
+    paths = list(chunk_paths)
+    rng = random.Random(seed)
+    rng.shuffle(paths)
+
+    n_train = int(len(paths) * train_split)
+    n_train = max(n_train, 1) if len(paths) >= 2 else len(paths)  # 1 chunk → tudo para treino, sem test
+    return paths[:n_train], paths[n_train:]
+
+
 def build_loaders(chunk_paths, batch_size, train_split,
                   buffer_size, num_workers, prefetch_factor,
                   seed=None, mode='grid'):
@@ -496,13 +516,16 @@ def build_loaders(chunk_paths, batch_size, train_split,
             "para o subdiretório correto. Execute build_data_chunks.py antes do treino."
         )
 
-    rng = random.Random(seed)
-    rng.shuffle(paths)
-
-    n_train     = int(len(paths) * train_split)
-    n_train     = max(n_train, 1) if len(paths) >= 2 else len(paths)  # 1 chunk → tudo para treino, sem test
-    train_paths = paths[:n_train]
-    test_paths  = paths[n_train:]
+    # [REMOVIDO] split inline — movido para split_chunk_paths() para que
+    # scripts/eval.py possa reproduzir o mesmo split sem duplicar a lógica.
+    #
+    # rng = random.Random(seed)
+    # rng.shuffle(paths)
+    # n_train     = int(len(paths) * train_split)
+    # n_train     = max(n_train, 1) if len(paths) >= 2 else len(paths)
+    # train_paths = paths[:n_train]
+    # test_paths  = paths[n_train:]
+    train_paths, test_paths = split_chunk_paths(paths, train_split, seed)
 
     train_ds = cls(train_paths, buffer_size, prefetch_chunks=2)
     test_ds  = cls(test_paths,  buffer_size, prefetch_chunks=2)

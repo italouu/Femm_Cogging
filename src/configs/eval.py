@@ -1,11 +1,15 @@
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
 class EvalCfg:
-    run_dir              : str   = 'data/logs/motor_fixed_geometry_135x270/FNO2d/run_0001' # caminho para run_XXXX/ (data/logs/{problem}/{arch}/run_XXXX)
+    run_dir              : str   = 'data/logs/motor_default_v2_135x270/FNO2d/run_0001' # caminho para run_XXXX/ (data/logs/{problem}/{arch}/run_XXXX)
     checkpoint           : str   = 'best'              # 'best', 'latest' ou 'final'
-    chunk_name           : str   = 'data_chunk_0000'   # sem extensão .pt; dataset lido de run_dir/config.json
+    split                : str   = 'test'               # 'train' ou 'test' — conjunto de onde o chunk vem
+    chunk_index          : Optional[int] = 0         # N-ésimo chunk (0-indexed) dentro de `split`, reproduzindo
+                                                         # o mesmo shuffle/seed do treino da run; se None, usa chunk_name
+    chunk_name           : str   = 'data_chunk_0000'   # sem extensão .pt; usado só se chunk_index=None; dataset lido de run_dir/config.json
     sample_idx           : int   = 0
     irrelevance_threshold: float = 0.0001
     show_qtree_overlay   : bool  = False               # overlay de refinamento (FNO_GNN)

@@ -84,7 +84,7 @@ class FNO_GNNConfig:
 class GNN_PostBaseConfig:
     # Treino em duas etapas (não end-to-end): base_run_dir aponta para um run já treinado
     # (FNO2d ou FNO_GNN), congelado; só o GNN novo é treinado.
-    base_run_dir   : str = 'data/logs/motor_fixed_geometry_135x270/FNO2d/run_0001'
+    base_run_dir   : str = 'data/logs/motor_default_v2_135x270/FNO2d/run_0001'
     base_checkpoint: str = 'best'   # 'best', 'latest' ou 'final'
     gnn_node_width : int = 32
     gnn_n_layers   : int = 3
@@ -181,22 +181,22 @@ class MaskedFNO_GNNConfig:
 
 @dataclass
 class NnCfg:
-    dataset: str = 'fixed_geometry_135x270'
-    arch: str = 'FNO2d'
+    dataset: str = 'motor_default_v2_135x270'
+    arch: str = 'GNN_PostBase'
     loss: str = 'mse'
 
-    problem: str = 'motor_fixed_geometry_135x270'
+    problem: str = 'motor_default_v2_135x270'
 
     # Treino
     lr: float = 1e-3
-    n_epochs: int = 10
+    n_epochs: int = 500
     scheduler: str = 'step'
     scheduler_step: int = 100
-    scheduler_gamma: float = 0.5
+    scheduler_gamma: float = 0.8
 
     # Dataloader
     batch_size: int = 32
-    train_split: float = 0.70
+    train_split: float = 0.30
     buffer_size: int = 64
     num_workers: int = 2
     prefetch_factor: int = 2

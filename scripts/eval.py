@@ -1,8 +1,10 @@
+import glob
 import json
 import torch
 from pathlib import Path
 from src.configs.eval import EvalCfg
 from src.neural_op.archs import ARCH_REGISTRY
+from src.neural_op.dataloaders.grid_loader import split_chunk_paths
 
 # ── Configuração ───────────────────────────────────────────────────────────────
 _eval = EvalCfg()
@@ -34,7 +36,24 @@ sd   = {k: v for k, v in ckpt['model_state_dict'].items() if k != '_metadata'}
 model.load_state_dict(sd)
 print(f"Modelo carregado: {ckpt_path}  (epoch {ckpt['epoch']})")
 
+# ── Resolver chunk dentro do split treino/teste da run ────────────────────────
+chunk_paths = sorted(glob.glob(f'data/torch/data_chunks/{dataset}/data_chunk_*.pt'))
+train_paths, test_paths = split_chunk_paths(
+    chunk_paths, cfg_dict['train_split'], cfg_dict['split_seed']
+)
+split_paths = train_paths if _eval.split == 'train' else test_paths
+
+if _eval.chunk_index is not None:
+    chunk_path = Path(split_paths[_eval.chunk_index])
+else:
+    chunk_path = Path(f'data/torch/data_chunks/{dataset}/{_eval.chunk_name}.pt')
+    if chunk_path not in (Path(p) for p in split_paths):
+        other = 'treino' if _eval.split == 'test' else 'teste'
+        print(f"  [AVISO] {chunk_path.name} não pertence ao split '{_eval.split}' "
+              f"desta run (pertence a {other} ou não existe no dataset).")
+
+print(f"Chunk: {chunk_path.name}  (split='{_eval.split}')")
+
 # ── Carregar chunk e avaliar ───────────────────────────────────────────────────
-chunk_path = Path(f'data/torch/data_chunks/{dataset}/{_eval.chunk_name}.pt')
 d = torch.load(chunk_path, map_location='cpu')
 entry.eval_fn(model, d, _eval)

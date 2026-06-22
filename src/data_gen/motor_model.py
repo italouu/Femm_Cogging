@@ -1157,7 +1157,12 @@ class BLDC_Shapely_Model(BLDC_Process):
         #out motor
         c_out = center.buffer(self.outer_diameter/2)
         self.out_motor = c_out.difference(c1)
-        self.geometries['vacuum'].append(self.out_motor)
+        # [REMOVIDO] vácuo deve ser implícito (resíduo de área não coberta por
+        # ferro/ímã/cobre), igual ao resto do código. Adicionar out_motor aqui
+        # fazia compute() em _make_material_compute_fn contar a área de vácuo
+        # duas vezes (interseção + resíduo), zerando frac_dom e forçando refino
+        # até max_depth no anel entre o rotor e o raio externo de amostragem.
+        # self.geometries['vacuum'].append(self.out_motor)
 
         # poles
         step_ang = 360/self.number_rotor_poles
@@ -1194,7 +1199,11 @@ class BLDC_Shapely_Model(BLDC_Process):
 
         #in motor
         self.in_motor = center.buffer(self.inner_diameter/2)
-        self.geometries['vacuum'].append(self.in_motor)
+        # [REMOVIDO] mesmo motivo do out_motor acima — vácuo implícito, não
+        # cadastrado em geometries['vacuum']. Na prática in_motor nunca
+        # intersecta o domínio amostrado (raio igual a r_in da amostragem),
+        # mas mantemos o mesmo padrão por consistência.
+        # self.geometries['vacuum'].append(self.in_motor)
 
     def _create_air_gap(self):
         center = Point(0,0)

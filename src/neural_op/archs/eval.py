@@ -272,7 +272,7 @@ def fno_gnn_eval_fn(model, d, eval_cfg):
 
     fig, axes = plt.subplots(4, 4, figsize=(18, 13))
     fig.suptitle(
-        f"FNO_GNN — amostra {i}  |  B_ref={B_ref:.4f}  "
+        f"{type(model).__name__} — amostra {i}  |  B_ref={B_ref:.4f}  "
         f"região relevante: {mask.mean()*100:.1f}%",
         fontsize=12,
     )

@@ -46,7 +46,10 @@
       "PowerShell(head *)",
       "Bash(Remove-Item *)",
       "Bash(dir D:\\\\UDESC\\\\MESTRADO\\\\FEMM_cogging\\\\docs *)",
-      "Bash(copy *)"
+      "Bash(copy *)",
+      "Bash(git stash *)",
+      "Bash(git --no-pager diff CLAUDE.md)",
+      "Bash(python3 *)"
     ]
   }
 }

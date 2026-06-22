@@ -2,15 +2,17 @@ from dataclasses import dataclass, asdict
 
 from src.neural_op.archs.fno            import FNO2d,          fno_step_fn
 from src.neural_op.archs.fno_gnn        import FNO_GNN,        make_fno_gnn_step
+from src.neural_op.archs.fno_gnn_field  import FNO_GNN_Field
 from src.neural_op.archs.fno_mat        import (MaskedFNO2d,    masked_fno_step_fn,
                                                 FNO2d_SingleMat, make_single_mat_step_fn)
 from src.neural_op.archs.masked_fno_gnn import MaskedFNO_GNN,  make_masked_fno_gnn_step
+from src.neural_op.archs.gnn_post_base  import GNN_PostBase,   gnn_post_base_step_fn
 from src.neural_op.archs.eval           import (fno_eval_fn, fno_gnn_eval_fn,
                                                 masked_fno_eval_fn, masked_fno_gnn_eval_fn,
                                                 single_mat_fno_eval_fn)
 from src.configs.training               import (FNOConfig, FNO_GNNConfig,
                                                 MaskedFNO2dConfig, MaskedFNO_GNNConfig,
-                                                SingleMatFNOConfig)
+                                                SingleMatFNOConfig, GNN_PostBaseConfig)
 # [REMOVIDO] PhiDeepONet — removido do escopo ativo (2026-05-27)
 # from src.neural_op.archs.phi_deeponet import PhiDeepONet,        phi_deeponet_step_fn
 # from src.neural_op.archs.eval         import phi_deeponet_eval_fn
@@ -44,6 +46,20 @@ def _fno_gnn_kwargs(cfg):
 #     return {k: v for k, v in asdict(cfg).items() if k != 'data_res'}
 
 
+def _gnn_post_base_kwargs(cfg):
+    # base_arch/base_arch_cfg (snapshot, init=False) são passados como fallback ao
+    # construtor — não fazem parte do model_kwargs "normal", mas precisam chegar até
+    # GNN_PostBase para reconstrução resiliente caso base_run_dir não exista mais.
+    return {
+        'base_run_dir':    cfg.base_run_dir,
+        'base_checkpoint': cfg.base_checkpoint,
+        'gnn_node_width':  cfg.gnn_node_width,
+        'gnn_n_layers':    cfg.gnn_n_layers,
+        'base_arch':       cfg.base_arch,
+        'base_arch_cfg':   cfg.base_arch_cfg,
+    }
+
+
 ARCH_REGISTRY: dict = {
     'FNO2d': ArchEntry(
         cls=FNO2d,
@@ -63,6 +79,14 @@ ARCH_REGISTRY: dict = {
     'FNO_GNN': ArchEntry(
         cls=FNO_GNN,
         cfg_cls=FNO_GNNConfig,
+        loader_mode='qtree',
+        model_kwargs=_fno_gnn_kwargs,
+        make_step_fn=lambda cfg: make_fno_gnn_step(cfg.lambda_loss),
+        eval_fn=fno_gnn_eval_fn,
+    ),
+    'FNO_GNN_Field': ArchEntry(
+        cls=FNO_GNN_Field,
+        cfg_cls=FNO_GNNConfig,   # mesma config de FNO_GNN — só o forward muda (campo vs delta)
         loader_mode='qtree',
         model_kwargs=_fno_gnn_kwargs,
         make_step_fn=lambda cfg: make_fno_gnn_step(cfg.lambda_loss),
@@ -91,6 +115,14 @@ ARCH_REGISTRY: dict = {
         model_kwargs=lambda cfg: {k: v for k, v in asdict(cfg).items() if k != 'lambda_loss'},
         make_step_fn=lambda cfg: make_masked_fno_gnn_step(cfg.lambda_loss),
         eval_fn=masked_fno_gnn_eval_fn,
+    ),
+    'GNN_PostBase': ArchEntry(
+        cls=GNN_PostBase,
+        cfg_cls=GNN_PostBaseConfig,
+        loader_mode='qtree',
+        model_kwargs=_gnn_post_base_kwargs,
+        make_step_fn=lambda cfg: gnn_post_base_step_fn,
+        eval_fn=fno_gnn_eval_fn,   # mesma assinatura de forward que FNO_GNN
     ),
 }
 

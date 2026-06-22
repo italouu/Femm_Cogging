@@ -81,6 +81,40 @@ class FNO_GNNConfig:
 
 
 @dataclass
+class GNN_PostBaseConfig:
+    # Treino em duas etapas (não end-to-end): base_run_dir aponta para um run já treinado
+    # (FNO2d ou FNO_GNN), congelado; só o GNN novo é treinado.
+    base_run_dir   : str = 'data/logs/motor_fixed_geometry_135x270/FNO2d/run_0001'
+    base_checkpoint: str = 'best'   # 'best', 'latest' ou 'final'
+    gnn_node_width : int = 32
+    gnn_n_layers   : int = 3
+
+    # Snapshot de arch/arch_cfg/epoch de base_run_dir, capturado em __post_init__ e
+    # gravado em config.json desta run (via NnCfg → ModelManager.open). Garante que os
+    # parâmetros do modelo base não se percam mesmo que base_run_dir seja movido/apagado
+    # depois — usado como fallback em GNN_PostBase._load_frozen_base.
+    base_arch     : str           = field(default='', init=False)
+    base_arch_cfg : dict          = field(default_factory=dict, init=False)
+    base_epoch    : Optional[int] = field(default=None, init=False)
+
+    def __post_init__(self):
+        import json
+        from pathlib import Path
+        import torch
+
+        run_dir  = Path(self.base_run_dir)
+        cfg_dict = json.loads((run_dir / 'config.json').read_text())
+        self.base_arch     = cfg_dict['arch']
+        self.base_arch_cfg = cfg_dict['arch_cfg']
+
+        ckpt_path = (run_dir / 'model_final.pth') if self.base_checkpoint == 'final' \
+            else (run_dir / 'checkpoints' / f'{self.base_checkpoint}.pth')
+        if ckpt_path.exists():
+            ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
+            self.base_epoch = ckpt.get('epoch')
+
+
+@dataclass
 class MaskedFNO_GNNConfig:
     # FNO com 8 canais de saída (4 materiais × Bx, By); GNN corrige nos 8 canais
     fno_modes1     : int   = 240
@@ -113,6 +147,11 @@ class MaskedFNO_GNNConfig:
 # │ FNO_GNN         │ mse / mae /          │ qtree            │ FNO_GNNConfig            │
 # │                 │   relative_l2        │                  │                          │
 # │ MaskedFNO_GNN   │ masked_fno_gnn_loss  │ qtree            │ MaskedFNO_GNNConfig      │
+# │ FNO_GNN_Field   │ mse / mae /          │ qtree            │ FNO_GNNConfig            │
+# │                 │   relative_l2        │                  │   (campo direto nos nós) │
+# │ GNN_PostBase    │ mse / mae /          │ qtree            │ GNN_PostBaseConfig       │
+# │                 │   relative_l2        │                  │   (base FNO2d/FNO_GNN    │
+# │                 │                      │                  │    congelada)            │
 # └─────────────────┴──────────────────────┴──────────────────┴──────────────────────────┘
 #
 # Chaves de loss — LOSS_REGISTRY (src/neural_op/losses.py)

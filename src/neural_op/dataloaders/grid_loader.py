@@ -543,7 +543,7 @@ def build_loaders(chunk_paths, batch_size, train_split,
     test_loader  = DataLoader(test_ds,  **loader_kw)
 
     print(f"Chunks: {len(paths)} total  "
-          f"({n_train} treino / {len(test_paths)} teste)  "
+          f"({len(train_paths)} treino / {len(test_paths)} teste)  "
           f"| buffer {buffer_size} amostras  "
           f"| workers {num_workers}  "
           f"| mode '{mode}'", flush=True)

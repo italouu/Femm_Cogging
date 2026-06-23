@@ -5,9 +5,12 @@ from pathlib import Path
 from src.configs.bench import BenchCfg
 from src.neural_op.archs import ARCH_REGISTRY
 from src.bench.metrics import METRICS_REGISTRY, aggregate
+from src.neural_op.dataloaders.grid_loader import _to_device
 
 # ── Configuração ───────────────────────────────────────────────────────────────
 _bench = BenchCfg()
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f"Device: {device}")
 
 # ── Carregar config da run ────────────────────────────────────────────────────
 run_dir  = Path(_bench.run_dir)
@@ -22,7 +25,6 @@ if hasattr(entry.cfg_cls, 'from_dict'):
 else:
     arch_cfg = entry.cfg_cls(**cfg_dict['arch_cfg'])
 model = entry.make_model(arch_cfg)
-model.eval()
 
 if _bench.checkpoint == 'final':
     ckpt_path = run_dir / 'model_final.pth'
@@ -32,6 +34,8 @@ else:
 ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
 sd   = {k: v for k, v in ckpt['model_state_dict'].items() if k != '_metadata'}
 model.load_state_dict(sd)
+model.to(device)
+model.eval()
 print(f"Modelo carregado: {ckpt_path}  (epoch {ckpt['epoch']})")
 
 # ── Avaliar todas as chunks do dataset ────────────────────────────────────────
@@ -42,6 +46,7 @@ print(f"Avaliando {len(chunk_paths)} chunks (treino+teste) de '{dataset}'...")
 pooled = {}
 for cp in chunk_paths:
     d = torch.load(cp, map_location='cpu')
+    d = _to_device(d, device)
     for stage, arr in collect_fn(model, d, _bench.irrelevance_threshold).items():
         pooled.setdefault(stage, []).append(arr)
 

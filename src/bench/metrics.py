@@ -28,7 +28,7 @@ def _mask_and_ref(mag_true, thr, extra_mask=None):
     if extra_mask is not None:
         mask = mask & extra_mask
     B = mag_true.shape[0]
-    B_ref = torch.ones(B)
+    B_ref = torch.ones(B, device=mag_true.device)
     for b in range(B):
         if mask[b].any():
             B_ref[b] = mag_true[b][mask[b]].pow(2).mean().sqrt()
@@ -40,7 +40,7 @@ def _pool_masked_pct(err, mask, B_ref):
     de todos os pixels relevantes de todas as amostras do chunk, já concatenados
     (pool global de pixels, não média por amostra)."""
     pct = err / B_ref.view(-1, 1, 1) * 100
-    return pct[mask].numpy()
+    return pct[mask].cpu().numpy()
 
 
 def _qtree_render_batched(values, node_x, L, H, W):
@@ -54,17 +54,18 @@ def _qtree_render_batched(values, node_x, L, H, W):
     node_x : [S_tot, N]  — col 3=r_base, col 4=c_base
     L      : [B]         nós por amostra
     """
+    device = values.device
     B = len(L)
     C = values.shape[1]
-    batch_idx = torch.repeat_interleave(torch.arange(B), L)
+    batch_idx = torch.repeat_interleave(torch.arange(B, device=device), L)
     rows = (node_x[:, 3] * H).long().clamp(0, H - 1)
     cols = (node_x[:, 4] * W).long().clamp(0, W - 1)
     flat = batch_idx * (H * W) + rows * W + cols
 
-    grid  = torch.zeros(B * H * W, C)
-    count = torch.zeros(B * H * W, 1)
+    grid  = torch.zeros(B * H * W, C, device=device)
+    count = torch.zeros(B * H * W, 1, device=device)
     grid.scatter_add_(0, flat.unsqueeze(1).expand_as(values), values)
-    count.scatter_add_(0, flat.unsqueeze(1), torch.ones(len(flat), 1))
+    count.scatter_add_(0, flat.unsqueeze(1), torch.ones(len(flat), 1, device=device))
     count.clamp_(min=1)
     return (grid / count).view(B, H, W, C).permute(0, 3, 1, 2)
 

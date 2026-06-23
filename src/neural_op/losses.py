@@ -1,8 +1,37 @@
 import torch
 
 
-def mse_loss(out, y):
-    return torch.mean((out - y) ** 2)
+def _magnitude(t):
+    """[B,C,H,W] (grade) ou [S,C] (nós) — magnitude vetorial se C>=2, abs se C==1."""
+    if t.shape[1] >= 2:
+        return (t[:, 0] ** 2 + t[:, 1] ** 2).sqrt()
+    return t[:, 0].abs()
+
+
+def topk_tail_term(pred, y, k_frac):
+    """
+    Termo de cauda reutilizável: erro quadrático relativo médio dos k_frac
+    elementos (pixels/nós) com maior erro de magnitude, normalizado pelo RMS
+    global de |y| (mesma referência relativa — B_ref — usada em
+    src/bench/metrics.py) para ficar em escala comparável à MSE.
+
+    pred, y : [B, C, H, W] (grade) ou [S, C] (nós), mesmo shape
+    k_frac  : fração (0,1] dos elementos com maior erro a penalizar
+    """
+    mag_true = _magnitude(y)
+    mag_pred = _magnitude(pred)
+    b_ref_sq = mag_true.pow(2).mean().clamp(min=1e-8)
+    err_rel  = ((mag_pred - mag_true) ** 2 / b_ref_sq).reshape(-1)
+    k = max(1, int(k_frac * err_rel.numel()))
+    return torch.topk(err_rel, k).values.mean()
+
+
+def mse_loss(out, y, tail_alpha=0.0, tail_k_frac=0.05):
+    base = torch.mean((out - y) ** 2)
+    if tail_alpha == 0.0:
+        return base
+    tail = topk_tail_term(out, y, tail_k_frac)
+    return (1.0 - tail_alpha) * base + tail_alpha * tail
 
 
 def mae_loss(out, y):

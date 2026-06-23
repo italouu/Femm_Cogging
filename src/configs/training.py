@@ -2,6 +2,7 @@ from dataclasses import dataclass, field, fields
 from typing import Any, Optional
 
 from src.configs.monitor import MonitorCfg  # noqa: F401  re-exportado daqui por retrocompatibilidade
+from src.configs.loss    import LossCfg     # noqa: F401  re-exportado daqui por retrocompatibilidade
 
 
 # ── Arquiteturas ──────────────────────────────────────────────────────────────
@@ -168,7 +169,8 @@ class MaskedFNO_GNNConfig:
 # ┌──────────────────────┬──────────────────────────────────────────────────────────────┐
 # │ chave                │ assinatura e uso                                             │
 # ├──────────────────────┼──────────────────────────────────────────────────────────────┤
-# │ 'mse'                │ (out, y)  — MSE elementar                                   │
+# │ 'mse'                │ (out, y)  — MSE elementar; + termo de cauda top-k opcional  │
+# │                      │   via loss_cfg.tail_alpha/tail_k_frac (0 = desligado)       │
 # │ 'mae'                │ (out, y)  — MAE elementar                                   │
 # │ 'relative_l2'        │ (out, y)  — L2 relativo normalizado por amostra             │
 # │ 'masked_fno_loss'    │ (pred8, y, masks)  — MSE mascarado por material na grade;   │
@@ -182,7 +184,7 @@ class MaskedFNO_GNNConfig:
 @dataclass
 class NnCfg:
     dataset: str = 'motor_default_v2_135x270'
-    arch: str = 'GNN_PostBase'
+    arch: str = 'FNO2d'
     loss: str = 'mse'
 
     problem: str = 'motor_default_v2_135x270'
@@ -209,6 +211,7 @@ class NnCfg:
 
     arch_cfg:     Any        = None   # None → auto-instanciado em __post_init__ via ARCH_REGISTRY
     monitor_cfg:  MonitorCfg = field(default_factory=MonitorCfg)
+    loss_cfg:     LossCfg    = field(default_factory=LossCfg)  # tail_alpha=0 → comportamento idêntico ao anterior
 
     def __post_init__(self):
         from pathlib import Path

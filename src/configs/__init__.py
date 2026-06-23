@@ -4,3 +4,4 @@ from src.configs.training import NnCfg, FNOConfig, MaskedFNO2dConfig, FNO_GNNCon
 from src.configs.monitor  import MonitorCfg
 from src.configs.eval     import EvalCfg
 from src.configs.bench    import BenchCfg
+from src.configs.loss     import LossCfg

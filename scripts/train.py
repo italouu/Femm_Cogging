@@ -1,3 +1,4 @@
+import functools
 import glob
 import torch
 from src.configs.training import NnCfg
@@ -39,6 +40,14 @@ if __name__ == '__main__':
 
     step_fn = entry.make_step_fn(_nn.arch_cfg)
     loss_fn = LOSS_REGISTRY[_nn.loss]
+    if _nn.loss_cfg.tail_alpha > 0:
+        # Atualmente só 'mse' aceita tail_alpha/tail_k_frac — outras chaves
+        # de LOSS_REGISTRY ainda não foram estendidas (TypeError se usadas aqui).
+        loss_fn = functools.partial(
+            loss_fn,
+            tail_alpha=_nn.loss_cfg.tail_alpha,
+            tail_k_frac=_nn.loss_cfg.tail_k_frac,
+        )
 
     # ── Modelo, optimizer, scheduler ───────────────────────────────────────
     if _nn.resume_run:
@@ -68,16 +77,6 @@ if __name__ == '__main__':
         scheduler = torch.optim.lr_scheduler.StepLR(
             optimizer, step_size=_nn.scheduler_step, gamma=_nn.scheduler_gamma)
 
-    # [REMOVIDO] ckpt_extra migrado para config.json via ModelManager
-    # ckpt_extra = {
-    #     'config':          NET_CONFIG,
-    #     'optimizer_label': type(optimizer).__name__,
-    #     'loss_label':      _nn.loss,
-    # }
-
-    # Inicializa CUDA aqui (e não no nível de módulo) para que os prints de
-    # build_loaders apareçam antes — diagnóstico mais claro se o driver CUDA
-    # estiver em estado inválido após crash de OOM.
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Device: {DEVICE}", flush=True)
 
@@ -105,12 +104,3 @@ if __name__ == '__main__':
     finally:
         mgr.close(status, monitor.last_epoch, model, optimizer, scheduler)
 
-    # [REMOVIDO] save interativo substituído por mgr.close() que salva model_final.pth
-    # name = input('save? (nome ou Enter para pular): ').strip()
-    # if name:
-    #     path = f'data/models/{_nn.dataset}/{name}.pth'
-    #     pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
-    #     save_checkpoint(path, start_epoch + _nn.n_epochs - 1,
-    #                     model, optimizer, scheduler,
-    #                     losses['train'], losses['test'], ckpt_extra)
-    #     print(f"Salvo em {path}")

@@ -144,6 +144,49 @@ def fno_eval_fn(model, d, eval_cfg):
     m, med, p95 = _masked_metrics(mag_err, mask, B_ref)
     cmap_nan = plt.cm.hot.copy(); cmap_nan.set_bad(color='#444444')
 
+    # ── Métrica opcional: projeta a predição (grade base) nas folhas da qtree ────
+    # e compara contra node_y (GT exato por folha, nunca promediado). Revela o
+    # erro que a saída em grade uniforme escapa em células mistas/interfaces.
+    # Cada folha conta como 1 amostra (sem peso por área).
+    qtree_ok = eval_cfg.qtree_metric_enabled and ('node_x' in d) and ('node_y' in d)
+    en_qt_render = None
+    if qtree_ok:
+        H, W  = int(d['dim'][0]), int(d['dim'][1])
+        L     = d['L']
+        n_off = torch.cat([torch.zeros(1, dtype=torch.long), L.cumsum(0)])
+        ns, ne = int(n_off[i]), int(n_off[i + 1])
+
+        node_x_i = d['node_x'][ns:ne]   # [S_i, 5] mu_r, M, cell_area, r_base, c_base
+        node_y_i = d['node_y'][ns:ne]   # [S_i, 2] Bx, By — valor exato por folha
+
+        rows = (node_x_i[:, 3] * H).long().clamp(0, H - 1)
+        cols = (node_x_i[:, 4] * W).long().clamp(0, W - 1)
+
+        # nearest-neighbor: a folha herda a predição da célula base que a contém
+        pred_qt = pred[:, rows, cols].T   # [S_i, C_out]
+
+        if pred_qt.shape[1] >= 2:
+            mag_true_qt = (node_y_i[:, 0]**2 + node_y_i[:, 1]**2).sqrt().numpy()
+            mag_pred_qt = (pred_qt[:, 0]**2  + pred_qt[:, 1]**2).sqrt().numpy()
+        else:
+            mag_true_qt = node_y_i[:, 0].abs().numpy()
+            mag_pred_qt = pred_qt[:, 0].abs().numpy()
+        err_qt = np.abs(mag_pred_qt - mag_true_qt)
+
+        mask_qt  = mag_true_qt >= thr
+        B_ref_qt = np.sqrt(np.mean(mag_true_qt[mask_qt]**2)) if mask_qt.any() else 1.0
+        qt_m, qt_med, qt_p95 = _masked_metrics(err_qt, mask_qt, B_ref_qt)
+
+        print(f"FNO (grade H×W)      — média={m:.1f}%  mediana={med:.1f}%  p95={p95:.1f}%")
+        print(f"FNO (qtree refinada) — média={qt_m:.1f}%  mediana={qt_med:.1f}%  p95={qt_p95:.1f}%  "
+              f"({int(mask_qt.sum())} folhas relevantes / {len(mask_qt)})")
+
+        en_qt = np.full(len(err_qt), np.nan, dtype=np.float32)
+        en_qt[mask_qt] = err_qt[mask_qt] / B_ref_qt * 100
+        en_qt_render = _qtree_render_as_grid(
+            torch.from_numpy(en_qt).unsqueeze(1), node_x_i, H, W
+        )[0].numpy()
+
     fig, axes = plt.subplots(3, 4, figsize=(18, 10))
     fig.suptitle(
         f"FNO2d — amostra {i}  |  ref={B_ref:.4f}  "
@@ -160,7 +203,13 @@ def fno_eval_fn(model, d, eval_cfg):
     axes[0, 2].imshow(mask.astype(float), origin='lower', aspect='auto',
                       cmap='gray', vmin=0, vmax=1)
     axes[0, 2].set_title(f'Máscara |y|>={thr}  (branco=relevante)', fontsize=9)
-    axes[0, 3].axis('off')
+    if en_qt_render is not None:
+        vmax_qt = eval_cfg.error_cap if eval_cfg.error_cap_enabled else float(np.nanmax(en_qt_render))
+        _imshow(axes[0, 3], en_qt_render,
+                f'Erro norm. qtree refinada [%]\nmédia={qt_m:.1f}%  p95={qt_p95:.1f}%',
+                cmap=cmap_nan, vmin=0, vmax=vmax_qt)
+    else:
+        axes[0, 3].axis('off')
 
     # Linha 1 — alvo
     _imshow(axes[1, 0], y[0].numpy(), f'Alvo: {out_labels[0]}')

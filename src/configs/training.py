@@ -13,7 +13,8 @@ class FNOConfig:
     out_channels: int = 2
     modes1: int = 270
     modes2: int = 270
-    conv_width: int = 8
+    conv_width: int = 6
+
     conv_layers: int = 4
     lift_width: int = 64
     lift_layers: int = 3
@@ -41,7 +42,7 @@ class SingleMatFNOConfig:
     out_channels: int   = 2        # sempre 2: Bx, By — não alterar
     modes1      : int   = 240
     modes2      : int   = 240
-    conv_width  : int   = 8
+    conv_width  : int   = 6
     conv_layers : int   = 4
     lift_width  : int   = 64
     lift_layers : int   = 3
@@ -56,7 +57,7 @@ class MaskedFNO2dConfig:
     out_channels: int   = 8      # 4 materiais × 2 campos (Bx, By) — ferro=0, ar=1, ima=2, cobre=3
     modes1      : int   = 240
     modes2      : int   = 240
-    conv_width  : int   = 8
+    conv_width  : int   = 6
     conv_layers : int   = 4
     lift_width  : int   = 64
     lift_layers : int   = 3
@@ -69,7 +70,7 @@ class MaskedFNO2dConfig:
 class FNO_GNNConfig:
     fno_modes1: int = 240
     fno_modes2: int = 240
-    fno_conv_width: int = 8
+    fno_conv_width: int = 6
     fno_conv_layers: int = 4
     fno_lift_width: int = 64
     fno_lift_layers: int = 3

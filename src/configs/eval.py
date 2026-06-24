@@ -10,6 +10,9 @@ class EvalCfg:
     chunk_index          : Optional[int] = 1         # N-ésimo chunk (0-indexed) dentro de `split`, reproduzindo
                                                          # o mesmo shuffle/seed do treino da run; se None, usa chunk_name
     chunk_name           : str   = 'data_chunk_0000'   # sem extensão .pt; usado só se chunk_index=None; dataset lido de run_dir/config.json
+    dataset_override     : Optional[str] = None        # nome de pasta em data/torch/data_chunks/; se None, usa dataset do
+                                                         # config.json da run (treino); se setado, ignora chunk_index (split de
+                                                         # treino não é reproduzível em outro dataset) e usa chunk_name
     sample_idx           : int   = 0
     irrelevance_threshold: float = 0.0001
     show_qtree_overlay   : bool  = False               # overlay de refinamento (FNO_GNN)

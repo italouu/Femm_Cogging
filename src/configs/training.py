@@ -68,15 +68,15 @@ class MaskedFNO2dConfig:
 
 @dataclass
 class FNO_GNNConfig:
-    fno_modes1: int = 240
-    fno_modes2: int = 240
+    fno_modes1: int = 270
+    fno_modes2: int = 270
     fno_conv_width: int = 6
     fno_conv_layers: int = 4
     fno_lift_width: int = 64
     fno_lift_layers: int = 3
     fno_proj_width: int = 64
     fno_proj_layers: int = 3
-    data_res: tuple = (80, 240)
+    data_res: tuple = (135, 270)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
     lambda_loss: float = 0.5   # peso da loss de grade; loss_nós = 1 - lambda_loss

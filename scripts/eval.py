@@ -15,6 +15,12 @@ cfg_dict = json.loads((run_dir / 'config.json').read_text())
 arch     = cfg_dict['arch']
 dataset  = cfg_dict['dataset']
 
+if _eval.dataset_override is not None:
+    dataset = _eval.dataset_override
+    if _eval.chunk_index is not None:
+        print(f"  [AVISO] dataset_override='{dataset}' definido — ignorando chunk_index "
+              f"(split de treino só é reproduzível no dataset original da run). Usando chunk_name='{_eval.chunk_name}'.")
+
 # ── Reconstruir e carregar modelo ─────────────────────────────────────────────
 entry = ARCH_REGISTRY[arch]
 if hasattr(entry.cfg_cls, 'from_dict'):
@@ -43,7 +49,7 @@ train_paths, test_paths = split_chunk_paths(
 )
 split_paths = train_paths if _eval.split == 'train' else test_paths
 
-if _eval.chunk_index is not None:
+if _eval.chunk_index is not None and _eval.dataset_override is None:
     chunk_path = Path(split_paths[_eval.chunk_index])
 else:
     chunk_path = Path(f'data/torch/data_chunks/{dataset}/{_eval.chunk_name}.pt')

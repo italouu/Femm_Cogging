@@ -449,12 +449,19 @@ def qtree_collate(samples):
     }
 
 
-def split_chunk_paths(chunk_paths, train_split, seed=None):
+def split_chunk_paths(chunk_paths, train_split, seed=None, test_split=None):
     """
     Divide chunk_paths em treino/teste ao nível de chunk — mesmo shuffle
     determinístico (via seed) usado por build_loaders, exposto separadamente
     para que scripts/eval.py possa reproduzir o split de uma run sem duplicar
     a lógica.
+
+    test_split : float|None
+        None       → teste = complemento de train_split (comportamento padrão).
+        float      → fração fixa (sobre o total de chunks) usada como teste;
+                     o restante entre train_split e test_split fica de fora
+                     da época (nem treino nem teste) — útil para agilizar
+                     avaliação quando train_split é pequeno (ex: testes rápidos).
 
     Returns
     -------
@@ -466,12 +473,22 @@ def split_chunk_paths(chunk_paths, train_split, seed=None):
 
     n_train = int(len(paths) * train_split)
     n_train = max(n_train, 1) if len(paths) >= 2 else len(paths)  # 1 chunk → tudo para treino, sem test
-    return paths[:n_train], paths[n_train:]
+    train_paths = paths[:n_train]
+    remaining   = paths[n_train:]
+
+    if test_split is None:
+        test_paths = remaining
+    else:
+        n_test = min(int(len(paths) * test_split), len(remaining))
+        n_test = max(n_test, 1) if remaining else 0
+        test_paths = remaining[:n_test]
+
+    return train_paths, test_paths
 
 
 def build_loaders(chunk_paths, batch_size, train_split,
                   buffer_size, num_workers, prefetch_factor,
-                  seed=None, mode='grid'):
+                  seed=None, mode='grid', test_split=None):
     """
     Divide chunk_paths em treino/teste ao nível de chunk, cria um dataset
     para cada split e retorna os DataLoaders.
@@ -489,10 +506,13 @@ def build_loaders(chunk_paths, batch_size, train_split,
     seed           : int|None        semente para o split reproduzível
     mode           : 'grid'|'qtree'  'grid' usa ChunkStreamDataset + collate padrão;
                                      'qtree' usa ChunkQtreeDataset + qtree_collate
+    test_split     : float|None      None → teste = complemento de train_split;
+                                     float → fração fixa de chunks para teste
+                                     (ver split_chunk_paths)
 
     Returns
     -------
-    train_loader, test_loader
+    train_loader, test_loader, train_paths, test_paths
     """
     if mode == 'grid':
         cls, collate_fn = ChunkStreamDataset, None
@@ -525,7 +545,7 @@ def build_loaders(chunk_paths, batch_size, train_split,
     # n_train     = max(n_train, 1) if len(paths) >= 2 else len(paths)
     # train_paths = paths[:n_train]
     # test_paths  = paths[n_train:]
-    train_paths, test_paths = split_chunk_paths(paths, train_split, seed)
+    train_paths, test_paths = split_chunk_paths(paths, train_split, seed, test_split)
 
     train_ds = cls(train_paths, buffer_size, prefetch_chunks=2)
     test_ds  = cls(test_paths,  buffer_size, prefetch_chunks=2)
@@ -542,9 +562,11 @@ def build_loaders(chunk_paths, batch_size, train_split,
     train_loader = DataLoader(train_ds, **loader_kw)
     test_loader  = DataLoader(test_ds,  **loader_kw)
 
+    n_unused = len(paths) - len(train_paths) - len(test_paths)
+    unused_str = f" / {n_unused} não usados" if n_unused > 0 else ""
     print(f"Chunks: {len(paths)} total  "
-          f"({len(train_paths)} treino / {len(test_paths)} teste)  "
+          f"({len(train_paths)} treino / {len(test_paths)} teste{unused_str})  "
           f"| buffer {buffer_size} amostras  "
           f"| workers {num_workers}  "
           f"| mode '{mode}'", flush=True)
-    return train_loader, test_loader
+    return train_loader, test_loader, train_paths, test_paths

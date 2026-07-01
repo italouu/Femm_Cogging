@@ -43,10 +43,32 @@ model.load_state_dict(sd)
 print(f"Modelo carregado: {ckpt_path}  (epoch {ckpt['epoch']})")
 
 # ── Resolver chunk dentro do split treino/teste da run ────────────────────────
-chunk_paths = sorted(glob.glob(f'data/torch/data_chunks/{dataset}/data_chunk_*.pt'))
-train_paths, test_paths = split_chunk_paths(
-    chunk_paths, cfg_dict['train_split'], cfg_dict['split_seed']
-)
+chunk_paths  = sorted(glob.glob(f'data/torch/data_chunks/{dataset}/data_chunk_*.pt'))
+chunk_dir    = Path(f'data/torch/data_chunks/{dataset}')
+split_path   = run_dir / 'split.json'
+
+if split_path.exists() and _eval.dataset_override is None:
+    # split.json é a fonte de verdade gravada no momento do treino — reproduz o
+    # split exato mesmo que o diretório do dataset tenha mudado desde então
+    # (chunks regenerados/adicionados/removidos quebrariam a reconstrução por seed).
+    split_dict  = json.loads(split_path.read_text())
+    train_paths = [str(chunk_dir / name) for name in split_dict['train']]
+    test_paths  = [str(chunk_dir / name) for name in split_dict['test']]
+
+    missing = [p for p in train_paths + test_paths if not Path(p).exists()]
+    if missing:
+        print(f"  [AVISO] {len(missing)} chunk(s) do split.json não existem mais em "
+              f"{chunk_dir} — dataset mudou desde o treino desta run. Faltando: "
+              f"{[Path(p).name for p in missing]}")
+else:
+    if _eval.dataset_override is None:
+        print("  [AVISO] split.json não encontrado nesta run (run anterior a esta "
+              "mudança) — reconstruindo split via train_split/seed. Se o dataset "
+              "mudou desde o treino, este split pode divergir do original.")
+    train_paths, test_paths = split_chunk_paths(
+        chunk_paths, cfg_dict['train_split'], cfg_dict['split_seed'],
+        cfg_dict.get('test_split')
+    )
 split_paths = train_paths if _eval.split == 'train' else test_paths
 
 if _eval.chunk_index is not None and _eval.dataset_override is None:

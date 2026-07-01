@@ -83,7 +83,7 @@ class FNO_GNNConfig:
     data_res: tuple = (135, 270)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
-    lambda_loss: float = 0.5   # peso da loss de grade; loss_nós = 1 - lambda_loss
+    lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
 
 
 @dataclass
@@ -209,6 +209,9 @@ class NnCfg:
     # Dataloader
     batch_size: int = 32
     train_split: float = 0.30
+    test_split: Optional[float] = None  # None → complemento de train_split (1 - train_split);
+                                         # valor explícito → fração fixa de chunks para teste,
+                                         # útil para agilizar épocas com train_split pequeno
     buffer_size: int = 64
     num_workers: int = 2
     prefetch_factor: int = 2

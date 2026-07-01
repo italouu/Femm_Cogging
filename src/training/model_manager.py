@@ -14,6 +14,9 @@ class ModelManager:
 
     Cria data/logs/{problem}/{arch}/run_XXXX/ com:
       config.json   — hiperparâmetros + metadados (autossuficiente para reconstrução)
+      split.json    — nomes dos chunks de treino/teste desta run (fonte de verdade;
+                      evita reconstruir o split via seed sobre um dataset que pode
+                      ter mudado desde o treino)
       metrics.jsonl — uma linha por heartbeat
       status.txt    — running → done / stopped / failed
       notes.txt     — vazio; edição manual pós-treino
@@ -35,6 +38,7 @@ class ModelManager:
         self.latest_path    = self.checkpoint_dir / 'latest.pth'
         self.final_path     = self.run_dir / 'model_final.pth'
         self._config_path   = self.run_dir / 'config.json'
+        self._split_path    = self.run_dir / 'split.json'
         self._metrics_path  = self.run_dir / 'metrics.jsonl'
         self._status_path   = self.run_dir / 'status.txt'
         self._notes_path    = self.run_dir / 'notes.txt'
@@ -42,8 +46,16 @@ class ModelManager:
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self._notes_path.write_text('')
 
-    def open(self, model, device: str, resumed_from=None):
-        """Escreve config.json e status=running. Deve ser chamado antes de fit()."""
+    def open(self, model, device: str, resumed_from=None, split=None):
+        """
+        Escreve config.json e status=running. Deve ser chamado antes de fit().
+
+        split : dict|None
+            {'train': [...paths...], 'test': [...paths...]} usados nesta run.
+            Gravado em split.json (só os nomes dos arquivos, não o caminho completo,
+            para não depender do dataset continuar no mesmo local) — permite que
+            scripts/eval.py reproduza o split exato sem recalcular via seed.
+        """
         cfg_dict               = asdict(self.cfg)
         cfg_dict['n_params']   = count_params(model)
         cfg_dict['device']     = str(device)
@@ -51,6 +63,12 @@ class ModelManager:
         if resumed_from is not None:
             cfg_dict['resumed_from'] = str(resumed_from)
         self._config_path.write_text(json.dumps(cfg_dict, indent=2))
+        if split is not None:
+            split_dict = {
+                'train': [Path(p).name for p in split['train']],
+                'test':  [Path(p).name for p in split['test']],
+            }
+            self._split_path.write_text(json.dumps(split_dict, indent=2))
         self._status_path.write_text('running')
         suffix = f"  (retomado de {Path(resumed_from).name})" if resumed_from else ""
         print(f"  run -> {self.run_dir}{suffix}")

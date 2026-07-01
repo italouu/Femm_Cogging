@@ -27,7 +27,7 @@ if __name__ == '__main__':
         f'data/torch/data_chunks/{_nn.dataset}/data_chunk_*.pt'
     ))
 
-    train_loader, test_loader = build_loaders(
+    train_loader, test_loader, train_paths, test_paths = build_loaders(
         chunk_paths,
         batch_size      = _nn.batch_size,
         train_split     = _nn.train_split,
@@ -36,6 +36,7 @@ if __name__ == '__main__':
         prefetch_factor = _nn.prefetch_factor,
         seed            = _nn.split_seed,
         mode            = entry.loader_mode,
+        test_split      = _nn.test_split,
     )
 
     step_fn = entry.make_step_fn(_nn.arch_cfg, _nn.loss_cfg)
@@ -84,7 +85,8 @@ if __name__ == '__main__':
     test_loader  = CUDAPrefetcher(test_loader,  DEVICE)
 
     mgr     = ModelManager(_nn)
-    mgr.open(model, DEVICE, resumed_from=_nn.resume_run)
+    mgr.open(model, DEVICE, resumed_from=_nn.resume_run,
+             split={'train': train_paths, 'test': test_paths})
     monitor = TrainingMonitor(cfg=_nn.monitor_cfg, mgr=mgr)
 
     status = 'failed'

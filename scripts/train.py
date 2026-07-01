@@ -38,11 +38,11 @@ if __name__ == '__main__':
         mode            = entry.loader_mode,
     )
 
-    step_fn = entry.make_step_fn(_nn.arch_cfg)
+    step_fn = entry.make_step_fn(_nn.arch_cfg, _nn.loss_cfg)
     loss_fn = LOSS_REGISTRY[_nn.loss]
-    if _nn.loss_cfg.tail_alpha > 0:
-        # Atualmente só 'mse' aceita tail_alpha/tail_k_frac — outras chaves
-        # de LOSS_REGISTRY ainda não foram estendidas (TypeError se usadas aqui).
+    if getattr(_nn.loss_cfg, 'tail_alpha', 0.0) > 0:
+        # Só MseLossCfg tem tail_alpha/tail_k_frac — getattr evita AttributeError
+        # em outras configs de loss.
         loss_fn = functools.partial(
             loss_fn,
             tail_alpha=_nn.loss_cfg.tail_alpha,

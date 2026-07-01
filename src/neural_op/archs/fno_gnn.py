@@ -93,16 +93,20 @@ class FNO_GNN(torch.nn.Module):
             n_layers=gnn_n_layers,
         )
 
-    def forward(self, x_hw, node_x, edge_index, edge_attr, L):
+    def forward(self, x_hw, node_x, edge_index, edge_attr, L, return_components=False):
         y_hw_fno     = self.fno(x_hw)
         fno_at_nodes = _interpolate_fno_to_nodes(y_hw_fno, node_x, L)
         gnn_input    = torch.cat([node_x, fno_at_nodes], dim=-1)
         delta        = self.gnn(gnn_input, edge_index, edge_attr)
+        if return_components:
+            return y_hw_fno, fno_at_nodes, delta
         return y_hw_fno, fno_at_nodes + delta
 
 
-def make_fno_gnn_step(lambda_loss):
-    """Retorna step_fn fechada sobre lambda_loss (peso da loss de grade)."""
+def make_fno_gnn_step(lambda_loss, loss_cfg=None):
+    """Retorna step_fn fechada sobre lambda_loss e loss_cfg."""
+    subtract = getattr(loss_cfg, 'subtract_fno', False)
+
     def fno_gnn_step(batch, model, loss_fn, device):
         x_hw       = batch['x_hw'].to(device)
         node_x     = batch['node_x'].to(device)
@@ -111,8 +115,15 @@ def make_fno_gnn_step(lambda_loss):
         L          = batch['L'].to(device)
         y_hw       = batch['y_hw'].to(device)
         y_node     = batch['node_y'][:, :2].to(device)
-        y_hw_fno, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
-        loss_grid  = loss_fn(y_hw_fno, y_hw)
-        loss_nodes = loss_fn(y_nodes,  y_node)
+        if subtract:
+            y_hw_fno, _, delta = model(x_hw, node_x, edge_index, edge_attr, L,
+                                       return_components=True)
+            loss_grid  = loss_fn(y_hw_fno, y_hw)
+            loss_nodes = loss_fn(delta,    y_node)
+        else:
+            y_hw_fno, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
+            loss_grid  = loss_fn(y_hw_fno, y_hw)
+            loss_nodes = loss_fn(y_nodes,  y_node)
         return lambda_loss * loss_grid + (1.0 - lambda_loss) * loss_nodes
+
     return fno_gnn_step

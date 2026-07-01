@@ -6,7 +6,9 @@ from src.neural_op.archs.fno_gnn_field  import FNO_GNN_Field
 from src.neural_op.archs.fno_mat        import (MaskedFNO2d,    masked_fno_step_fn,
                                                 FNO2d_SingleMat, make_single_mat_step_fn)
 from src.neural_op.archs.masked_fno_gnn import MaskedFNO_GNN,  make_masked_fno_gnn_step
-from src.neural_op.archs.gnn_post_base  import GNN_PostBase,   gnn_post_base_step_fn
+from src.neural_op.archs.gnn_post_base  import (GNN_PostBase,
+                                                gnn_post_base_step_fn,
+                                                make_gnn_post_base_step_fn)
 from src.neural_op.archs.eval           import (fno_eval_fn, fno_gnn_eval_fn,
                                                 masked_fno_eval_fn, masked_fno_gnn_eval_fn,
                                                 single_mat_fno_eval_fn)
@@ -25,7 +27,7 @@ class ArchEntry:
     cfg_cls     : type      # dataclass de config correspondente
     loader_mode : str       # 'grid' ou 'qtree'
     model_kwargs: callable  # (arch_cfg) -> dict com kwargs do construtor do modelo
-    make_step_fn: callable  # (arch_cfg) -> step_fn(batch, model, loss_fn, device)
+    make_step_fn: callable  # (arch_cfg, loss_cfg) -> step_fn(batch, model, loss_fn, device)
     eval_fn     : callable  # (model, chunk_data, eval_cfg) -> None
 
     def make_model(self, arch_cfg):
@@ -66,14 +68,14 @@ ARCH_REGISTRY: dict = {
         cfg_cls=FNOConfig,
         loader_mode='grid',
         model_kwargs=_fno_kwargs,
-        make_step_fn=lambda cfg: fno_step_fn,
+        make_step_fn=lambda cfg, lcfg: fno_step_fn,
         eval_fn=fno_eval_fn,
     ),
     # [REMOVIDO] 'phi_DeepONet' — removido do registry (2026-05-27)
     # 'phi_DeepONet': ArchEntry(
     #     cls=PhiDeepONet, cfg_cls=PhiDeepONetConfig, loader_mode='qtree',
     #     model_kwargs=_phi_deeponet_kwargs,
-    #     make_step_fn=lambda cfg: phi_deeponet_step_fn,
+    #     make_step_fn=lambda cfg, lcfg: phi_deeponet_step_fn,
     #     eval_fn=phi_deeponet_eval_fn,
     # ),
     'FNO_GNN': ArchEntry(
@@ -81,7 +83,7 @@ ARCH_REGISTRY: dict = {
         cfg_cls=FNO_GNNConfig,
         loader_mode='qtree',
         model_kwargs=_fno_gnn_kwargs,
-        make_step_fn=lambda cfg: make_fno_gnn_step(cfg.lambda_loss),
+        make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
         eval_fn=fno_gnn_eval_fn,
     ),
     'FNO_GNN_Field': ArchEntry(
@@ -89,7 +91,7 @@ ARCH_REGISTRY: dict = {
         cfg_cls=FNO_GNNConfig,   # mesma config de FNO_GNN — só o forward muda (campo vs delta)
         loader_mode='qtree',
         model_kwargs=_fno_gnn_kwargs,
-        make_step_fn=lambda cfg: make_fno_gnn_step(cfg.lambda_loss),
+        make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
         eval_fn=fno_gnn_eval_fn,
     ),
     'MaskedFNO2d': ArchEntry(
@@ -97,7 +99,7 @@ ARCH_REGISTRY: dict = {
         cfg_cls=MaskedFNO2dConfig,
         loader_mode='grid',
         model_kwargs=lambda cfg: asdict(cfg),
-        make_step_fn=lambda cfg: masked_fno_step_fn,
+        make_step_fn=lambda cfg, lcfg: masked_fno_step_fn,
         eval_fn=masked_fno_eval_fn,
     ),
     'FNO2d_SingleMat': ArchEntry(
@@ -105,7 +107,7 @@ ARCH_REGISTRY: dict = {
         cfg_cls=SingleMatFNOConfig,
         loader_mode='grid',
         model_kwargs=lambda cfg: asdict(cfg),   # material_id é parâmetro do construtor
-        make_step_fn=lambda cfg: make_single_mat_step_fn(cfg.material_id),
+        make_step_fn=lambda cfg, lcfg: make_single_mat_step_fn(cfg.material_id),
         eval_fn=single_mat_fno_eval_fn,
     ),
     'MaskedFNO_GNN': ArchEntry(
@@ -113,7 +115,7 @@ ARCH_REGISTRY: dict = {
         cfg_cls=MaskedFNO_GNNConfig,
         loader_mode='qtree',
         model_kwargs=lambda cfg: {k: v for k, v in asdict(cfg).items() if k != 'lambda_loss'},
-        make_step_fn=lambda cfg: make_masked_fno_gnn_step(cfg.lambda_loss),
+        make_step_fn=lambda cfg, lcfg: make_masked_fno_gnn_step(cfg.lambda_loss),
         eval_fn=masked_fno_gnn_eval_fn,
     ),
     'GNN_PostBase': ArchEntry(
@@ -121,7 +123,7 @@ ARCH_REGISTRY: dict = {
         cfg_cls=GNN_PostBaseConfig,
         loader_mode='qtree',
         model_kwargs=_gnn_post_base_kwargs,
-        make_step_fn=lambda cfg: gnn_post_base_step_fn,
+        make_step_fn=lambda cfg, lcfg: make_gnn_post_base_step_fn(lcfg),
         eval_fn=fno_gnn_eval_fn,   # mesma assinatura de forward que FNO_GNN
     ),
 }
@@ -138,7 +140,7 @@ try:
         cfg_cls=FNORefConfig,
         loader_mode='grid',
         model_kwargs=_fno_ref_kwargs,
-        make_step_fn=lambda cfg: fno_step_fn,
+        make_step_fn=lambda cfg, lcfg: fno_step_fn,
         eval_fn=fno_eval_fn,
     )
 except ImportError:

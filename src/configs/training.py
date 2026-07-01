@@ -1,8 +1,12 @@
 from dataclasses import dataclass, field, fields
 from typing import Any, Optional
 
-from src.configs.monitor import MonitorCfg  # noqa: F401  re-exportado daqui por retrocompatibilidade
-from src.configs.loss    import LossCfg     # noqa: F401  re-exportado daqui por retrocompatibilidade
+from src.configs.monitor import MonitorCfg   # noqa: F401  re-exportado daqui por retrocompatibilidade
+from src.configs.loss    import (            # noqa: F401  re-exportado daqui por retrocompatibilidade
+    LossCfg, MseLossCfg, MaeLossCfg, RelativeL2LossCfg,
+    MaskedFNOLossCfg, SingleMaterialFNOLossCfg, MaskedFNOGNNLossCfg,
+    LOSS_CFG_REGISTRY,
+)
 
 
 # ── Arquiteturas ──────────────────────────────────────────────────────────────
@@ -167,20 +171,25 @@ class MaskedFNO_GNNConfig:
 # └─────────────────┴──────────────────────┴──────────────────┴──────────────────────────┘
 #
 # Chaves de loss — LOSS_REGISTRY (src/neural_op/losses.py)
-# ┌──────────────────────┬──────────────────────────────────────────────────────────────┐
-# │ chave                │ assinatura e uso                                             │
-# ├──────────────────────┼──────────────────────────────────────────────────────────────┤
-# │ 'mse'                │ (out, y)  — MSE elementar; + termo de cauda top-k opcional  │
-# │                      │   via loss_cfg.tail_alpha/tail_k_frac (0 = desligado)       │
-# │ 'mae'                │ (out, y)  — MAE elementar                                   │
-# │ 'relative_l2'        │ (out, y)  — L2 relativo normalizado por amostra             │
-# │ 'masked_fno_loss'    │ (pred8, y, masks)  — MSE mascarado por material na grade;   │
-# │                      │   pesos ∝ parcela de domínio; step_fn passa masks           │
-# │ 'masked_fno_gnn_loss'│ (y_hw_8, y_hw, masks,                                       │
-# │                      │  y_nodes_8, node_y, material_ids, lambda_loss)              │
-# │                      │   — grade via masked_fno_loss + nós via masked_gnn_node;   │
-# │                      │   lambda_loss da arch_cfg é injetado pelo step_fn           │
-# └──────────────────────┴──────────────────────────────────────────────────────────────┘
+# Config correspondente — LOSS_CFG_REGISTRY (src/configs/loss.py)
+# ┌──────────────────────┬─────────────────────────┬────────────────────────────────────┐
+# │ chave                │ cfg_cls                 │ campos configuráveis               │
+# ├──────────────────────┼─────────────────────────┼────────────────────────────────────┤
+# │ 'mse'                │ MseLossCfg              │ tail_alpha, tail_k_frac,           │
+# │                      │                         │ subtract_fno (FNO_GNN/PostBase)    │
+# │ 'mae'                │ MaeLossCfg              │ subtract_fno (FNO_GNN/PostBase)    │
+# │ 'relative_l2'        │ RelativeL2LossCfg       │ subtract_fno (FNO_GNN/PostBase)    │
+# │ 'masked_fno_loss'    │ MaskedFNOLossCfg        │ —                                  │
+# │ 'single_material_    │ SingleMaterialFNOLossCfg│ —                                  │
+# │   fno_loss'          │                         │                                    │
+# │ 'masked_fno_gnn_loss'│ MaskedFNOGNNLossCfg     │ — (lambda_loss vem de arch_cfg)    │
+# └──────────────────────┴─────────────────────────┴────────────────────────────────────┘
+#
+# subtract_fno (MseLossCfg / MaeLossCfg / RelativeL2LossCfg):
+#   False (padrão) → loss_nós = loss_fn(fno_at_nodes + delta, y_node)
+#   True           → loss_nós = loss_fn(delta, y_node)
+#                    delta = output bruto do GNN (sem soma da baseline FNO)
+#                    inference permanece inalterada: retorna fno + delta
 
 @dataclass
 class NnCfg:
@@ -212,7 +221,7 @@ class NnCfg:
 
     arch_cfg:     Any        = None   # None → auto-instanciado em __post_init__ via ARCH_REGISTRY
     monitor_cfg:  MonitorCfg = field(default_factory=MonitorCfg)
-    loss_cfg:     LossCfg    = field(default_factory=LossCfg)  # tail_alpha=0 → comportamento idêntico ao anterior
+    loss_cfg:     Any        = None   # None → auto-instanciado em __post_init__ via LOSS_CFG_REGISTRY
 
     def __post_init__(self):
         from pathlib import Path
@@ -230,6 +239,9 @@ class NnCfg:
                 f"arch='{self.arch}' espera arch_cfg do tipo {expected.__name__}, "
                 f"recebido {type(self.arch_cfg).__name__}"
             )
+        if self.loss_cfg is None:
+            cls = LOSS_CFG_REGISTRY.get(self.loss, MseLossCfg)
+            self.loss_cfg = cls()
         if self.resume_run is not None and not Path(self.resume_run).exists():
             resolved = Path('data/logs') / self.problem / self.arch / self.resume_run
             self.resume_run = str(resolved)

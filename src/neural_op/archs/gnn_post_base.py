@@ -116,19 +116,47 @@ class GNN_PostBase(torch.nn.Module):
                 y_hw_base, base_at_nodes = self.base_model(x_hw, node_x, edge_index, edge_attr, L)
         return y_hw_base, base_at_nodes
 
-    def forward(self, x_hw, node_x, edge_index, edge_attr, L):
+    def forward(self, x_hw, node_x, edge_index, edge_attr, L, return_components=False):
         y_hw_base, base_at_nodes = self._base_pred_at_nodes(x_hw, node_x, edge_index, edge_attr, L)
         gnn_input = torch.cat([node_x, base_at_nodes], dim=-1)
         delta     = self.gnn(gnn_input, edge_index, edge_attr)
+        if return_components:
+            return y_hw_base, base_at_nodes, delta
         return y_hw_base, base_at_nodes + delta
 
 
-def gnn_post_base_step_fn(batch, model, loss_fn, device):
-    x_hw       = batch['x_hw'].to(device)
-    node_x     = batch['node_x'].to(device)
-    edge_index = batch['edge_index'].to(device)
-    edge_attr  = batch['edge_attr'].to(device)
-    L          = batch['L'].to(device)
-    y_node     = batch['node_y'][:, :2].to(device)
-    _, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
-    return loss_fn(y_nodes, y_node)
+def make_gnn_post_base_step_fn(loss_cfg=None):
+    """Retorna step_fn fechada sobre loss_cfg."""
+    subtract = getattr(loss_cfg, 'subtract_fno', False)
+
+    def gnn_post_base_step(batch, model, loss_fn, device):
+        x_hw       = batch['x_hw'].to(device)
+        node_x     = batch['node_x'].to(device)
+        edge_index = batch['edge_index'].to(device)
+        edge_attr  = batch['edge_attr'].to(device)
+        L          = batch['L'].to(device)
+        y_node     = batch['node_y'][:, :2].to(device)
+        if subtract:
+            _, _, delta = model(x_hw, node_x, edge_index, edge_attr, L,
+                                return_components=True)
+            return loss_fn(delta, y_node)
+        else:
+            _, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
+            return loss_fn(y_nodes, y_node)
+
+    return gnn_post_base_step
+
+
+# [REMOVIDO] gnn_post_base_step_fn plain function — substituída por make_gnn_post_base_step_fn
+# para aceitar loss_cfg (subtract_fno). Retrocompatibilidade via fábrica com loss_cfg=None
+# (comportamento idêntico ao anterior).
+# def gnn_post_base_step_fn(batch, model, loss_fn, device):
+#     x_hw       = batch['x_hw'].to(device)
+#     node_x     = batch['node_x'].to(device)
+#     edge_index = batch['edge_index'].to(device)
+#     edge_attr  = batch['edge_attr'].to(device)
+#     L          = batch['L'].to(device)
+#     y_node     = batch['node_y'][:, :2].to(device)
+#     _, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
+#     return loss_fn(y_nodes, y_node)
+gnn_post_base_step_fn = make_gnn_post_base_step_fn()

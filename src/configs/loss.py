@@ -1,24 +1,71 @@
 from dataclasses import dataclass
 
+# [REMOVIDO] LossCfg único — substituído por classes individuais por loss (2026-07-01).
+# Mantido como alias de retrocompatibilidade abaixo (LossCfg = MseLossCfg).
+#
+# @dataclass
+# class LossCfg:
+#     tail_alpha:  float = 0.2
+#     tail_k_frac: float = 0.05
+
 
 @dataclass
-class LossCfg:
+class MseLossCfg:
     """
-    Hiperparâmetros do termo de cauda (top-k), combinado de forma convexa com
-    uma loss base (ex: mse).
+    Hiperparâmetros da MSE com termo de cauda top-k opcional e subtract_fno.
 
-    Cálculo (ver topk_tail_term em src/neural_op/losses.py):
-        mag_true = magnitude vetorial de y      (sqrt(Bx²+By²), ou |y| se 1 canal)
-        mag_pred = magnitude vetorial de out
-        b_ref²   = mean(mag_true²)                       — RMS² global de |y| no batch
-        err_rel  = (mag_pred - mag_true)² / b_ref²        — erro quadrático relativo por elemento
-        k        = max(1, tail_k_frac * n_elementos)
-        tail     = mean(top-k maiores valores de err_rel) — foco só na cauda (piores elementos)
-
-        loss_final = (1 - tail_alpha) * loss_base(out, y) + tail_alpha * tail
-
-    tail_alpha=0 → tail não é computado, loss_final == loss_base (comportamento idêntico ao anterior).
-    Manter tail_alpha baixo: perto de 1 a parcela de loss_base praticamente desaparece.
+    tail_alpha=0  → tail desligado; loss_final == MSE pura.
+    subtract_fno  → FNO_GNN / GNN_PostBase: loss de nós em delta (output bruto do GNN)
+                    vs y_node em vez de (fno_at_nodes + delta) vs y_node.
     """
-    tail_alpha:  float = 0.2    # peso do termo de cauda; 0 = desligado; manter baixo (ex: 0.1-0.3)
-    tail_k_frac: float = 0.05   # fração dos piores elementos penalizados (top 5%, alinhado ao p95 já reportado em src/bench/metrics.py)
+    tail_alpha:   float = 0.2
+    tail_k_frac:  float = 0.05
+    subtract_fno: bool  = False
+
+
+@dataclass
+class MaeLossCfg:
+    """
+    Config para MAE com opção subtract_fno (FNO_GNN / GNN_PostBase).
+
+    subtract_fno  → loss de nós em delta (output bruto do GNN) vs y_node.
+    """
+    subtract_fno: bool = False
+
+
+@dataclass
+class RelativeL2LossCfg:
+    """
+    Config para L2 relativo com opção subtract_fno (FNO_GNN / GNN_PostBase).
+
+    subtract_fno  → loss de nós em delta (output bruto do GNN) vs y_node.
+    """
+    subtract_fno: bool = False
+
+
+@dataclass
+class MaskedFNOLossCfg:
+    """Config para masked_fno_loss (MaskedFNO2d). Sem parâmetros configuráveis."""
+
+
+@dataclass
+class SingleMaterialFNOLossCfg:
+    """Config para single_material_fno_loss (FNO2d_SingleMat). Sem parâmetros configuráveis."""
+
+
+@dataclass
+class MaskedFNOGNNLossCfg:
+    """Config para masked_fno_gnn_loss (MaskedFNO_GNN). lambda_loss vem de arch_cfg."""
+
+
+# Retrocompatibilidade: LossCfg era o único tipo antes da separação por loss.
+LossCfg = MseLossCfg
+
+LOSS_CFG_REGISTRY: dict = {
+    'mse':                      MseLossCfg,
+    'mae':                      MaeLossCfg,
+    'relative_l2':              RelativeL2LossCfg,
+    'masked_fno_loss':          MaskedFNOLossCfg,
+    'single_material_fno_loss': SingleMaterialFNOLossCfg,
+    'masked_fno_gnn_loss':      MaskedFNOGNNLossCfg,
+}

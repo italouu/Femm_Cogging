@@ -193,11 +193,11 @@ class MaskedFNO_GNNConfig:
 
 @dataclass
 class NnCfg:
-    dataset: str = 'motor_default_v2_135x270'
+    dataset: str = 'motor_default_v3_135x270'
     arch: str = 'FNO2d'
     loss: str = 'mse'
 
-    problem: str = 'motor_default_v2_135x270'
+    problem: str = 'motor_default_v3_135x270'
 
     # Treino
     lr: float = 1e-3

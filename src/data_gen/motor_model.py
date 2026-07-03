@@ -433,7 +433,8 @@ class BLDC_Process:
     def generate_samples(num_samples, seed=42):
 
         N_POLES   = 42
-        PHASE_MAX = 360.0 / (2 * N_POLES)
+        # [REMOVIDO] PHASE_MAX = 360.0 / (2 * N_POLES)  # cobria só 1/4 do período forma+polaridade (360/21)
+        PHASE_MAX = 2 * 360.0 / N_POLES
 
         space = {
             'number_rotor_poles':     {'unit': '',    'x_min': 42,       'x_max': 42},
@@ -719,7 +720,8 @@ class BLDC_Process:
         OUTER_D          = 93.0
         INNER_D          = 57.0
 
-        PHASE_MAX = 360.0 / (2*N_POLES)   # ≈ 17° — um pitch de polo
+        # [REMOVIDO] PHASE_MAX = 360.0 / (2*N_POLES)  # docstring dizia "pitch completo" (17°) mas fórmula dava 4.29°
+        PHASE_MAX = 2 * 360.0 / N_POLES   # ≈ 17.14° — um pitch de polo completo (forma + polaridade)
 
         space = {
             'number_rotor_poles':     {'unit': '',   'x_min': N_POLES,      'x_max': N_POLES},

@@ -1152,7 +1152,12 @@ class BLDC_Shapely_Model(BLDC_Process):
         # backiron
         center = Point(0,0)
         c1 = center.buffer(self.rotor_outer_diameter/2)
-        c2 = center.buffer(self.rotor_inner_diameter/2 + self.pole_thickness)
+        # [REMOVIDO] resolução padrão do buffer (quad_segs=16, ~5.6°/segmento) não
+        # casava com a malha de 1° usada em _create_sec para os polos, causando
+        # sobreposição visível entre poles e back_iron perto do raio
+        # rotor_inner/2+pole_thickness (sagita ~0.05mm vs coroa mínima de ~1mm)
+        # c2 = center.buffer(self.rotor_inner_diameter/2 + self.pole_thickness)
+        c2 = center.buffer(self.rotor_inner_diameter/2 + self.pole_thickness, quad_segs=90)
         self.back_iron = c1.difference(c2)
         self.geometries['iron_1008'].append(self.back_iron)
 

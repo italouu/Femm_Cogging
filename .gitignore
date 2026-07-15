@@ -47,6 +47,12 @@ __pycache__/
 /data/torch/stream_chunks/motor_uniform/*
 !/data/torch/stream_chunks/motor_uniform/.gitkeep
 
+/data/torch/data_chunks/*
+!/data/torch/data_chunks/.gitkeep
+!/data/torch/data_chunks/motor_default_v4_135x270/
+/data/torch/data_chunks/motor_default_v4_135x270/*
+!/data/torch/data_chunks/motor_default_v4_135x270/.gitkeep
+
 # modelos de rede — ignorar pesos, manter estrutura via .gitkeep
 /data/models/*
 !/data/models/.gitkeep

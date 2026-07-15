@@ -1,0 +1,143 @@
+====================================================================================================
+PANORAMA DOS TREINOS -- PREDICAO DE CAMPO B EM MOTORES BLDC (FNO)
+Gerado em 2026-07-07 a partir de varredura de data/logs/ (config.json + metrics.jsonl + status.txt)
+====================================================================================================
+
+## 1. RESUMO QUANTITATIVO
+----------------------------------------------------------------------------------------------------
+Runs totais: 48  (38 concluidas / done, 10 interrompidas / stopped)
+Datasets: 4  -- motor_phase_0, motor_fixed_geometry_135x270, motor_fixed_geometry_v2_135x270, motor_default_v4_135x270 (atual)
+Arquiteturas: 3  -- FNO2d (27 runs), FNO_GNN (14 runs), GNN_PostBase (7 runs)
+Loss functions usadas: mse (40 runs), relative_l2 (5 runs), mae (3 runs)
+Tempo total de treino somado (GPU, cuda): ~72.2 h
+  por arquitetura: FNO2d ~21.0h | FNO_GNN ~34.7h | GNN_PostBase ~16.5h
+  por dataset: motor_default_v4_135x270 ~32.1h | motor_fixed_geometry_135x270 ~21.3h | motor_fixed_geometry_v2_135x270 ~12.2h | motor_phase_0 ~6.5h
+Periodo coberto pelos logs: 2026-06-11 01:31 -> 2026-07-07 01:20
+Melhor mse no dataset atual (motor_default_v4_135x270): FNO_GNN/run_0003 = 0.026903 (600 epocas)
+Melhor mse global: motor_phase_0/FNO2d/run_0002 = 0.004156 -- mas essa e uma tarefa mais facil (fase do rotor fixa), nao um modelo melhor
+
+## 2. ACHADOS QUALITATIVOS
+----------------------------------------------------------------------------------------------------
+(a) GNN_PostBase vs. base congelada -- evidencia PARCIAL de refinamento.
+    Unica comparacao em escala igual disponivel (mesma base, mesma metrica mse):
+      FNO2d/run_0001 sozinho             -> best_test = 0.028952
+      GNN_PostBase/run_0001 (sobre ele)  -> best_test = 0.025866   (-10.7%)
+    Isso sugere que o GNN de fato refina o campo do FNO congelado nesse caso -- contraria
+    parcialmente a suspeita registrada no CLAUDE.md (pendencia: "erro medio do FNO menor que
+    o do GNN do GNN_PostBase treinado em cima dele").
+    PORTANTO as demais 6 runs de GNN_PostBase usam como base o FNO2d/run_0002, que foi treinado
+    com loss relative_l2 -- o test_loss dessa base fica em outra escala (~0.35) e NAO e comparavel
+    ao mse do GNN (~0.03-0.19) nessas runs. A duvida do CLAUDE.md so fica resolvida de fato
+    reavaliando a base congelada sob a MESMA metrica (mse) usada pelo GNN.
+
+(b) FNO_GNN / GNN_PostBase custam 2-3x mais tempo de parede que FNO2d para o mesmo numero de
+    epocas (ex.: 500 epocas ~= 70 min em FNO2d vs. ~= 150-240 min em FNO_GNN/GNN_PostBase no
+    dataset atual), apesar de contagens de parametros proximas (~5.3M em ambos). O overhead
+    vem do processamento de grafo (mensagens por no/aresta), nao do tamanho do modelo.
+
+(c) motor_phase_0 nao e comparavel em dificuldade. Os menores test_loss registrados no
+    levantamento (0.0067, 0.0042) vem desse dataset inicial (fase do rotor fixa, geometria
+    mais restrita), nao do dataset atual -- refletem uma tarefa mais facil, nao um modelo
+    superior.
+
+(d) Uma run divergiu claramente: FNO2d com 37.6M parametros
+    (motor_fixed_geometry_135x270/FNO2d/run_0011, conv_width=16) atingiu test_loss=1.52 e foi
+    interrompida -- modelo grande demais / instavel para essa configuracao.
+
+(e) loss_cfg (tail_alpha, tail_k_frac, subtract_fno) so aparece no dataset atual
+    (motor_default_v4_135x270) -- e a implementacao em andamento do item pendente no CLAUDE.md
+    sobre "losses focadas em erro percentual (media/p95)":
+      - tail_alpha/tail_k_frac: termo de cauda top-k opcional somado a MSE (tail_alpha=0 desliga)
+      - subtract_fno: em FNO_GNN/GNN_PostBase, faz o GNN aprender o RESIDUO (delta) sobre a saida
+        do FNO em vez do campo absoluto
+    Comparacoes preliminares dentro do dataset atual (GNN_PostBase, base=FNO2d/run_0002, loss=mse):
+      subtract_fno=False (run_0003, 500 ep) -> best=0.03342
+      subtract_fno=True  (run_0005, 420 ep, interrompida) -> best=0.03255  (levemente melhor)
+    Com loss=mae, o quadro inverte:
+      subtract_fno=False (run_0006, gnn_layers=2, 410 ep, interrompida) -> best=0.08788
+      subtract_fno=True  (run_0007, gnn_layers=2, 450 ep, interrompida) -> best=0.18618  (bem pior)
+    Nenhuma dessas runs rodou ate o fim (todas "stopped") -- tratar como indicio, nao conclusao.
+
+## 3. EVOLUCAO DOS EXPERIMENTOS (cronologica)
+----------------------------------------------------------------------------------------------------
+motor_phase_0 (2 runs, 2026-06-11)
+  Ponto de partida. So FNO2d, fase do rotor fixa. Descontinuado depois de 2 runs.
+
+motor_fixed_geometry_135x270 (19 runs, 06-12 -> 06-14)
+  Maior fase de exploracao de hiperparametros: variacao de modes1/2 (30-270), conv_width
+  (6-16) e um teste de modelo grande (37.6M parametros, run_0011) que DIVERGIU (ver 2d).
+  Primeira aparicao de FNO_GNN, com lambda_loss variando 0.01-0.2.
+
+motor_fixed_geometry_v2_135x270 (11 runs, 06-14 -> 06-15)
+  Geometria revisada; hiperparametros de arquitetura ja estabilizados (conv_width=6,
+  node_width=32, gnn_layers=3). A run mais longa do levantamento inteiro
+  (FNO_GNN/run_0004, 2600 epocas, ~5.1h) atinge o melhor mse desse dataset (0.02249).
+
+motor_default_v4_135x270 (16 runs, 07-04 -> 07-07, ATIVO -- chunks ainda nao versionados em git)
+  Dataset atual. Introduz loss_cfg (tail_alpha/subtract_fno, ver 2e) e as primeiras runs de
+  GNN_PostBase de fato encadeadas sobre um FNO2d congelado do MESMO dataset.
+
+## 4. TABELA COMPLETA -- TODAS AS 48 RUNS
+----------------------------------------------------------------------------------------------------
+dataset                          arch          run       status   loss           best_test    @ep  epocas  params(M)  tempo(min) inicio            flags
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+motor_default_v4_135x270         FNO2d         run_0001  done     mse               0.0290    349     500       5.30        68.7 2026-07-04T14:48  tail_a=0.0 sub_fno=False
+motor_default_v4_135x270         FNO2d         run_0002  done     relative_l2       0.3554     99     500       6.62        70.1 2026-07-05T13:10  sub_fno=False
+motor_default_v4_135x270         FNO2d         run_0003  done     relative_l2       0.3503     39     500       9.41        70.5 2026-07-05T15:25  sub_fno=False
+motor_default_v4_135x270         FNO2d         run_0004  done     mae               0.0878    239     500       9.41        70.3 2026-07-07T01:19  sub_fno=True
+motor_default_v4_135x270         FNO_GNN       run_0001  stopped  mse               0.0275    409     410       5.31       151.0 2026-07-04T17:56  tail_a=0.0 sub_fno=False lam=0
+motor_default_v4_135x270         FNO_GNN       run_0002  done     mse               0.0529     99     100       5.31        39.1 2026-07-04T20:32  tail_a=0.0 sub_fno=False lam=0
+motor_default_v4_135x270         FNO_GNN       run_0003  done     mse               0.0269    599     600       5.31       238.1 2026-07-04T23:31  tail_a=0.0 sub_fno=False lam=0
+motor_default_v4_135x270         FNO_GNN       run_0004  stopped  relative_l2       0.9781    149     190       5.31        74.5 2026-07-06T05:34  sub_fno=False lam=0
+motor_default_v4_135x270         FNO_GNN       run_0005  done     relative_l2       0.8381    499     500       5.31       154.7 2026-07-06T06:53  sub_fno=False lam=0
+motor_default_v4_135x270         GNN_PostBase  run_0001  done     mse               0.0259     89     500       5.31       172.7 2026-07-05T05:02  tail_a=0.0 sub_fno=False base=FNO2d/run_0001
+motor_default_v4_135x270         GNN_PostBase  run_0002  done     relative_l2       3.6380    499     500       6.63       173.8 2026-07-05T17:41  sub_fno=False base=FNO2d/run_0002
+motor_default_v4_135x270         GNN_PostBase  run_0003  done     mse               0.0334    499     500       6.63       174.7 2026-07-05T22:02  tail_a=0.0 sub_fno=False base=FNO2d/run_0002
+motor_default_v4_135x270         GNN_PostBase  run_0004  stopped  mse               0.0490    259     260       6.63        90.3 2026-07-06T04:01  tail_a=0.05 sub_fno=False base=FNO2d/run_0002
+motor_default_v4_135x270         GNN_PostBase  run_0005  stopped  mse               0.0325    419     420       6.63       146.5 2026-07-06T14:30  tail_a=0.0 sub_fno=True base=FNO2d/run_0002
+motor_default_v4_135x270         GNN_PostBase  run_0006  stopped  mae               0.0879    399     410       6.63       110.5 2026-07-06T17:00  sub_fno=False base=FNO2d/run_0002
+motor_default_v4_135x270         GNN_PostBase  run_0007  stopped  mae               0.1862     59     450       6.63       120.8 2026-07-06T18:53  sub_fno=True base=FNO2d/run_0002
+motor_fixed_geometry_135x270     FNO2d         run_0001  done     mse               0.1547      9      10       9.41         1.8 2026-06-12T15:59  
+motor_fixed_geometry_135x270     FNO2d         run_0002  done     mse              15.0817      9      10       9.41         0.9 2026-06-13T13:46  
+motor_fixed_geometry_135x270     FNO2d         run_0003  done     mse               0.0316    229     300       9.41        26.6 2026-06-13T13:48  
+motor_fixed_geometry_135x270     FNO2d         run_0004  done     mse               0.0497    299     300       9.41        26.8 2026-06-13T14:20  
+motor_fixed_geometry_135x270     FNO2d         run_0005  done     mse               0.0435    599     600       9.41        52.4 2026-06-13T14:51  
+motor_fixed_geometry_135x270     FNO2d         run_0006  done     mse               0.0964    299     300       0.78        26.0 2026-06-13T15:21  
+motor_fixed_geometry_135x270     FNO2d         run_0007  done     mse               0.2139    299     300       0.77        25.5 2026-06-13T16:13  
+motor_fixed_geometry_135x270     FNO2d         run_0008  done     mse               0.0470    299     300       9.44        27.7 2026-06-13T16:59  
+motor_fixed_geometry_135x270     FNO2d         run_0009  done     mse               0.0433    599     600       9.44        55.1 2026-06-13T17:51  
+motor_fixed_geometry_135x270     FNO2d         run_0010  done     mse               0.0427    869     900       9.44        81.8 2026-06-13T19:06  
+motor_fixed_geometry_135x270     FNO2d         run_0011  stopped  mse               1.5246    139     140      37.61        13.6 2026-06-13T19:36  
+motor_fixed_geometry_135x270     FNO2d         run_0012  done     mse               0.0308    299     300       5.30        26.6 2026-06-13T19:51  
+motor_fixed_geometry_135x270     FNO2d         run_0013  done     mse               0.0303    599     600       5.30        52.1 2026-06-13T20:26  
+motor_fixed_geometry_135x270     FNO2d         run_0014  done     mse               0.0302   1099    1200       5.30       104.7 2026-06-13T21:20  
+motor_fixed_geometry_135x270     FNO_GNN       run_0001  done     mse               0.0354    199     200       5.31        37.3 2026-06-14T00:12  lam=0.2
+motor_fixed_geometry_135x270     FNO_GNN       run_0002  done     mse               0.0313    399     400       5.31        76.2 2026-06-14T01:24  lam=0.2
+motor_fixed_geometry_135x270     FNO_GNN       run_0003  done     mse               0.0248   1259    1300       5.31       236.2 2026-06-14T02:05  lam=0.01
+motor_fixed_geometry_135x270     FNO_GNN       run_0004  stopped  mse               0.0248   1309    1320       5.31       234.7 2026-06-14T13:00  lam=0.01
+motor_fixed_geometry_135x270     FNO_GNN       run_0005  done     mse               0.0827    889     900       5.31       172.6 2026-06-14T13:05  lam=0.12
+motor_fixed_geometry_v2_135x270  FNO2d         run_0001  done     mse               0.0246    199     200       5.30         7.9 2026-06-14T22:58  
+motor_fixed_geometry_v2_135x270  FNO2d         run_0002  done     mse               0.0234    389     400       5.30        15.7 2026-06-14T23:27  
+motor_fixed_geometry_v2_135x270  FNO2d         run_0003  done     mse               0.0516    199     200       5.30         8.2 2026-06-15T13:51  
+motor_fixed_geometry_v2_135x270  FNO2d         run_0004  stopped  mse               0.0504    299     300       5.30        12.4 2026-06-15T14:01  
+motor_fixed_geometry_v2_135x270  FNO2d         run_0005  stopped  mse               0.7798      9      10       5.30         0.4 2026-06-15T14:07  
+motor_fixed_geometry_v2_135x270  FNO2d         run_0006  done     mse               0.0462    189     200       5.30         8.2 2026-06-15T14:08  
+motor_fixed_geometry_v2_135x270  FNO2d         run_0007  done     mse               0.0446    379     400       5.30        16.4 2026-06-15T15:05  
+motor_fixed_geometry_v2_135x270  FNO_GNN       run_0001  done     mse               0.0400    189     200       5.31        23.7 2026-06-15T16:18  lam=0.12
+motor_fixed_geometry_v2_135x270  FNO_GNN       run_0002  done     mse               0.0299    529    1000       5.31       119.6 2026-06-15T16:49  lam=0.012
+motor_fixed_geometry_v2_135x270  FNO_GNN       run_0003  done     mse               0.0240   1799    1800       5.31       214.1 2026-06-15T19:00  lam=0.012
+motor_fixed_geometry_v2_135x270  FNO_GNN       run_0004  done     mse               0.0225   2589    2600       5.31       308.2 2026-06-15T20:44  lam=0.012
+motor_phase_0                    FNO2d         run_0001  done     mse               0.0067    599     600       9.41       176.2 2026-06-11T01:31  
+motor_phase_0                    FNO2d         run_0002  done     mse               0.0042   1199    1200       9.41       214.0 2026-06-11T08:58  
+
+## 5. NOTAS METODOLOGICAS
+----------------------------------------------------------------------------------------------------
+- best_test = menor test_loss ja atingido pelo checkpoint "best" durante a run (nao e
+  necessariamente o valor final).
+- epocas = numero real de epocas treinadas (pode exceder n_epochs configurado quando a run foi
+  retomada / resumed).
+- tempo(min) = estimativa: media de (train_time_s + eval_time_s) dos pontos logados (a cada 10
+  epocas) * numero de epocas reais, convertido para minutos. Aproximado, nao um cronometro exato.
+- Valores de loss NAO sao comparaveis entre linhas com "loss" diferente (mse vs relative_l2 vs
+  mae tem escalas diferentes).
+- Fonte dos dados: data/logs/<dataset>/<arch>/run_XXXX/{config.json, metrics.jsonl, status.txt}

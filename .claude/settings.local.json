@@ -49,7 +49,11 @@
       "Bash(copy *)",
       "Bash(git stash *)",
       "Bash(git --no-pager diff CLAUDE.md)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Skill(dataviz)",
+      "Artifact",
+      "Bash(echo \"exit=$?\")",
+      "Bash(git status *)"
     ]
   }
 }

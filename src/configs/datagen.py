@@ -4,7 +4,7 @@ from typing import Optional
 
 @dataclass
 class DatagenConfig:
-    dataset: str = 'fixed_geometry_v4_135x270'
+    dataset: str = 'test_motor_v5_135x270'
 
     # Grade / Geometria
     n_r: int = 135
@@ -15,11 +15,11 @@ class DatagenConfig:
     # Geração de dados
     mode: str = 'qtree'
     distribution: str = 'uniform'
-    sample_method: str = 'legacy'  # 'fixed_geometry' |'constrained' | 'legacy'
-    n_samples: int = 2000
+    sample_method: str = 'legacy'  # 'fixed_geometry' |'constrained' | 'legacy' | 'constrained_lhs'
+    n_samples: int = 4000
     max_depth: int = 1
     datagen_seed: int = 12
-    cascade_buffer: Optional[int] = None
+    cascade_buffer: Optional[int] = 1
     homogeneity_threshold: float = 0.90
 
     # Prepare / chunks

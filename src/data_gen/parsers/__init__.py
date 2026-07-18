@@ -16,12 +16,14 @@ instanciando MotorQtreeParserConfig e exporte-o aqui.
 """
 from ._base            import MotorQtreeParserConfig, apply_parser_config
 from .fno_gnn          import FNO_GNN_PARSER
+from .fno_gnn_v2       import FNO_GNN_V2_PARSER
 from .fno2d            import FNO2D_PARSER
 from .masked_fno2d     import MASKED_FNO2D_PARSER
 from .masked_fno_gnn   import MASKED_FNO_GNN_PARSER
 
 PARSER_REGISTRY = {
     'FNO_GNN':        FNO_GNN_PARSER,
+    'FNO_GNN_v2':     FNO_GNN_V2_PARSER,   # FNO_GNN_PARSER + delta_mu direcional em edge_attr
     'FNO2D':          FNO2D_PARSER,
     'MaskedFNO2d':    MASKED_FNO2D_PARSER,
     'MaskedFNO_GNN':  MASKED_FNO_GNN_PARSER,
@@ -31,6 +33,7 @@ __all__ = [
     'MotorQtreeParserConfig',
     'apply_parser_config',
     'FNO_GNN_PARSER',
+    'FNO_GNN_V2_PARSER',
     'FNO2D_PARSER',
     'MASKED_FNO2D_PARSER',
     'MASKED_FNO_GNN_PARSER',

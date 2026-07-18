@@ -53,7 +53,9 @@
       "Skill(dataviz)",
       "Artifact",
       "Bash(echo \"exit=$?\")",
-      "Bash(git status *)"
+      "Bash(git status *)",
+      "Bash(python -m tests.smoke_test_refactor)",
+      "Bash(rm -f smoke_out.txt)"
     ]
   }
 }

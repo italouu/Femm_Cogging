@@ -489,7 +489,15 @@ def build_graph_edges_motor(
         1  delta_c       diferença angular j−i (com wrap; unidades de célula base)
         2  shared_length comprimento da fronteira compartilhada
         3  center_dist   distância euclidiana entre centros
-        4  delta_mu      mu_r[j] − mu_r[i]  ← só computado se 4 estiver em cols
+        4  delta_mu      mu_r[i] − mu_r[j] (origem − destino) ← só computado se 4 ∈ cols
+
+    NOTA (2026-07-17): delta_mu é direcional em "origem − destino" (i−j), o
+    INVERSO da convenção "destino − origem" (j−i) usada em delta_r/delta_c.
+    Escolha deliberada para uso pelo FNO_GNN_v2 (parser FNO_GNN_V2_PARSER):
+    positivo quando a aresta sai de alta permeabilidade para baixa (ex:
+    ferro→ar), negativo no sentido inverso. Antes de 2026-07-17 a fórmula era
+    j−i (mesma convenção das demais colunas), mas nenhum parser registrado
+    consumia a coluna 4 até então — sem impacto em runs já treinadas.
 
     Parâmetros
     ----------
@@ -519,7 +527,11 @@ def build_graph_edges_motor(
                 )
             srcs     = edge_index[0]
             dsts     = edge_index[1]
-            delta_mu = (mu_r[dsts] - mu_r[srcs]).reshape(-1, 1).astype(np.float32)
+            # [REMOVIDO] delta_mu = (mu_r[dsts] - mu_r[srcs])  # j-i, mesma convenção
+            # de delta_r/delta_c. Trocado por i-j (origem-destino) a pedido do
+            # usuário (2026-07-17): positivo = aresta sai de alta permeabilidade
+            # para baixa. Ver nota no docstring desta função.
+            delta_mu = (mu_r[srcs] - mu_r[dsts]).reshape(-1, 1).astype(np.float32)
             full_attr = np.concatenate([edge_attr_base, delta_mu], axis=1)  # [E, 5]
         else:
             full_attr = edge_attr_base  # [E, 4] — delta_mu nunca alocado

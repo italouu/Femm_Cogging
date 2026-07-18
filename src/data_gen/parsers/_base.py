@@ -45,7 +45,13 @@ class MotorQtreeParserConfig:
         1  delta_c       diferença angular j−i (com wrap; unidades de célula base)
         2  shared_length comprimento da fronteira compartilhada
         3  center_dist   distância euclidiana entre centros
-        4  delta_mu      mu_r[j] − mu_r[i]  ← única feature que requer mu_r
+        4  delta_mu      mu_r[i] − mu_r[j] (origem − destino)  ← única feature que requer mu_r
+
+    NOTA (2026-07-17): delta_mu usa convenção "origem − destino" (i−j), o
+    INVERSO de delta_r/delta_c ("destino − origem", j−i). Positivo quando a
+    aresta sai de alta permeabilidade para baixa. Ver build_graph_edges_motor
+    em data_utils.py. Usada pelo parser FNO_GNN_V2_PARSER (fno_gnn_v2.py);
+    FNO_GNN_PARSER e MASKED_FNO_GNN_PARSER continuam sem essa coluna.
     """
     name           : str
     node_x_cols    : list   # índices das colunas de node_x [S, 9] a exportar

@@ -87,6 +87,18 @@ class FNO_GNNConfig:
 
 
 @dataclass
+class FNO_GNN_v2Config(FNO_GNNConfig):
+    """Mesmos campos de FNO_GNNConfig — FNO_GNN_v2 (src/neural_op/archs/fno_gnn_v2.py)
+    só muda _EDGE_DIM (4→5) internamente, sem novo hiperparâmetro. Classe
+    própria (em vez de reaproveitar FNO_GNNConfig) para que NnCfg.__post_init__
+    valide arch↔arch_cfg corretamente e para runs registrarem no config.json
+    qual variante (v1/v2) foi usada. Requer dataset gerado com
+    npz_parser='FNO_GNN_v2' (edge_attr [E,5], inclui delta_mu direcional —
+    ver src/data_gen/parsers/fno_gnn_v2.py)."""
+    pass
+
+
+@dataclass
 class GNN_PostBaseConfig:
     # Treino em duas etapas (não end-to-end): base_run_dir aponta para um run já treinado
     # (FNO2d ou FNO_GNN), congelado; só o GNN novo é treinado.
@@ -162,6 +174,10 @@ class MaskedFNO_GNNConfig:
 # │                 │   fno_loss           │                  │   (material_id=0..3)     │
 # │ FNO_GNN         │ mse / mae /          │ qtree            │ FNO_GNNConfig            │
 # │                 │   relative_l2        │                  │                          │
+# │ FNO_GNN_v2      │ mse / mae /          │ qtree            │ FNO_GNN_v2Config         │
+# │                 │   relative_l2        │                  │   (edge_attr c/ delta_mu │
+# │                 │                      │                  │    direcional; parser    │
+# │                 │                      │                  │    FNO_GNN_v2 no npz)    │
 # │ MaskedFNO_GNN   │ masked_fno_gnn_loss  │ qtree            │ MaskedFNO_GNNConfig      │
 # │ FNO_GNN_Field   │ mse / mae /          │ qtree            │ FNO_GNNConfig            │
 # │                 │   relative_l2        │                  │   (campo direto nos nós) │

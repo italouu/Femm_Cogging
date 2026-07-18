@@ -86,6 +86,7 @@ _SAMPLE_METHODS = {
     'constrained':     BLDC_Process.generate_samples_constrained,
     'legacy':          BLDC_Process.generate_samples,
     'fixed_geometry':  BLDC_Process.generate_samples_fixed_geometry,
+    'constrained_lhs': BLDC_Process.generate_samples_constrained_lhs_filtered,
 }
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ from dataclasses import dataclass, asdict
 
 from src.neural_op.archs.fno            import FNO2d,          fno_step_fn
 from src.neural_op.archs.fno_gnn        import FNO_GNN,        make_fno_gnn_step
+from src.neural_op.archs.fno_gnn_v2     import FNO_GNN_v2
 from src.neural_op.archs.fno_gnn_field  import FNO_GNN_Field
 from src.neural_op.archs.fno_mat        import (MaskedFNO2d,    masked_fno_step_fn,
                                                 FNO2d_SingleMat, make_single_mat_step_fn)
@@ -12,7 +13,7 @@ from src.neural_op.archs.gnn_post_base  import (GNN_PostBase,
 from src.neural_op.archs.eval           import (fno_eval_fn, fno_gnn_eval_fn,
                                                 masked_fno_eval_fn, masked_fno_gnn_eval_fn,
                                                 single_mat_fno_eval_fn)
-from src.configs.training               import (FNOConfig, FNO_GNNConfig,
+from src.configs.training               import (FNOConfig, FNO_GNNConfig, FNO_GNN_v2Config,
                                                 MaskedFNO2dConfig, MaskedFNO_GNNConfig,
                                                 SingleMatFNOConfig, GNN_PostBaseConfig)
 # [REMOVIDO] PhiDeepONet — removido do escopo ativo (2026-05-27)
@@ -89,6 +90,18 @@ ARCH_REGISTRY: dict = {
     'FNO_GNN_Field': ArchEntry(
         cls=FNO_GNN_Field,
         cfg_cls=FNO_GNNConfig,   # mesma config de FNO_GNN — só o forward muda (campo vs delta)
+        loader_mode='qtree',
+        model_kwargs=_fno_gnn_kwargs,
+        make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
+        eval_fn=fno_gnn_eval_fn,
+    ),
+    # FNO_GNN_v2 (2026-07-17): edge_attr [E,5] com delta_mu direcional
+    # (mu_origem - mu_destino). Requer dataset gerado com npz_parser='FNO_GNN_v2'
+    # (src/data_gen/parsers/fno_gnn_v2.py) — incompatível com chunks de FNO_GNN
+    # (edge_attr [E,4]). Forward/step_fn/eval_fn herdados de FNO_GNN sem alteração.
+    'FNO_GNN_v2': ArchEntry(
+        cls=FNO_GNN_v2,
+        cfg_cls=FNO_GNN_v2Config,
         loader_mode='qtree',
         model_kwargs=_fno_gnn_kwargs,
         make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),

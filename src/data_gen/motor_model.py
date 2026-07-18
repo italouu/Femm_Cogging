@@ -697,6 +697,196 @@ class BLDC_Process:
         return samples
 
     @staticmethod
+    def generate_samples_constrained_lhs(num_samples, seed=42, qmc_method='lhs'):
+        """Variante de generate_samples_constrained com amostragem LHS (ou Sobol).
+
+        Diferença central: stator_outer, gap, pole_thickness e pole_embrance são
+        sorteados de forma INDEPENDENTE via design QMC (scipy.stats.qmc) sobre
+        intervalos nominais fixos — sem os clamps condicionais que
+        generate_samples_constrained aplica a cada amostra (gap_max/pt_max
+        recalculados por amostra para forçar validade geométrica). Isso preenche
+        melhor o espaço conjunto de parâmetros, ao custo de gerar candidatas
+        geometricamente inválidas (pole_thickness que não cabe no rotor).
+
+        A validade é verificada a posteriori reaproveitando a mesma fórmula usada
+        como clamp em generate_samples_constrained (pt_max), agora como critério
+        de aceite/rejeição:
+            stator_outer/2 + gap + pole_thickness + MIN_BACK_IRON <= ROTOR_OUTER/2
+
+        Retorna (samples, valid_mask): samples contém as num_samples candidatas
+        (mesmo formato dos outros geradores), válidas e inválidas; valid_mask é
+        um np.ndarray booleano de tamanho num_samples. Este método NÃO garante
+        num_samples amostras válidas — filtrar/reamostrar fica a cargo do
+        chamador, depois de avaliar a taxa de rejeição.
+        """
+        from scipy.stats import qmc
+
+        STATOR_INNER   = 60.0
+        ROTOR_OUTER    = 90.0
+        HS0, HS1, HS2  = 1.0, 1.2, 3.7
+        HS_TOTAL       = HS0 + HS1 + HS2   # 5.9
+        STACK_LENGTH   = 1.0
+        N_SLOTS        = 36
+        N_POLES        = 42
+        OUTER_D        = 93.0
+        INNER_D        = 57.0
+
+        MIN_GAP            = 0.5
+        MAX_GAP            = 2.0
+        MIN_BACK_IRON      = 1.0
+        MIN_POLE_THICKNESS = 1.5
+        MIN_YOKE           = 1.0
+
+        stator_outer_min = STATOR_INNER + 2.0 * (HS_TOTAL + MIN_YOKE)   # ≈ 73.8
+        stator_outer_max = ROTOR_OUTER  - 2.0 * (MIN_GAP + MIN_POLE_THICKNESS + MIN_BACK_IRON)  # = 81.0
+
+        # limite nominal (não condicional) de pole_thickness: melhor caso possível
+        # de rotor_inner (stator_outer mínimo + gap mínimo). Mesmo assim gera
+        # rejeições sempre que o stator_outer/gap sorteados de fato deixam menos
+        # espaço radial do que esse melhor caso.
+        rotor_inner_best_case      = stator_outer_min + 2.0 * MIN_GAP
+        pole_thickness_nominal_max = ROTOR_OUTER / 2.0 - rotor_inner_best_case / 2.0 - MIN_BACK_IRON
+
+        PHASE_MAX = 0 #360.0 / (2 * N_POLES)
+
+        space = {
+            'number_rotor_poles':     {'unit': '',    'x_min': 42,       'x_max': 42},
+            'number_stator_slots':    {'unit': '',    'x_min': 36,       'x_max': 36},
+            'outer_diameter':         {'unit': 'mm',  'x_min': 93,       'x_max': 93},
+            'inner_diameter':         {'unit': 'mm',  'x_min': 57,       'x_max': 57},
+            'stator_outer_diameter':  {'unit': 'mm',  'x_min': 0,        'x_max': 0},
+            'stator_inner_diameter':  {'unit': 'mm',  'x_min': 60,       'x_max': 60},
+            'stack_length':           {'unit': 'mm',  'x_min': 0,        'x_max': 0},
+            'slot_Hs0':               {'unit': 'mm',  'x_min': 0,        'x_max': 0},
+            'slot_Hs1':               {'unit': 'mm',  'x_min': 0,        'x_max': 0},
+            'slot_Hs2':               {'unit': 'mm',  'x_min': 0,        'x_max': 0},
+            'slot_Bs0':               {'unit': 'mm',  'x_min': 1,        'x_max': 0},
+            'slot_Bs1':               {'unit': 'mm',  'x_min': 0,        'x_max': 0},
+            'slot_Bs2':               {'unit': 'mm',  'x_min': 0,        'x_max': 0},
+            'slot_Rs':                {'unit': 'mm',  'x_min': 0,        'x_max': 0},
+            'rotor_outer_diameter':   {'unit': 'mm',  'x_min': 90,       'x_max': 90},
+            'rotor_inner_diameter':   {'unit': 'mm',  'x_min': 0,        'x_max': 0},
+            'pole_embrance':          {'unit': '',    'x_min': 0.6,      'x_max': 0.90},
+            'pole_thickness':         {'unit': 'mm',  'x_min': 0,        'x_max': 0},
+            'rotor_phase':            {'unit': 'deg', 'x_min': 0,        'x_max': PHASE_MAX},
+            }
+
+        N_DIMS = 8   # stator_outer, gap, pole_thickness, pole_embrance, Bs0, Bs1, Bs2, rotor_phase
+        if qmc_method == 'lhs':
+            sampler = qmc.LatinHypercube(d=N_DIMS, seed=seed)
+        elif qmc_method == 'sobol':
+            sampler = qmc.Sobol(d=N_DIMS, seed=seed)
+        else:
+            raise ValueError(f"qmc_method deve ser 'lhs' ou 'sobol', recebido: {qmc_method!r}")
+        quantiles = sampler.random(n=num_samples)   # [num_samples, N_DIMS] em [0,1)
+
+        def _ppf(q, lo, hi):
+            """CDF inversa: uniforme ou triangular (moda em lo + 0.8*(hi-lo), igual a _sample)."""
+            if lo >= hi:
+                return lo
+            if DISTRIBUTION == 'uniform':
+                return lo + q * (hi - lo)
+            md = lo + 0.8 * (hi - lo)
+            if md <= lo or md >= hi:
+                return lo + q * (hi - lo)
+            split = (md - lo) / (hi - lo)
+            if q <= split:
+                return lo + np.sqrt(q * (hi - lo) * (md - lo))
+            return hi - np.sqrt((1.0 - q) * (hi - lo) * (hi - md))
+
+        samples = {key: {'unit': cfg['unit'], 'value': []} for key, cfg in space.items()}
+        valid_mask = np.empty(num_samples, dtype=bool)
+
+        for i in range(num_samples):
+            q = quantiles[i]
+
+            stator_outer   = _ppf(q[0], stator_outer_min, stator_outer_max)
+            gap            = _ppf(q[1], MIN_GAP, MAX_GAP)
+            pole_thickness = _ppf(q[2], MIN_POLE_THICKNESS, pole_thickness_nominal_max)
+            pole_embrance  = _ppf(q[3], 0.6, 0.90)
+
+            rotor_inner = stator_outer + 2.0 * gap
+
+            # mesma fórmula usada como clamp em generate_samples_constrained (pt_max),
+            # agora usada como critério de validade a posteriori
+            pt_max = ROTOR_OUTER / 2.0 - rotor_inner / 2.0 - MIN_BACK_IRON
+            valid_mask[i] = pole_thickness <= pt_max
+
+            # larguras do slot como fração do arco no respectivo raio
+            arc_Bs0 = 2.0 * np.pi * (stator_outer / 2.0)              / N_SLOTS
+            Bs0     = _ppf(q[4], 0.15 * arc_Bs0, 0.30 * arc_Bs0)
+
+            arc_Bs1 = 2.0 * np.pi * (stator_outer / 2.0 - HS0 - HS1) / N_SLOTS
+            Bs1     = _ppf(q[5], 0.30 * arc_Bs1, 0.40 * arc_Bs1)
+
+            arc_Bs2 = 2.0 * np.pi * (stator_outer / 2.0 - HS_TOTAL)   / N_SLOTS
+            Bs2     = _ppf(q[6], 0.35 * arc_Bs2, 0.50 * arc_Bs2)
+
+            rotor_phase = _ppf(q[7], 0.0, PHASE_MAX)
+
+            samples['outer_diameter']['value'].append(OUTER_D)
+            samples['inner_diameter']['value'].append(INNER_D)
+            samples['number_rotor_poles']['value'].append(N_POLES)
+            samples['number_stator_slots']['value'].append(N_SLOTS)
+            samples['stator_outer_diameter']['value'].append(stator_outer)
+            samples['stator_inner_diameter']['value'].append(STATOR_INNER)
+            samples['stack_length']['value'].append(STACK_LENGTH)
+            samples['rotor_outer_diameter']['value'].append(ROTOR_OUTER)
+            samples['rotor_inner_diameter']['value'].append(rotor_inner)
+            samples['pole_embrance']['value'].append(pole_embrance)
+            samples['pole_thickness']['value'].append(pole_thickness)
+            samples['slot_Hs0']['value'].append(HS0)
+            samples['slot_Hs1']['value'].append(HS1)
+            samples['slot_Hs2']['value'].append(HS2)
+            samples['slot_Rs']['value'].append(0.0)
+            samples['slot_Bs0']['value'].append(Bs0)
+            samples['slot_Bs1']['value'].append(Bs1)
+            samples['slot_Bs2']['value'].append(Bs2)
+            samples['rotor_phase']['value'].append(rotor_phase)
+
+        return samples, valid_mask
+
+    @staticmethod
+    def generate_samples_constrained_lhs_filtered(num_samples, seed=42, qmc_method='lhs',
+                                                    oversample_factor=3.0, max_rounds=8):
+        """Wrapper de generate_samples_constrained_lhs que garante `num_samples` amostras
+        válidas, no mesmo formato (samples, sem mask) das demais funções de amostragem —
+        compatível com o uso direto em _SAMPLE_METHODS do pipeline de geração.
+
+        Taxa de validade observada em benchmark (tests/test_lhs_validity_bench.py): ~35-37%.
+        oversample_factor=3.0 cobre isso com margem numa única rodada; se não bastar,
+        reamostra em rodadas adicionais (seed incrementado a cada rodada) até max_rounds.
+        """
+        collected = None
+        n_collected = 0
+        round_seed = seed
+        n_request = max(1, int(np.ceil(num_samples * oversample_factor)))
+
+        for _ in range(max_rounds):
+            batch, valid_mask = BLDC_Process.generate_samples_constrained_lhs(
+                num_samples=n_request, seed=round_seed, qmc_method=qmc_method
+            )
+            if collected is None:
+                collected = {key: {'unit': cfg['unit'], 'value': []} for key, cfg in batch.items()}
+            for key, cfg in batch.items():
+                collected[key]['value'].extend(v for v, ok in zip(cfg['value'], valid_mask) if ok)
+            n_collected = len(next(iter(collected.values()))['value'])
+            if n_collected >= num_samples:
+                break
+            round_seed += 1
+
+        if n_collected < num_samples:
+            raise RuntimeError(
+                f"Só {n_collected}/{num_samples} amostras válidas após {max_rounds} rodadas "
+                f"(oversample_factor={oversample_factor}). Aumente oversample_factor ou max_rounds."
+            )
+
+        for key in collected:
+            collected[key]['value'] = collected[key]['value'][:num_samples]
+
+        return collected
+
+    @staticmethod
     def generate_samples_fixed_geometry(num_samples, seed=42):
         """Todas as dimensões fixas; apenas o ângulo do rotor varia.
 
@@ -1151,7 +1341,13 @@ class BLDC_Shapely_Model(BLDC_Process):
 
         # backiron
         center = Point(0,0)
-        c1 = center.buffer(self.rotor_outer_diameter/2)
+        # [REMOVIDO] mesmo problema do c2 abaixo: resolução padrão do buffer
+        # (quad_segs=8, ~11.25°/segmento) facetava o círculo externo do rotor,
+        # criando serrilhado ferro/vácuo (sagita ~0.22mm no raio de 45mm) na
+        # fronteira externa do back_iron — visível como zigue-zague na borda
+        # do rotor no grid de mu_r em vez de uma linha reta.
+        # c1 = center.buffer(self.rotor_outer_diameter/2)
+        c1 = center.buffer(self.rotor_outer_diameter/2, quad_segs=90)
         # [REMOVIDO] resolução padrão do buffer (quad_segs=16, ~5.6°/segmento) não
         # casava com a malha de 1° usada em _create_sec para os polos, causando
         # sobreposição visível entre poles e back_iron perto do raio

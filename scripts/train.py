@@ -39,7 +39,8 @@ if __name__ == '__main__':
         test_split      = _nn.test_split,
     )
 
-    step_fn = entry.make_step_fn(_nn.arch_cfg, _nn.loss_cfg)
+    step_fn   = entry.make_step_fn(_nn.arch_cfg, _nn.loss_cfg)
+    metric_fn = entry.metric_fn(_nn.arch_cfg)
     loss_fn = LOSS_REGISTRY[_nn.loss]
     if getattr(_nn.loss_cfg, 'tail_alpha', 0.0) > 0:
         # Só MseLossCfg tem tail_alpha/tail_k_frac — getattr evita AttributeError
@@ -96,6 +97,7 @@ if __name__ == '__main__':
             optimizer, scheduler, loss_fn,
             device=DEVICE, n_epochs=_nn.n_epochs,
             step_fn=step_fn,
+            metric_fn=metric_fn,
             monitor=monitor,
             start_epoch=start_epoch,
             prev_losses=prev_losses,

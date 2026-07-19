@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from src.neural_op.archs._blocks import MLP, FNO_Blocks
 
@@ -52,3 +53,12 @@ class FNO2d(nn.Module):
 def fno_step_fn(batch, model, loss_fn, device):
     x, y = batch
     return loss_fn(model(x.to(device)), y.to(device))
+
+
+def fno_metric_fn(batch, model, device):
+    """MAE bruto (sem máscara) na grade H×W. Sem estrutura de grafo — mae_graph=None."""
+    x, y = batch
+    with torch.no_grad():
+        pred   = model(x.to(device))
+        mae_hw = torch.mean(torch.abs(pred - y.to(device))).item()
+    return mae_hw, None

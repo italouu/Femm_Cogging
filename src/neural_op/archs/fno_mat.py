@@ -77,6 +77,23 @@ def make_single_mat_step_fn(material_id):
     return step_fn
 
 
+def make_single_mat_metric_fn(material_id):
+    """MAE bruto restrito à região do material alvo. Sem grafo — mae_graph=None."""
+    def metric_fn(batch, model, device):
+        x, y   = batch
+        x_d    = x.to(device)
+        y_d    = y.to(device)
+        with torch.no_grad():
+            masks    = _make_material_masks(x_d[:, 0])
+            mask_m   = masks[:, material_id]                       # [B, H, W] bool
+            pred     = model(x_d)                                   # [B, 2, H, W]
+            mask_exp = mask_m.unsqueeze(1).expand_as(pred)
+            diff     = torch.abs(pred - y_d)[mask_exp]
+            mae_hw   = diff.mean().item() if diff.numel() > 0 else 0.0
+        return mae_hw, None
+    return metric_fn
+
+
 def masked_fno_step_fn(batch, model, loss_fn, device):
     x, y  = batch
     x_d   = x.to(device)
@@ -84,3 +101,16 @@ def masked_fno_step_fn(batch, model, loss_fn, device):
     masks = _make_material_masks(x_d[:, 0])   # [B, 4, H, W] — on-the-fly, ~0ms
     pred  = model(x_d)                         # [B, 8, H, W]
     return loss_fn(pred, y_d, masks)
+
+
+def masked_fno_metric_fn(batch, model, device):
+    """MAE bruto (sem máscara) na grade H×W, após assemble por material. Sem mae_graph."""
+    x, y = batch
+    x_d  = x.to(device)
+    y_d  = y.to(device)
+    with torch.no_grad():
+        masks     = _make_material_masks(x_d[:, 0])
+        pred8     = model(x_d)
+        assembled = model.assemble(pred8, masks)
+        mae_hw    = torch.mean(torch.abs(assembled - y_d)).item()
+    return mae_hw, None

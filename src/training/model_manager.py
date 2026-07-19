@@ -74,8 +74,17 @@ class ModelManager:
         print(f"  run -> {self.run_dir}{suffix}")
 
     def log(self, epoch, train_loss, test_loss, lr,
-            train_time_s, eval_time_s, samples_per_s):
-        """Append de uma linha em metrics.jsonl. Chamado pelo TrainingMonitor no heartbeat."""
+            train_time_s, eval_time_s, samples_per_s,
+            mae_hw=None, mae_graph=None):
+        """
+        Append de uma linha em metrics.jsonl. Chamado pelo TrainingMonitor no heartbeat.
+
+        mae_hw/mae_graph : MAE bruto (Tesla) sobre o test set, calculado só no
+        heartbeat via ArchEntry.metric_fn — mae_hw compara sempre a saída em grade
+        H×W do FNO; mae_graph compara a saída final em grafo/nós (None se o arch
+        não produz saída em grafo, ex: FNO2d/MaskedFNO2d, ou se a run não passou
+        metric_fn a fit()).
+        """
         entry = {
             'epoch':         epoch,
             'train_loss':    train_loss,
@@ -84,6 +93,8 @@ class ModelManager:
             'train_time_s':  round(train_time_s, 3),
             'eval_time_s':   round(eval_time_s, 3),
             'samples_per_s': round(samples_per_s, 1),
+            'mae_hw':        mae_hw,
+            'mae_graph':     mae_graph,
         }
         with self._metrics_path.open('a') as f:
             f.write(json.dumps(entry) + '\n')

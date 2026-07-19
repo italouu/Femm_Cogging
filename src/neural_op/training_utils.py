@@ -83,6 +83,38 @@ def eval_epoch(model, loader, loss_fn, device, step_fn):
     return (total_loss.item() / n_batches) if n_batches > 0 else 0.0
 
 
+def compute_mae_metrics(model, loader, device, metric_fn):
+    """
+    Uma passagem sobre loader sem gradiente, acumulando mae_hw/mae_graph (MAE bruto,
+    sem máscara) via metric_fn. Chamada só no heartbeat (dentro de fit()) — custo
+    extra de uma passada a mais no ritmo de checkpoint_every, não em toda época.
+
+    metric_fn : (batch, model, device) -> (mae_hw: float, mae_graph: float|None)
+
+    Returns
+    -------
+    mae_hw_avg    : float — média por batch de mae_hw
+    mae_graph_avg : float|None — média por batch de mae_graph; None se o arch não
+                    produz saída em grafo (todo mae_graph do loader é None)
+    """
+    model.eval()
+    total_hw, total_graph = 0.0, 0.0
+    has_graph = False
+    n_batches = 0
+    with torch.no_grad():
+        for batch in loader:
+            mae_hw, mae_graph = metric_fn(batch, model, device)
+            total_hw += mae_hw
+            if mae_graph is not None:
+                total_graph += mae_graph
+                has_graph = True
+            n_batches += 1
+    if n_batches == 0:
+        return 0.0, None
+    mae_graph_avg = (total_graph / n_batches) if has_graph else None
+    return total_hw / n_batches, mae_graph_avg
+
+
 def save_checkpoint(path, epoch, model, optimizer, scheduler
                     # [REMOVIDO] train_losses, test_losses → metrics.jsonl via ModelManager
                     # [REMOVIDO] extra → config.json via ModelManager
@@ -105,7 +137,7 @@ def save_checkpoint(path, epoch, model, optimizer, scheduler
 
 def fit(model, train_loader, test_loader,
         optimizer, scheduler, loss_fn, device, n_epochs, step_fn,
-        *, start_epoch=0, prev_losses=None, monitor=None):
+        *, start_epoch=0, prev_losses=None, monitor=None, metric_fn=None):
     """
     Loop completo de treino.
 
@@ -114,6 +146,12 @@ def fit(model, train_loader, test_loader,
     start_epoch : epoch absoluto inicial (0 = treino novo).
     prev_losses : {'train': [...], 'test': [...]} de run anterior; None = vazio.
     monitor     : TrainingMonitor | None — gerencia checkpoint, best e early stop.
+    metric_fn   : (batch, model, device) -> (mae_hw, mae_graph|None) | None
+                  Se fornecido, calcula MAE bruto sobre test_loader a cada heartbeat
+                  (mesmo ritmo de checkpoint_every) e grava mae_hw/mae_graph no log
+                  via monitor. mae_hw compara sempre a saída em grade H×W do FNO;
+                  mae_graph compara a saída final em grafo/nós (None se o arch não
+                  produzir saída em grafo).
 
     Returns
     -------
@@ -160,11 +198,16 @@ def fit(model, train_loader, test_loader,
         if monitor is not None:
             monitor.last_epoch = ep
             if (i + 1) % monitor.cfg.checkpoint_every == 0:
-                current_lr  = optimizer.param_groups[0]['lr']
+                current_lr = optimizer.param_groups[0]['lr']
+                mae_hw, mae_graph = (
+                    compute_mae_metrics(model, test_loader, device, metric_fn)
+                    if metric_fn is not None else (None, None)
+                )
                 should_stop = monitor.step(
                     ep, train_losses, test_losses, model, optimizer, scheduler,
                     lr=current_lr, train_time_s=train_time_s,
                     eval_time_s=eval_time_s, samples_per_s=samples_per_s,
+                    mae_hw=mae_hw, mae_graph=mae_graph,
                 )
                 if should_stop:
                     break

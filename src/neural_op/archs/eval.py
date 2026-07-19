@@ -21,6 +21,27 @@ def _err_norm(err, mask, B_ref):
     return np.where(mask, err / B_ref * 100, np.nan)
 
 
+def _err_display(err, mask, B_ref, mode):
+    """
+    Painel de erro alternável: 'percent' (normalizado por B_ref, %) ou
+    'absolute' (erro bruto |pred-alvo|, mesma unidade do campo — Tesla).
+    Retorna (array com NaN fora da máscara, label do painel).
+    """
+    if mode == 'absolute':
+        return np.where(mask, err, np.nan), 'Erro absoluto [T]'
+    return _err_norm(err, mask, B_ref), 'Erro norm. [%]'
+
+
+def _err_vmax(disps, eval_cfg):
+    """
+    vmax do colormap de erro. error_cap só se aplica no modo 'percent' (é definido
+    em % — não tem tradução direta para o modo 'absolute', que sempre auto-escala).
+    """
+    if eval_cfg.error_plot_mode == 'percent' and eval_cfg.error_cap_enabled:
+        return eval_cfg.error_cap
+    return max(float(np.nanmax(d)) if np.isfinite(d).any() else 1.0 for d in disps)
+
+
 # ── Helpers FNO_GNN ───────────────────────────────────────────────────────────
 
 # [REMOVIDO] _qtree_render — projetava nós via scatter_add para H×W (média por célula base),
@@ -140,7 +161,7 @@ def fno_eval_fn(model, d, eval_cfg):
     mask  = mag_true >= thr
     B_ref = np.sqrt(np.mean(mag_true[mask]**2)) if mask.any() else 1.0
 
-    en      = _err_norm(mag_err, mask, B_ref)
+    en, en_label = _err_display(mag_err, mask, B_ref, eval_cfg.error_plot_mode)
     m, med, p95 = _masked_metrics(mag_err, mask, B_ref)
     cmap_nan = plt.cm.hot.copy(); cmap_nan.set_bad(color='#444444')
 
@@ -181,8 +202,8 @@ def fno_eval_fn(model, d, eval_cfg):
         print(f"FNO (qtree refinada) — média={qt_m:.1f}%  mediana={qt_med:.1f}%  p95={qt_p95:.1f}%  "
               f"({int(mask_qt.sum())} folhas relevantes / {len(mask_qt)})")
 
-        en_qt = np.full(len(err_qt), np.nan, dtype=np.float32)
-        en_qt[mask_qt] = err_qt[mask_qt] / B_ref_qt * 100
+        en_qt, en_qt_label = _err_display(err_qt, mask_qt, B_ref_qt, eval_cfg.error_plot_mode)
+        en_qt = en_qt.astype(np.float32)
         en_qt_render = _qtree_render_as_grid(
             torch.from_numpy(en_qt).unsqueeze(1), node_x_i, H, W
         )[0].numpy()
@@ -204,9 +225,9 @@ def fno_eval_fn(model, d, eval_cfg):
                       cmap='gray', vmin=0, vmax=1)
     axes[0, 2].set_title(f'Máscara |y|>={thr}  (branco=relevante)', fontsize=9)
     if en_qt_render is not None:
-        vmax_qt = eval_cfg.error_cap if eval_cfg.error_cap_enabled else float(np.nanmax(en_qt_render))
+        vmax_qt = _err_vmax([en_qt_render], eval_cfg)
         _imshow(axes[0, 3], en_qt_render,
-                f'Erro norm. qtree refinada [%]\nmédia={qt_m:.1f}%  p95={qt_p95:.1f}%',
+                f'{en_qt_label} qtree refinada\nmédia={qt_m:.1f}%  p95={qt_p95:.1f}%',
                 cmap=cmap_nan, vmin=0, vmax=vmax_qt)
     else:
         axes[0, 3].axis('off')
@@ -226,10 +247,11 @@ def fno_eval_fn(model, d, eval_cfg):
         _imshow(axes[2, 1], pred[1].numpy(), f'Pred: {out_labels[1]}')
     else:
         axes[2, 1].axis('off')
-    err_vmax = eval_cfg.error_cap if eval_cfg.error_cap_enabled else float(np.nanmax(en))
-    _imshow(axes[2, 2], mag_err, 'Erro absoluto |y|')
+    err_vmax = _err_vmax([en], eval_cfg)
+    _imshow(axes[2, 2], mag_err, 'Erro absoluto |y| [T]')
+    ref_note = f'  (÷ ref={B_ref:.3f})' if eval_cfg.error_plot_mode == 'percent' else ''
     _imshow(axes[2, 3], en,
-            f'Erro norm. global [%]  (÷ ref={B_ref:.3f})\n'
+            f'{en_label} global{ref_note}\n'
             f'média={m:.1f}%  mediana={med:.1f}%  p95={p95:.1f}%',
             cmap=cmap_nan, vmin=0, vmax=err_vmax)
     plt.tight_layout()
@@ -307,17 +329,15 @@ def fno_gnn_eval_fn(model, d, eval_cfg):
     print(f"FNO  — média={fno_m:.1f}%  mediana={fno_med:.1f}%  p95={fno_p95:.1f}%")
     print(f"GNN  — média={gnn_m:.1f}%  mediana={gnn_med:.1f}%  p95={gnn_p95:.1f}%")
 
-    en_fno   = _err_norm(err_fno, mask, B_ref)
-    en_gnn   = _err_norm(err_gnn, mask, B_ref)
+    en_fno, en_fno_label = _err_display(err_fno, mask, B_ref, eval_cfg.error_plot_mode)
+    en_gnn, en_gnn_label = _err_display(err_gnn, mask, B_ref, eval_cfg.error_plot_mode)
     cmap_nan = plt.cm.hot.copy(); cmap_nan.set_bad(color='#444444')
 
     def _lim(*a): return min(x.min() for x in a), max(x.max() for x in a)
     bx_lim  = _lim(bx_tq, bx_fno, bx_gnn)
     by_lim  = _lim(by_tq, by_fno, by_gnn)
     mag_lim = _lim(mag_tq, mag_fno, mag_gnn)
-    err_vmax = eval_cfg.error_cap if eval_cfg.error_cap_enabled else max(
-        float(np.nanmax(en_fno)), float(np.nanmax(en_gnn))
-    )
+    err_vmax = _err_vmax([en_fno, en_gnn], eval_cfg)
 
     fig, axes = plt.subplots(4, 4, figsize=(18, 13))
     fig.suptitle(
@@ -345,7 +365,7 @@ def fno_gnn_eval_fn(model, d, eval_cfg):
     _imshow(axes[2, 1], by_fno,  'FNO pred: By',  vmin=by_lim[0],  vmax=by_lim[1])
     _imshow(axes[2, 2], mag_fno, 'FNO pred: |B|', vmin=mag_lim[0], vmax=mag_lim[1])
     _imshow(axes[2, 3], en_fno,
-            f'FNO erro norm [%]\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
+            f'FNO {en_fno_label}\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
             cmap=cmap_nan, vmin=0, vmax=err_vmax)
 
     # Linha 3 — GNN (qtree real); erro em H×W
@@ -353,7 +373,7 @@ def fno_gnn_eval_fn(model, d, eval_cfg):
     _imshow(axes[3, 1], by_gnn,  'GNN pred: By (qtree)',  vmin=by_lim[0],  vmax=by_lim[1])
     _imshow(axes[3, 2], mag_gnn, 'GNN pred: |B| (qtree)', vmin=mag_lim[0], vmax=mag_lim[1])
     _imshow(axes[3, 3], en_gnn,
-            f'GNN erro norm [%] (H×W vs GT grid)\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
+            f'GNN {en_gnn_label} (H×W vs GT grid)\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
             cmap=cmap_nan, vmin=0, vmax=err_vmax)
 
     plt.tight_layout()
@@ -405,7 +425,7 @@ def single_mat_fno_eval_fn(model, d, eval_cfg):
         mat_map[masks[m]] = m
     mat_map = mat_map.numpy()
 
-    en          = _err_norm(mag_err, mask_rel, B_ref)
+    en, en_label = _err_display(mag_err, mask_rel, B_ref, eval_cfg.error_plot_mode)
     m_, med, p95 = _masked_metrics(mag_err, mask_rel, B_ref)
     cmap_nan    = plt.cm.hot.copy(); cmap_nan.set_bad(color='#444444')
 
@@ -444,10 +464,11 @@ def single_mat_fno_eval_fn(model, d, eval_cfg):
     _imshow(axes[2, 3], mag_pred_mat, f'Pred: |B| ({mat_name})', cmap='viridis')
 
     # Linha 3 — erros
-    _imshow(axes[3, 0], mag_err, 'Erro abs |B| (domínio)')
-    err_vmax = eval_cfg.error_cap if eval_cfg.error_cap_enabled else float(np.nanmax(en))
+    _imshow(axes[3, 0], mag_err, 'Erro abs |B| (domínio) [T]')
+    err_vmax = _err_vmax([en], eval_cfg)
+    ref_note = f'  ref={B_ref:.3f}' if eval_cfg.error_plot_mode == 'percent' else ''
     _imshow(axes[3, 1], en,
-            f'Erro norm. [%]  ref={B_ref:.3f}\n'
+            f'{en_label}{ref_note}\n'
             f'média={m_:.1f}%  mediana={med:.1f}%  p95={p95:.1f}%',
             cmap=cmap_nan, vmin=0, vmax=err_vmax)
     axes[3, 2].axis('off')
@@ -500,7 +521,7 @@ def masked_fno_eval_fn(model, d, eval_cfg):
         mat_map[masks[m]] = m
     mat_map = mat_map.numpy()
 
-    en          = _err_norm(mag_err, mask_rel, B_ref)
+    en, en_label = _err_display(mag_err, mask_rel, B_ref, eval_cfg.error_plot_mode)
     m_, med, p95 = _masked_metrics(mag_err, mask_rel, B_ref)
     cmap_nan    = plt.cm.hot.copy(); cmap_nan.set_bad(color='#444444')
 
@@ -530,10 +551,11 @@ def masked_fno_eval_fn(model, d, eval_cfg):
     # Linha 2 — predição montada + erro
     _imshow(axes[2, 0], bx_pred, 'Pred: Bx (assembled)')
     _imshow(axes[2, 1], by_pred, 'Pred: By (assembled)')
-    err_vmax = eval_cfg.error_cap if eval_cfg.error_cap_enabled else float(np.nanmax(en))
-    _imshow(axes[2, 2], mag_err, 'Erro absoluto |B|')
+    err_vmax = _err_vmax([en], eval_cfg)
+    ref_note = f'  ref={B_ref:.3f}' if eval_cfg.error_plot_mode == 'percent' else ''
+    _imshow(axes[2, 2], mag_err, 'Erro absoluto |B| [T]')
     _imshow(axes[2, 3], en,
-            f'Erro norm. [%]  ref={B_ref:.3f}\n'
+            f'{en_label}{ref_note}\n'
             f'média={m_:.1f}%  mediana={med:.1f}%  p95={p95:.1f}%',
             cmap=cmap_nan, vmin=0, vmax=err_vmax)
 
@@ -629,17 +651,15 @@ def masked_fno_gnn_eval_fn(model, d, eval_cfg):
     print(f"FNO  — média={fno_m:.1f}%  mediana={fno_med:.1f}%  p95={fno_p95:.1f}%")
     print(f"GNN  — média={gnn_m:.1f}%  mediana={gnn_med:.1f}%  p95={gnn_p95:.1f}%")
 
-    en_fno   = _err_norm(err_fno, mask_rel, B_ref)
-    en_gnn   = _err_norm(err_gnn, mask_rel, B_ref)
+    en_fno, en_fno_label = _err_display(err_fno, mask_rel, B_ref, eval_cfg.error_plot_mode)
+    en_gnn, en_gnn_label = _err_display(err_gnn, mask_rel, B_ref, eval_cfg.error_plot_mode)
     cmap_nan = plt.cm.hot.copy(); cmap_nan.set_bad(color='#444444')
 
     def _lim(*a): return min(x.min() for x in a), max(x.max() for x in a)
     bx_lim  = _lim(bx_tq, bx_fno, bx_gnn)
     by_lim  = _lim(by_tq, by_fno, by_gnn)
     mag_lim = _lim(mag_tq, mag_fno, mag_gnn)
-    err_vmax = eval_cfg.error_cap if eval_cfg.error_cap_enabled else max(
-        float(np.nanmax(en_fno)), float(np.nanmax(en_gnn))
-    )
+    err_vmax = _err_vmax([en_fno, en_gnn], eval_cfg)
 
     fig, axes = plt.subplots(4, 4, figsize=(18, 13))
     fig.suptitle(
@@ -669,7 +689,7 @@ def masked_fno_gnn_eval_fn(model, d, eval_cfg):
     _imshow(axes[2, 1], by_fno,  'FNO assembled: By',  vmin=by_lim[0],  vmax=by_lim[1])
     _imshow(axes[2, 2], mag_fno, 'FNO assembled: |B|', vmin=mag_lim[0], vmax=mag_lim[1])
     _imshow(axes[2, 3], en_fno,
-            f'FNO erro norm [%]\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
+            f'FNO {en_fno_label}\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
             cmap=cmap_nan, vmin=0, vmax=err_vmax)
 
     # Linha 3 — GNN assembled (qtree real); erro em H×W
@@ -677,7 +697,7 @@ def masked_fno_gnn_eval_fn(model, d, eval_cfg):
     _imshow(axes[3, 1], by_gnn,  'GNN assembled: By (qtree)',  vmin=by_lim[0],  vmax=by_lim[1])
     _imshow(axes[3, 2], mag_gnn, 'GNN assembled: |B| (qtree)', vmin=mag_lim[0], vmax=mag_lim[1])
     _imshow(axes[3, 3], en_gnn,
-            f'GNN erro norm [%] (H×W vs GT grid)\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
+            f'GNN {en_gnn_label} (H×W vs GT grid)\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
             cmap=cmap_nan, vmin=0, vmax=err_vmax)
 
     plt.tight_layout()

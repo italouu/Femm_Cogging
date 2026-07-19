@@ -35,10 +35,14 @@ class TrainingMonitor:
         self._patience_count = 0
 
     def step(self, epoch, train_losses, test_losses, model, optimizer, scheduler,
-             *, lr=0.0, train_time_s=0.0, eval_time_s=0.0, samples_per_s=0.0) -> bool:
+             *, lr=0.0, train_time_s=0.0, eval_time_s=0.0, samples_per_s=0.0,
+             mae_hw=None, mae_graph=None) -> bool:
         """
         Chamado a cada heartbeat. Salva checkpoint, atualiza best, loga métricas,
         verifica early stop. Retorna True se o treino deve parar.
+
+        mae_hw/mae_graph : MAE bruto opcional (ver fit()/ArchEntry.metric_fn);
+                            None quando a run não passou metric_fn a fit().
         """
         test_loss = test_losses[-1]
         improved  = test_loss < self._best_loss - self.cfg.early_stop_min_delta
@@ -57,7 +61,8 @@ class TrainingMonitor:
 
         if self.mgr is not None:
             self.mgr.log(epoch, train_losses[-1], test_losses[-1], lr,
-                         train_time_s, eval_time_s, samples_per_s)
+                         train_time_s, eval_time_s, samples_per_s,
+                         mae_hw=mae_hw, mae_graph=mae_graph)
 
         if self.cfg.early_stop_patience is not None:
             if self._patience_count >= self.cfg.early_stop_patience:

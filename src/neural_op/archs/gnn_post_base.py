@@ -147,6 +147,26 @@ def make_gnn_post_base_step_fn(loss_cfg=None):
     return gnn_post_base_step
 
 
+def gnn_post_base_metric_fn(batch, model, device):
+    """
+    MAE bruto: mae_hw compara a saída em grade H×W do modelo base congelado
+    (FNO2d ou estágio FNO do FNO_GNN) contra y_hw; mae_graph compara a saída
+    final do GNN_PostBase (base + delta) nos nós contra node_y.
+    """
+    x_hw       = batch['x_hw'].to(device)
+    node_x     = batch['node_x'].to(device)
+    edge_index = batch['edge_index'].to(device)
+    edge_attr  = batch['edge_attr'].to(device)
+    L          = batch['L'].to(device)
+    y_hw       = batch['y_hw'].to(device)
+    y_node     = batch['node_y'][:, :2].to(device)
+    with torch.no_grad():
+        y_hw_base, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
+        mae_hw    = torch.mean(torch.abs(y_hw_base - y_hw)).item()
+        mae_graph = torch.mean(torch.abs(y_nodes   - y_node)).item()
+    return mae_hw, mae_graph
+
+
 # [REMOVIDO] gnn_post_base_step_fn plain function — substituída por make_gnn_post_base_step_fn
 # para aceitar loss_cfg (subtract_fno). Retrocompatibilidade via fábrica com loss_cfg=None
 # (comportamento idêntico ao anterior).

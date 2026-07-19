@@ -18,6 +18,8 @@ class EvalCfg:
     show_qtree_overlay   : bool  = False               # overlay de refinamento (FNO_GNN)
     error_cap_enabled    : bool  = False                # capa vmax do colormap de erro em error_cap
     error_cap            : float = 20.0                # vmax do erro normalizado [%] quando error_cap_enabled=True
+    error_plot_mode      : str   = 'percent'           # 'percent' (erro norm. por B_ref, %) ou
+                                                         # 'absolute' (erro bruto |pred-alvo|, Tesla)
     qtree_metric_enabled : bool  = False                # fno_eval_fn: projeta a predição (grade base) nas
                                                          # folhas da qtree e calcula erro vs node_y (GT fino);
                                                          # requer chunk com node_x/node_y/L (parser FNO_GNN)

@@ -95,3 +95,23 @@ def make_masked_fno_gnn_step(lambda_loss):
         return loss_fn(y_hw_8, y_hw, masks, y_nodes_2, y_node, lambda_loss)
 
     return masked_fno_gnn_step
+
+
+def masked_fno_gnn_metric_fn(batch, model, device):
+    """
+    MAE bruto: mae_hw compara o FNO assemblado por material (grade H×W) contra y_hw;
+    mae_graph compara a saída final da GNN nos nós contra node_y.
+    """
+    x_hw       = batch['x_hw'].to(device)
+    node_x     = batch['node_x'].to(device)
+    edge_index = batch['edge_index'].to(device)
+    edge_attr  = batch['edge_attr'].to(device)
+    L          = batch['L'].to(device)
+    y_hw       = batch['y_hw'].to(device)
+    y_node     = batch['node_y'][:, :2].to(device)
+    with torch.no_grad():
+        y_hw_8, masks, y_nodes_2 = model(x_hw, node_x, edge_index, edge_attr, L)
+        y_hw_assembled = model.assemble_grid(y_hw_8, masks)
+        mae_hw    = torch.mean(torch.abs(y_hw_assembled - y_hw)).item()
+        mae_graph = torch.mean(torch.abs(y_nodes_2 - y_node)).item()
+    return mae_hw, mae_graph

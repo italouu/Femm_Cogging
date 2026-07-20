@@ -31,7 +31,9 @@ class MaskedFNO_GNN(torch.nn.Module):
     _GRID_IN_CH  = 2
     _GRID_OUT_CH = 8    # 4 materiais × 2 campos (saída FNO antes do assemble)
     _NODE_IN_CH  = 5    # mu_r, M, cell_area, r_base, c_base  (MASKED_FNO_GNN_PARSER)
-    _EDGE_DIM    = 4
+    # [REMOVIDO] _EDGE_DIM = 4 hardcoded — edge_dim agora detectado automaticamente
+    # em MaskedFNO_GNNConfig/NnCfg.__post_init__ e passado explicitamente (mesmo
+    # motivo de FNO_GNN — ver src/neural_op/archs/fno_gnn.py).
     _GNN_IN_CH   = _NODE_IN_CH + 2   # 5 + 2 (FNO assemblado 8→2 antes da GNN)
 
     def __init__(self,
@@ -40,7 +42,8 @@ class MaskedFNO_GNN(torch.nn.Module):
                  fno_lift_width, fno_lift_layers,
                  fno_proj_width, fno_proj_layers,
                  data_res,
-                 gnn_node_width, gnn_n_layers):
+                 gnn_node_width, gnn_n_layers,
+                 edge_dim):
         super().__init__()
         self.fno = FNO2d(
             in_channels=self._GRID_IN_CH,
@@ -54,7 +57,7 @@ class MaskedFNO_GNN(torch.nn.Module):
         self.gnn = GNN(
             in_node_features=self._GNN_IN_CH,
             out_node_features=2,
-            edge_dim=self._EDGE_DIM,
+            edge_dim=edge_dim,
             node_width=gnn_node_width,
             n_layers=gnn_n_layers,
         )

@@ -9,6 +9,34 @@ from src.configs.loss    import (            # noqa: F401  re-exportado daqui po
 )
 
 
+def _detect_edge_dim_from_dataset(dataset: str) -> int:
+    """
+    Lê edge_attr.shape[-1] do primeiro chunk de data/torch/data_chunks/{dataset}/.
+
+    Fonte de verdade para arch_cfgs com GNN interno (FNO_GNN, FNO_GNN_v2,
+    MaskedFNO_GNN, GNN_PostBase) — evita hardcode de edge_dim quando parsers
+    diferentes geram edge_attr com número de colunas diferente (ex:
+    FNO_GNN_PARSER=4 cols vs FNO_GNN_V2_PARSER=5 cols, delta_mu direcional).
+    Chamado por NnCfg.__post_init__.
+    """
+    import glob
+    import torch
+
+    chunk_paths = sorted(glob.glob(f'data/torch/data_chunks/{dataset}/data_chunk_*.pt'))
+    if not chunk_paths:
+        raise FileNotFoundError(
+            f"_detect_edge_dim_from_dataset: nenhum chunk encontrado em "
+            f"'data/torch/data_chunks/{dataset}/' — não foi possível detectar edge_dim."
+        )
+    sample = torch.load(chunk_paths[0], map_location='cpu', weights_only=False)
+    if 'edge_attr' not in sample:
+        raise ValueError(
+            f"_detect_edge_dim_from_dataset: chunks de '{dataset}' não têm 'edge_attr' "
+            f"(dataset sem grafo) — este arch requer chunks qtree com grafo (build_graph=True)."
+        )
+    return sample['edge_attr'].shape[-1]
+
+
 # ── Arquiteturas ──────────────────────────────────────────────────────────────
 
 @dataclass
@@ -85,17 +113,27 @@ class FNO_GNNConfig:
     gnn_n_layers: int = 3
     lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
 
+    # edge_dim do GNN interno — detectado automaticamente em NnCfg.__post_init__
+    # (helper _detect_edge_dim_from_dataset) a partir do edge_attr dos chunks do
+    # dataset de treino (self.dataset). Default 4 só é usado se este arch_cfg for
+    # reconstruído fora de NnCfg (ex: scripts/eval.py faz cfg_cls(**arch_cfg_dict)
+    # direto do config.json salvo — nesse caso o valor gravado na própria run é
+    # usado, não o default).
+    edge_dim: int = field(default=4, init=False)
+
 
 @dataclass
 class FNO_GNN_v2Config(FNO_GNNConfig):
-    """Mesmos campos de FNO_GNNConfig — FNO_GNN_v2 (src/neural_op/archs/fno_gnn_v2.py)
-    só muda _EDGE_DIM (4→5) internamente, sem novo hiperparâmetro. Classe
-    própria (em vez de reaproveitar FNO_GNNConfig) para que NnCfg.__post_init__
-    valide arch↔arch_cfg corretamente e para runs registrarem no config.json
-    qual variante (v1/v2) foi usada. Requer dataset gerado com
-    npz_parser='FNO_GNN_v2' (edge_attr [E,5], inclui delta_mu direcional —
-    ver src/data_gen/parsers/fno_gnn_v2.py)."""
-    pass
+    """Mesmos campos de FNO_GNNConfig. FNO_GNN_v2 (src/neural_op/archs/fno_gnn_v2.py)
+    é hoje um alias de FNO_GNN — edge_dim vem do construtor (não mais de uma
+    constante de classe _EDGE_DIM), auto-detectado a partir do dataset. Classe e
+    arch próprios mantidos só por compatibilidade: reconstruir/avaliar runs já
+    treinadas antes dessa mudança depende de 'arch'=='FNO_GNN_v2' existir no
+    ARCH_REGISTRY. Default de edge_dim=5 (em vez de 4, herdado de FNO_GNNConfig)
+    porque configs salvos dessas runs antigas não têm a chave 'edge_dim' — sem
+    esse default específico, cfg_cls(**arch_cfg_dict) em scripts/eval.py
+    reconstruiria com edge_dim=4, incompatível com os pesos salvos (5 colunas)."""
+    edge_dim: int = field(default=5, init=False)
 
 
 @dataclass
@@ -115,15 +153,12 @@ class GNN_PostBaseConfig:
     base_arch_cfg : dict          = field(default_factory=dict, init=False)
     base_epoch    : Optional[int] = field(default=None, init=False)
 
-    # edge_dim do GNN interno (self.gnn.gate_mlp etc.) — detectado automaticamente em
-    # __post_init__ a partir do edge_attr dos chunks do dataset em que o modelo base
-    # (base_run_dir) foi treinado. Evita hardcode: chunks gerados por parsers diferentes
-    # (FNO_GNN_PARSER=4 cols, FNO_GNN_V2_PARSER=5 cols com delta_mu) exigem edge_dim
-    # diferente no GNN novo.
+    # edge_dim do GNN interno — auto-detectado em NnCfg.__post_init__ (helper
+    # _detect_edge_dim_from_dataset), a partir do dataset de treino (self.dataset
+    # do NnCfg, não de base_run_dir) — ver FNO_GNNConfig para detalhes.
     edge_dim: int = field(default=4, init=False)
 
     def __post_init__(self):
-        import glob
         import json
         from pathlib import Path
         import torch
@@ -138,23 +173,6 @@ class GNN_PostBaseConfig:
         if ckpt_path.exists():
             ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
             self.base_epoch = ckpt.get('epoch')
-
-        dataset     = cfg_dict['dataset']
-        chunk_paths = sorted(glob.glob(f'data/torch/data_chunks/{dataset}/data_chunk_*.pt'))
-        if not chunk_paths:
-            raise FileNotFoundError(
-                f"GNN_PostBaseConfig: nenhum chunk encontrado em "
-                f"'data/torch/data_chunks/{dataset}/' (dataset do modelo base em "
-                f"'{self.base_run_dir}') — não foi possível detectar edge_dim automaticamente."
-            )
-        sample = torch.load(chunk_paths[0], map_location='cpu', weights_only=False)
-        if 'edge_attr' not in sample:
-            raise ValueError(
-                f"GNN_PostBaseConfig: chunks de '{dataset}' não têm 'edge_attr' (dataset sem "
-                f"grafo) — GNN_PostBase requer chunks qtree gerados com um parser de grafo "
-                f"(build_graph=True)."
-            )
-        self.edge_dim = sample['edge_attr'].shape[-1]
 
     @classmethod
     def from_dict(cls, d: dict):
@@ -182,6 +200,9 @@ class MaskedFNO_GNNConfig:
     gnn_node_width : int   = 32
     gnn_n_layers   : int   = 3
     lambda_loss    : float = 0.5   # peso da loss de grade; loss_nós = 1 - lambda_loss
+
+    # edge_dim do GNN interno — auto-detectado em NnCfg.__post_init__, ver FNO_GNNConfig
+    edge_dim: int = field(default=4, init=False)
 
 
 # ── Config principal ──────────────────────────────────────────────────────────
@@ -234,18 +255,18 @@ class MaskedFNO_GNNConfig:
 
 @dataclass
 class NnCfg:
-    dataset: str = 'motor_default_v3_135x270'
-    arch: str = 'FNO2d'
-    loss: str = 'mse'
+    dataset: str = 'test_motor_v5_135x270'
+    arch: str = 'FNO_GNN'
+    loss: str = 'mae'
 
-    problem: str = 'motor_default_v3_135x270'
+    problem: str = 'test_motor_v5_135x270'
 
     # Treino
     lr: float = 1e-3
     n_epochs: int = 500
     scheduler: str = 'step'
     scheduler_step: int = 100
-    scheduler_gamma: float = 0.8
+    scheduler_gamma: float = 0.6
 
     # Dataloader
     batch_size: int = 32
@@ -283,6 +304,11 @@ class NnCfg:
                 f"arch='{self.arch}' espera arch_cfg do tipo {expected.__name__}, "
                 f"recebido {type(self.arch_cfg).__name__}"
             )
+        if hasattr(self.arch_cfg, 'edge_dim'):
+            # archs qtree com GNN interno (FNO_GNN, FNO_GNN_v2, MaskedFNO_GNN,
+            # GNN_PostBase) — edge_dim sempre recalculado a partir dos chunks reais
+            # de self.dataset, nunca deixado no default da dataclass.
+            self.arch_cfg.edge_dim = _detect_edge_dim_from_dataset(self.dataset)
         if self.loss_cfg is None:
             cls = LOSS_CFG_REGISTRY.get(self.loss, MseLossCfg)
             self.loss_cfg = cls()

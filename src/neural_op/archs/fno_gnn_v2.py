@@ -8,12 +8,16 @@ class FNO_GNN_v2(FNO_GNN):
 
     Criada em 2026-07-17 a pedido do usuário, em vez de alterar FNO_GNN
     diretamente — mantém FNO_GNN/FNO_GNN_Field e runs já treinadas intactas.
-    Mesma arquitetura, mesmo forward, mesma step_fn e mesmo eval_fn de
-    FNO_GNN (herdados); só _EDGE_DIM muda (4 → 5), o que redimensiona a
-    primeira camada do GNN (EdgeConvLayer opera sobre node_width + edge_dim).
+
+    2026-07-20: edge_dim deixou de ser uma constante de classe (_EDGE_DIM) e
+    passou a vir do construtor, auto-detectado a partir do dataset (ver
+    FNO_GNNConfig/NnCfg.__post_init__) — na prática esta classe hoje é
+    idêntica a FNO_GNN. Mantida (e mantida registrada em ARCH_REGISTRY) só
+    por compatibilidade: reconstruir/avaliar runs já treinadas com
+    "arch": "FNO_GNN_v2" no config.json depende desse nome existir.
 
     Requer chunks gerados pelo parser FNO_GNN_V2_PARSER
     (src/data_gen/parsers/fno_gnn_v2.py) — chunks de FNO_GNN_PARSER têm
     edge_attr [E, 4] e não são compatíveis (mismatch de shape no GNN).
     """
-    _EDGE_DIM = 5
+    pass

@@ -58,7 +58,10 @@ class FNO_GNN(torch.nn.Module):
     _GRID_IN_CH  = 2
     _GRID_OUT_CH = 2
     _NODE_IN_CH  = 5
-    _EDGE_DIM    = 4
+    # [REMOVIDO] _EDGE_DIM = 4 hardcoded — quebrava com edge_attr de dimensão
+    # diferente (ex: FNO_GNN_V2_PARSER, 5 cols com delta_mu). edge_dim agora é
+    # detectado automaticamente em FNO_GNNConfig/NnCfg.__post_init__ e passado
+    # explicitamente ao construtor.
     _GNN_IN_CH   = _NODE_IN_CH + _GRID_OUT_CH    # 7
 
     def __init__(self,
@@ -73,7 +76,8 @@ class FNO_GNN(torch.nn.Module):
                  data_res,
                  gnn_node_width,
                  # gnn_msg_width,  # [REMOVIDO] — gate escalar não usa msg_width
-                 gnn_n_layers):
+                 gnn_n_layers,
+                 edge_dim):
         super().__init__()
 
         self.fno = FNO2d(
@@ -88,7 +92,7 @@ class FNO_GNN(torch.nn.Module):
         self.gnn = GNN(
             in_node_features=self._GNN_IN_CH,
             out_node_features=self._GRID_OUT_CH,
-            edge_dim=self._EDGE_DIM,
+            edge_dim=edge_dim,
             node_width=gnn_node_width,
             n_layers=gnn_n_layers,
         )

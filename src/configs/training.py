@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, MISSING
 from typing import Any, Optional
 
 from src.configs.monitor import MonitorCfg   # noqa: F401  re-exportado daqui por retrocompatibilidade
@@ -35,6 +35,28 @@ def _detect_edge_dim_from_dataset(dataset: str) -> int:
             f"(dataset sem grafo) — este arch requer chunks qtree com grafo (build_graph=True)."
         )
     return sample['edge_attr'].shape[-1]
+
+
+def _from_dict_generic(cls, d: dict):
+    """
+    Reconstrói uma dataclass com campos init=False (ex: edge_dim, base_arch) a
+    partir de um dict já salvo (config.json), sem passar por __init__/__post_init__
+    — usado por scripts/eval.py (via hasattr(cfg_cls, 'from_dict')) para reconstruir
+    arch_cfg sem depender de recursos externos (dataset, base_run_dir) ainda
+    existirem no mesmo estado do treino.
+
+    Campo ausente em d (ex: 'edge_dim' em config.json de runs salvas antes desse
+    campo existir) cai no default da dataclass, em vez de KeyError — mesmo
+    comportamento que cls(**d) teria se o campo fosse init=True.
+    """
+    obj = cls.__new__(cls)
+    for f in fields(cls):
+        if f.name in d:
+            setattr(obj, f.name, d[f.name])
+        else:
+            default = f.default if f.default is not MISSING else f.default_factory()
+            setattr(obj, f.name, default)
+    return obj
 
 
 # ── Arquiteturas ──────────────────────────────────────────────────────────────
@@ -121,6 +143,13 @@ class FNO_GNNConfig:
     # usado, não o default).
     edge_dim: int = field(default=4, init=False)
 
+    @classmethod
+    def from_dict(cls, d: dict):
+        # edge_dim é init=False — scripts/eval.py detecta este método (hasattr) e o usa
+        # em vez de cfg_cls(**arch_cfg_dict), que quebraria por edge_dim não ser kwarg
+        # do construtor. FNO_GNN_v2Config herda este método sem precisar redefinir.
+        return _from_dict_generic(cls, d)
+
 
 @dataclass
 class FNO_GNN_v2Config(FNO_GNNConfig):
@@ -178,11 +207,8 @@ class GNN_PostBaseConfig:
     def from_dict(cls, d: dict):
         # Reconstrói a partir de um config.json já salvo (eval/resume) sem rechamar
         # __post_init__ — evita depender de base_run_dir ainda existir; usa o snapshot
-        # (base_arch/base_arch_cfg/base_epoch) já gravado na própria run.
-        obj = cls.__new__(cls)
-        for f in fields(cls):
-            setattr(obj, f.name, d[f.name])
-        return obj
+        # (base_arch/base_arch_cfg/base_epoch/edge_dim) já gravado na própria run.
+        return _from_dict_generic(cls, d)
 
 
 @dataclass
@@ -203,6 +229,11 @@ class MaskedFNO_GNNConfig:
 
     # edge_dim do GNN interno — auto-detectado em NnCfg.__post_init__, ver FNO_GNNConfig
     edge_dim: int = field(default=4, init=False)
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        # edge_dim é init=False — ver FNO_GNNConfig.from_dict para o motivo.
+        return _from_dict_generic(cls, d)
 
 
 # ── Config principal ──────────────────────────────────────────────────────────

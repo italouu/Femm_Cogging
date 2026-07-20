@@ -68,6 +68,7 @@ def _gnn_post_base_kwargs(cfg):
         'gnn_n_layers':    cfg.gnn_n_layers,
         'base_arch':       cfg.base_arch,
         'base_arch_cfg':   cfg.base_arch_cfg,
+        'edge_dim':        cfg.edge_dim,
     }
 
 

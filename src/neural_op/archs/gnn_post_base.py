@@ -88,12 +88,15 @@ class GNN_PostBase(torch.nn.Module):
     """
 
     _NODE_IN_CH  = 5
-    _EDGE_DIM    = 4
+    # [REMOVIDO] _EDGE_DIM = 4 hardcoded — quebrava com chunks de parsers com edge_attr
+    # de dimensão diferente (ex: FNO_GNN_V2_PARSER, 5 cols com delta_mu). edge_dim agora
+    # é detectado automaticamente em GNN_PostBaseConfig.__post_init__ a partir dos
+    # chunks do dataset e passado explicitamente aqui.
     _BASE_OUT_CH = 2
     _GNN_IN_CH   = _NODE_IN_CH + _BASE_OUT_CH
 
     def __init__(self, base_run_dir, base_checkpoint, gnn_node_width, gnn_n_layers,
-                 base_arch=None, base_arch_cfg=None):
+                 edge_dim, base_arch=None, base_arch_cfg=None):
         super().__init__()
         self.base_arch, self.base_model = _load_frozen_base(
             base_run_dir, base_checkpoint,
@@ -102,7 +105,7 @@ class GNN_PostBase(torch.nn.Module):
         self.gnn = GNN(
             in_node_features=self._GNN_IN_CH,
             out_node_features=self._BASE_OUT_CH,
-            edge_dim=self._EDGE_DIM,
+            edge_dim=edge_dim,
             node_width=gnn_node_width,
             n_layers=gnn_n_layers,
         )

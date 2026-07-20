@@ -115,7 +115,15 @@ class GNN_PostBaseConfig:
     base_arch_cfg : dict          = field(default_factory=dict, init=False)
     base_epoch    : Optional[int] = field(default=None, init=False)
 
+    # edge_dim do GNN interno (self.gnn.gate_mlp etc.) — detectado automaticamente em
+    # __post_init__ a partir do edge_attr dos chunks do dataset em que o modelo base
+    # (base_run_dir) foi treinado. Evita hardcode: chunks gerados por parsers diferentes
+    # (FNO_GNN_PARSER=4 cols, FNO_GNN_V2_PARSER=5 cols com delta_mu) exigem edge_dim
+    # diferente no GNN novo.
+    edge_dim: int = field(default=4, init=False)
+
     def __post_init__(self):
+        import glob
         import json
         from pathlib import Path
         import torch
@@ -130,6 +138,23 @@ class GNN_PostBaseConfig:
         if ckpt_path.exists():
             ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
             self.base_epoch = ckpt.get('epoch')
+
+        dataset     = cfg_dict['dataset']
+        chunk_paths = sorted(glob.glob(f'data/torch/data_chunks/{dataset}/data_chunk_*.pt'))
+        if not chunk_paths:
+            raise FileNotFoundError(
+                f"GNN_PostBaseConfig: nenhum chunk encontrado em "
+                f"'data/torch/data_chunks/{dataset}/' (dataset do modelo base em "
+                f"'{self.base_run_dir}') — não foi possível detectar edge_dim automaticamente."
+            )
+        sample = torch.load(chunk_paths[0], map_location='cpu', weights_only=False)
+        if 'edge_attr' not in sample:
+            raise ValueError(
+                f"GNN_PostBaseConfig: chunks de '{dataset}' não têm 'edge_attr' (dataset sem "
+                f"grafo) — GNN_PostBase requer chunks qtree gerados com um parser de grafo "
+                f"(build_graph=True)."
+            )
+        self.edge_dim = sample['edge_attr'].shape[-1]
 
     @classmethod
     def from_dict(cls, d: dict):

@@ -6,7 +6,10 @@ import torch
 from src.neural_op.archs._blocks import GNN
 from src.neural_op.archs.fno_gnn import _interpolate_fno_to_nodes
 
-_SUPPORTED_BASE_ARCHS = ('FNO2d', 'FNO_GNN')
+# [REMOVIDO] _SUPPORTED_BASE_ARCHS = ('FNO2d', 'FNO_GNN') — faltava 'FNO_GNN_v2';
+# FNO_GNN_v2 é subclasse de FNO_GNN com mesma assinatura de forward (ver
+# _base_pred_at_nodes abaixo, branch 'else'), então só faltava liberar aqui.
+_SUPPORTED_BASE_ARCHS = ('FNO2d', 'FNO_GNN', 'FNO_GNN_v2')
 
 
 def _load_frozen_base(base_run_dir, base_checkpoint, fallback_arch=None, fallback_arch_cfg=None):
@@ -44,9 +47,17 @@ def _load_frozen_base(base_run_dir, base_checkpoint, fallback_arch=None, fallbac
             f"run '{base_run_dir}' tem arch='{arch}'"
         )
 
-    entry    = ARCH_REGISTRY[arch]
-    arch_cfg = entry.cfg_cls(**arch_cfg_dict)
-    model    = entry.make_model(arch_cfg)
+    entry = ARCH_REGISTRY[arch]
+    # [REMOVIDO] arch_cfg = entry.cfg_cls(**arch_cfg_dict) — quebrava para arch_cfgs
+    # com campo init=False (ex: edge_dim em FNO_GNNConfig/FNO_GNN_v2Config): asdict()
+    # grava 'edge_dim' no config.json, mas __init__ não aceita esse kwarg. Mesmo
+    # padrão de scripts/eval.py:26-31 (hasattr from_dict) para reconstruir sem
+    # rechamar __post_init__/__init__.
+    if hasattr(entry.cfg_cls, 'from_dict'):
+        arch_cfg = entry.cfg_cls.from_dict(arch_cfg_dict)
+    else:
+        arch_cfg = entry.cfg_cls(**arch_cfg_dict)
+    model = entry.make_model(arch_cfg)
 
     ckpt_path = (run_dir / 'model_final.pth') if base_checkpoint == 'final' \
         else (run_dir / 'checkpoints' / f'{base_checkpoint}.pth')

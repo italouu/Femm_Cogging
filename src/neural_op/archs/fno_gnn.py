@@ -120,10 +120,14 @@ def make_fno_gnn_step(lambda_loss, loss_cfg=None):
         y_hw       = batch['y_hw'].to(device)
         y_node     = batch['node_y'][:, :2].to(device)
         if subtract:
-            y_hw_fno, _, delta = model(x_hw, node_x, edge_index, edge_attr, L,
-                                       return_components=True)
+            y_hw_fno, fno_at_nodes, delta = model(x_hw, node_x, edge_index, edge_attr, L,
+                                                   return_components=True)
             loss_grid  = loss_fn(y_hw_fno, y_hw)
-            loss_nodes = loss_fn(delta,    y_node)
+            # [REMOVIDO] loss_nodes = loss_fn(delta, y_node) — comparava a correção
+            # bruta do GNN contra o alvo inteiro, não contra o resíduo real da
+            # baseline FNO. Corrigido para residual learning de fato: delta deve
+            # aprender (y_node - fno_at_nodes), não y_node diretamente.
+            loss_nodes = loss_fn(delta, y_node - fno_at_nodes)
         else:
             y_hw_fno, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
             loss_grid  = loss_fn(y_hw_fno, y_hw)

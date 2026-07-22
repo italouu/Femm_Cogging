@@ -151,9 +151,13 @@ def make_gnn_post_base_step_fn(loss_cfg=None):
         L          = batch['L'].to(device)
         y_node     = batch['node_y'][:, :2].to(device)
         if subtract:
-            _, _, delta = model(x_hw, node_x, edge_index, edge_attr, L,
-                                return_components=True)
-            return loss_fn(delta, y_node)
+            _, base_at_nodes, delta = model(x_hw, node_x, edge_index, edge_attr, L,
+                                             return_components=True)
+            # [REMOVIDO] return loss_fn(delta, y_node) — comparava a correção bruta
+            # do GNN contra o alvo inteiro, não contra o resíduo real da baseline
+            # congelada. Corrigido para residual learning de fato: delta deve
+            # aprender (y_node - base_at_nodes), não y_node diretamente.
+            return loss_fn(delta, y_node - base_at_nodes)
         else:
             _, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
             return loss_fn(y_nodes, y_node)

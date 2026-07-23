@@ -90,13 +90,20 @@ _SAMPLE_METHODS = {
 }
 
 if __name__ == "__main__":
-    _gen = _SAMPLE_METHODS[_dg.sample_method]
-    motor_params_list = _gen(num_samples=N_SAMPLES, seed=_dg.datagen_seed)
-    BLDC_Process.export_params(params=motor_params_list)
+    if MODE == 'femm_mesh':
+        # pipeline via malha real do FEMM (ver src/data_gen/femm_mesh.py) —
+        # generate_one_batch/check_data só aceitam 'grid'/'qtree', então esse
+        # modo tem seu próprio fluxo, reaproveitado aqui em vez de duplicado.
+        from scripts.generate_data_femm_mesh import run as run_femm_mesh
+        run_femm_mesh()
+    else:
+        _gen = _SAMPLE_METHODS[_dg.sample_method]
+        motor_params_list = _gen(num_samples=N_SAMPLES, seed=_dg.datagen_seed)
+        BLDC_Process.export_params(params=motor_params_list)
 
-    missing_list = check_data(mode=MODE)   # n_phases removido; default=1 em check_data
-    print(f"missing [{len(missing_list)}] models")
+        missing_list = check_data(mode=MODE)   # n_phases removido; default=1 em check_data
+        print(f"missing [{len(missing_list)}] models")
 
-    multi_process(codes=missing_list, mode=MODE, motor_params_list=motor_params_list,
-                  n_r=N_R, n_a=N_A, ang_1=ANG_1, ang_2=ANG_2,
-                  max_depth=MAX_DEPTH)
+        multi_process(codes=missing_list, mode=MODE, motor_params_list=motor_params_list,
+                      n_r=N_R, n_a=N_A, ang_1=ANG_1, ang_2=ANG_2,
+                      max_depth=MAX_DEPTH)

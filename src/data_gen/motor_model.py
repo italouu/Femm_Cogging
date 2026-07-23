@@ -1272,30 +1272,33 @@ class BLDC_FEMM_Model(BLDC_Process):
         self.save_csv(Fields=Fields, names=names)
 
     def save_B_grid_pts(self, ang_1, ang_2, n_r, n_a, code=0):
-        """Salva Bx/By na grade base [n_r, n_a] — point queries nos centros H×W.
+        """Salva Bx/By/A na grade base [n_r, n_a] — point queries nos centros H×W.
 
         Sem averaging de sub-células qtree. A solução FEMM deve estar carregada.
         Chamado em ambos os modos (grid e qtree).
-        CSVs: Mag_Bx_grid_{code}.csv, Mag_By_grid_{code}.csv
+        CSVs: Mag_Bx_grid_{code}.csv, Mag_By_grid_{code}.csv, Mag_A_grid_{code}.csv
         """
         r_in      = self.inner_diameter / 2
         r_ext     = self.outer_diameter  / 2
         ang_1_rad = np.deg2rad(ang_1)
         ang_2_rad = np.deg2rad(ang_2)
 
-        bx_list, by_list = [], []
+        bx_list, by_list, a_list = [], [], []
         for x, y, r, th in self._iter_polar_points(r_in, r_ext, ang_1_rad, ang_2_rad, n_r, n_a):
             bx, by = femm.mo_getb(x, y)
             bx_list.append(bx)
             by_list.append(by)
+            a_list.append(femm.mo_geta(x, y))
 
         Bx = np.asarray(bx_list, dtype=float).reshape(-1, 1)
         By = np.asarray(by_list, dtype=float).reshape(-1, 1)
-        self.save_csv(Fields=[Bx, By],
-                      names=[f"Mag_Bx_grid_{code}.csv", f"Mag_By_grid_{code}.csv"])
+        A  = np.asarray(a_list,  dtype=float).reshape(-1, 1)
+        self.save_csv(Fields=[Bx, By, A],
+                      names=[f"Mag_Bx_grid_{code}.csv", f"Mag_By_grid_{code}.csv",
+                             f"Mag_A_grid_{code}.csv"])
 
     def save_B_grid_qtree_from_depth(self, depth, ang_1, ang_2, n_r, n_a, code=0):
-        """Amostra Bx/By nos centros das folhas definidas por depth.
+        """Amostra Bx/By/A nos centros das folhas definidas por depth.
 
         Não aplica critério de refinamento próprio — a estrutura vem do Shapely.
         A solução FEMM deve estar carregada (mi_loadsolution já chamado).
@@ -1313,22 +1316,25 @@ class BLDC_FEMM_Model(BLDC_Process):
         th_edges = np.linspace(ang_1_rad, ang_2_rad, n_a + 1)
 
         leaves = self._leaves_from_depth(
-            depth, r_edges, th_edges, n_r, n_a, field_keys=("bx", "by")
+            depth, r_edges, th_edges, n_r, n_a, field_keys=("bx", "by", "a")
         )
 
         for c in leaves:
             x, y, _, _ = self._cell_center_xy(c)
             bx, by = femm.mo_getb(x, y)
             c["bx"], c["by"] = float(bx), float(by)
+            c["a"] = float(femm.mo_geta(x, y))
 
         # [REMOVIDO] depth_arr salvo como Mag_B_depth_qt_ — depth unificado já em depth_qt_
         Bx = np.array([c["bx"] for c in leaves], dtype=float).reshape(-1, 1)
         By = np.array([c["by"] for c in leaves], dtype=float).reshape(-1, 1)
+        A  = np.array([c["a"]  for c in leaves], dtype=float).reshape(-1, 1)
 
-        Fields = [Bx, By]
+        Fields = [Bx, By, A]
         names  = [
             f"Mag_Bx_qt_{code}.csv",
             f"Mag_By_qt_{code}.csv",
+            f"Mag_A_qt_{code}.csv",
         ]
         self.save_csv(Fields=Fields, names=names)
 
@@ -1726,5 +1732,305 @@ class BLDC_Shapely_Model(BLDC_Process):
 
         Fields = [Field]
         names = [f"Material_{code}.csv"]
-        
+
         self.save_csv(Fields=Fields,names=names)
+
+
+class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
+    """Desenha só o setor 0-120 graus do motor (simetria periódica), em vez do
+    círculo completo (360 graus) que BLDC_FEMM_Model desenha — contorno
+    periódico (BdryFormat=4) nos dois cortes radiais em vez de A=0 em toda a
+    fronteira externa.
+
+    Promovido de tests/proto_femm_sym120.py (validado 2026-07-22, promovido
+    2026-07-23) — mesma classe, mesmo nome, sem alterações de geometria.
+
+    Por que 120 graus é o período correto (42 polos / 36 ranhuras):
+      - passo de polo = 360/42 = 8.571 graus; passo de ranhura = 360/36 = 10 graus
+      - período geométrico combinado = 360/gcd(42,36) = 60 graus, mas 60 graus
+        contém 7 polos (ímpar) -> troca de polaridade (anti-periódico)
+      - 120 graus contém 14 polos (par, sem troca de sinal) e 12 ranhuras
+        (12*10=120 exato) -> período periódico (não anti-periódico) mínimo
+
+    O corte em theta=0/120 cai exatamente no CENTRO de uma ranhura (ranhura 0 e
+    ranhura "12"=0+120). A geometria da bobina (_coil_coords) já é construída
+    como dois lóbulos espelhados (vp/vn) em torno dessa linha central, então
+    o corte é feito desenhando só o lóbulo vp da ranhura 0 e só o lóbulo vn
+    da ranhura 12 — sem precisar recortar o perfil arredondado da ranhura.
+
+    Os polos NÃO precisam ser cortados: o polo 0 já começa exatamente em
+    theta=0 (pole_offset=0 no modelo completo), então 14 polos completos
+    fecham exatamente em 120 graus.
+    """
+
+    N_POLES_SECTOR = 14   # 120 / (360/42)
+    N_SLOTS_SECTOR = 12   # 120 / (360/36)
+    _PERIODIC = "periodic_120"
+
+    def _bore_start_radius(self):
+        """Raio onde o domínio começa na direção radial interna. 0.0 = vai
+        até o centro (modelo completo, só recorta angularmente). Subclasses
+        podem sobrescrever para truncar também na direção radial."""
+        return 0.0
+
+    def draw_motor(self):
+        # --- rotor: back iron num único arco 0-120 (fecha com segmentos radiais) ---
+        self._create_sec(r_in=self.rotor_inner_diameter / 2 + self.pole_thickness,
+                          r_ext=self.rotor_outer_diameter / 2,
+                          ang_in_1=0, ang_in_2=120,
+                          material=self.material_iron)
+
+        # --- polos 0..13 (idêntico ao original, só o range muda) ---
+        step_ang = 360 / self.number_rotor_poles
+        pole_ang = step_ang * self.pole_embrance
+        for pole in range(self.N_POLES_SECTOR):
+            ang_1 = step_ang * pole
+            ang_2 = ang_1 + pole_ang
+            direction = 0 if pole % 2 == 0 else 180
+            self._create_sec(r_in=self.rotor_inner_diameter / 2,
+                              r_ext=self.rotor_inner_diameter / 2 + self.pole_thickness,
+                              ang_in_1=ang_1, ang_in_2=ang_2,
+                              material=self.material_mag,
+                              direction=direction, phase=0)
+
+        # --- bobinas (ranhura 0 só vp, ranhuras 1..11 completas, ranhura 12 só vn) ---
+        self._create_coils_sector()
+        self._coil_props_sector()
+
+        # --- estator ---
+        self._create_stator_sector()
+
+        # --- contorno externo A=0 (um único arco 0-120) ---
+        self._set_boundary_sector()
+
+        # --- cortes periódicos: por último, pra poder reaproveitar arestas
+        #     já desenhadas (polo 0 e o lóbulo da bobina) ---
+        self._draw_periodic_cuts()
+
+    # ------------------------------------------------------------------
+    # bobinas / ranhuras
+    # ------------------------------------------------------------------
+
+    def _create_coil_half(self, ang_deg, side):
+        """Desenha só um lóbulo (vp ou vn) da bobina — usado nas 2 ranhuras
+        de fronteira do setor (0 e 120), que são cortadas ao meio."""
+        ang_rad = np.deg2rad(ang_deg)
+        x, yp, yn = self._coil_coords()
+        y = yp if side == 'vp' else yn
+        v = np.column_stack((x, y))
+        R = np.array([[np.cos(ang_rad), -np.sin(ang_rad)],
+                      [np.sin(ang_rad), np.cos(ang_rad)]])
+        v = v @ R.T
+        for i in range(len(v) - 1):
+            femm.mi_drawline(v[i, 0], v[i, 1], v[i + 1, 0], v[i + 1, 1])
+
+    def _create_coils_sector(self):
+        step_ang = 360 / self.number_stator_slots  # usa o pitch ORIGINAL (36 ranhuras)
+        self._create_coil_half(ang_deg=0, side='vp')                # ranhura 0: só vp
+        for i in range(1, self.N_SLOTS_SECTOR):                     # ranhuras 1..11: completas
+            self._create_coils(ang=step_ang * i)
+        self._create_coil_half(ang_deg=120, side='vn')              # ranhura 12(=0+120): só vn
+
+    def _coil_props_sector(self):
+        """Cópia de _coil_props com o range trocado p/ N_SLOTS_SECTOR.
+
+        Rodar o loop só até 12 (em vez de 36) já produz exatamente a
+        combinação certa: coil_i_0 (i=0..11) cobre os lóbulos vp das
+        ranhuras 0..11; coil_i_1 (i=0..11) cobre os lóbulos vn das
+        ranhuras 1..12 — ou seja, ranhura 0 só ganha label vp e ranhura
+        12 só ganha label vn, batendo com _create_coils_sector acima.
+        """
+        n_turns = self.N_TURNS
+        r = self.stator_outer_diameter / 2 - (self.slot_Hs0 + self.slot_Hs1 + self.slot_Hs2 / 2)
+        step = 2 * np.pi / self.number_stator_slots
+        ang_offset = step / 2 - self.slotoppener_ang / 2
+
+        for i in range(self.N_SLOTS_SECTOR):
+            femm.mi_addcircprop('coil_' + str(i) + '_0', 0, 1)
+            femm.mi_addcircprop('coil_' + str(i) + '_1', 0, 1)
+
+            ang = step * i + step / 2 - ang_offset
+            femm.mi_getmaterial(self.material_copper)
+            femm.mi_addblocklabel(r * np.cos(ang), r * np.sin(ang))
+            femm.mi_selectlabel(r * np.cos(ang), r * np.sin(ang))
+            femm.mi_setblockprop(self.material_copper, 0, 1, 'coil_' + str(i) + '_0', 0, 0, n_turns)
+            femm.mi_clearselected()
+
+            ang = step * i + step / 2 + ang_offset
+            femm.mi_getmaterial(self.material_copper)
+            femm.mi_addblocklabel(r * np.cos(ang), r * np.sin(ang))
+            femm.mi_selectlabel(r * np.cos(ang), r * np.sin(ang))
+            femm.mi_setblockprop(self.material_copper, 0, 1, 'coil_' + str(i) + '_1', 0, 0, n_turns)
+            femm.mi_clearselected()
+
+    # ------------------------------------------------------------------
+    # estator
+    # ------------------------------------------------------------------
+
+    def _create_stator_sector(self):
+        res = 1
+        r_ext = self.stator_outer_diameter / 2
+        r_in = r_ext - self.slot_Hs0
+        step = 2 * np.pi / self.number_stator_slots
+        tooth_ang = step - self.slotoppener_ang
+
+        for i in range(self.N_SLOTS_SECTOR):
+            ang_1 = step * i + self.slotoppener_ang / 2
+            ang_2 = ang_1 + tooth_ang
+            femm.mi_drawarc(r_ext * np.cos(ang_1), r_ext * np.sin(ang_1),
+                             r_ext * np.cos(ang_2), r_ext * np.sin(ang_2),
+                             np.rad2deg(np.abs(ang_1 - ang_2)), res)
+            femm.mi_drawline(r_ext * np.cos(ang_1), r_ext * np.sin(ang_1),
+                              r_in * np.cos(ang_1), r_in * np.sin(ang_1))
+            femm.mi_drawline(r_ext * np.cos(ang_2), r_ext * np.sin(ang_2),
+                              r_in * np.cos(ang_2), r_in * np.sin(ang_2))
+
+        # label do "gap" (vácuo) entre estator e rotor — 90 graus cai dentro do setor
+        ang_avg = np.pi / 2
+        r_avg = (self.rotor_inner_diameter + self.stator_outer_diameter) / 4
+        femm.mi_getmaterial(self.material_gap)
+        femm.mi_addblocklabel(r_avg * np.cos(ang_avg), r_avg * np.sin(ang_avg))
+        femm.mi_selectlabel(r_avg * np.cos(ang_avg), r_avg * np.sin(ang_avg))
+        femm.mi_setblockprop(self.material_gap, 0, 1, "", np.rad2deg(ang_avg), 0, 0)
+        femm.mi_clearselected()
+
+        # círculo interno do estator (furo do eixo) — um único arco 0-120
+        r_in2 = self.stator_inner_diameter / 2
+        femm.mi_drawarc(r_in2 * np.cos(0), r_in2 * np.sin(0),
+                         r_in2 * np.cos(np.deg2rad(120)), r_in2 * np.sin(np.deg2rad(120)),
+                         120, res)
+
+        # label de vácuo dentro da cunha do furo (FEMM exige material em toda
+        # região fechada — sem label = erro "material not defined", não vira
+        # buraco automaticamente); igual ao (0,0) do modelo original
+        r_bore_lab = (self._bore_start_radius() + r_in2) / 2
+        ang_bore = np.deg2rad(60)
+        femm.mi_getmaterial(self.material_gap)
+        femm.mi_addblocklabel(r_bore_lab * np.cos(ang_bore), r_bore_lab * np.sin(ang_bore))
+        femm.mi_selectlabel(r_bore_lab * np.cos(ang_bore), r_bore_lab * np.sin(ang_bore))
+        femm.mi_setblockprop(self.material_gap, 0, 1, "", 0, 0, 0)
+        femm.mi_clearselected()
+
+        ang_avg = np.deg2rad(60)
+        r_avg = (self.stator_inner_diameter / 2 + self.stator_outer_diameter / 2
+                 - (self.slot_Hs0 + self.slot_Hs1 + self.slot_Hs2)) / 2
+        femm.mi_getmaterial(self.material_iron)
+        femm.mi_addblocklabel(r_avg * np.cos(ang_avg), r_avg * np.sin(ang_avg))
+        femm.mi_selectlabel(r_avg * np.cos(ang_avg), r_avg * np.sin(ang_avg))
+        femm.mi_setblockprop(self.material_iron, 0, 1, "", np.rad2deg(ang_avg), 0, 0)
+        femm.mi_clearselected()
+
+    # ------------------------------------------------------------------
+    # contorno externo + cortes periódicos
+    # ------------------------------------------------------------------
+
+    def _set_boundary_sector(self):
+        res = 1
+        femm.mi_addboundprop("A=0", 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
+
+        r = self.outer_diameter / 2
+        femm.mi_drawarc(r * np.cos(0), r * np.sin(0),
+                         r * np.cos(np.deg2rad(120)), r * np.sin(np.deg2rad(120)),
+                         120, res)
+        femm.mi_selectarcsegment(r * np.cos(np.deg2rad(60)), r * np.sin(np.deg2rad(60)))
+        femm.mi_setarcsegmentprop(1, "A=0", 0, 0)
+        femm.mi_clearselected()
+
+        r_in = self.outer_diameter / 2 * 0.99
+        theta = np.deg2rad(60)
+        femm.mi_getmaterial(self.material_gap)
+        femm.mi_addblocklabel(r_in * np.cos(theta), r_in * np.sin(theta))
+        femm.mi_selectlabel(r_in * np.cos(theta), r_in * np.sin(theta))
+        femm.mi_setblockprop(self.material_gap, 0, 1, "", 0, 0, 0)
+        femm.mi_clearselected()
+
+        # arco interno A=0, se o domínio for truncado radialmente (subclasse)
+        r_bore = self._bore_start_radius()
+        if r_bore > 0:
+            femm.mi_drawarc(r_bore * np.cos(0), r_bore * np.sin(0),
+                             r_bore * np.cos(np.deg2rad(120)), r_bore * np.sin(np.deg2rad(120)),
+                             120, res)
+            femm.mi_selectarcsegment(r_bore * np.cos(np.deg2rad(60)), r_bore * np.sin(np.deg2rad(60)))
+            femm.mi_setarcsegmentprop(1, "A=0", 0, 0)
+            femm.mi_clearselected()
+
+    def _draw_radial_cut(self, r1, r2, ang_deg, propname):
+        """mi_addsegment só conecta pontos que já existem como nó — se
+        nenhuma geometria anterior tocou esse extremo (ex: a origem), a
+        chamada falha em silêncio sem criar nada. mi_addnode garante o
+        nó antes; se o ponto já existir (extremo de um arco desenhado
+        antes), é um no-op seguro (não duplica)."""
+        ang = np.deg2rad(ang_deg)
+        x1, y1 = r1 * np.cos(ang), r1 * np.sin(ang)
+        x2, y2 = r2 * np.cos(ang), r2 * np.sin(ang)
+        femm.mi_addnode(x1, y1)
+        femm.mi_addnode(x2, y2)
+        femm.mi_addsegment(x1, y1, x2, y2)
+        self._apply_periodic_existing(r1, r2, ang_deg, propname)
+
+    def _apply_periodic_existing(self, r1, r2, ang_deg, propname):
+        ang = np.deg2rad(ang_deg)
+        rm = (r1 + r2) / 2
+        femm.mi_selectsegment(rm * np.cos(ang), rm * np.sin(ang))
+        femm.mi_setsegmentprop(propname, 0, 1, 0, 0)
+        femm.mi_clearselected()
+
+    def _draw_periodic_cuts(self):
+        """Cada par (theta=0, theta=120) na MESMA faixa radial precisa de um
+        nome de propriedade periódica PRÓPRIO — o FEMM só aceita exatamente
+        2 segmentos por propriedade periódica (erro 'assigned to more than
+        two segments' se reusar o mesmo nome em várias faixas radiais)."""
+        r_bs0 = (self.stator_outer_diameter / 2 - self.slot_Hs0) * np.cos(self.slotoppener_ang / 2)
+        slot_bottom = r_bs0 - self.slot_Hs1 - self.slot_Hs2
+
+        # (nome, r1, r2, precisa_desenhar_novo_segmento)
+        ranges = [
+            # furo do eixo até o furo do estator, e daí até o fundo da ranhura —
+            # separados pq o segmento único 0->slot_bottom cruzaria o círculo do
+            # furo do estator (r=stator_inner_diameter/2) e o FEMM o fragmenta
+            # (fragmentos desiguais nos 2 lados -> erro "dissimilar segments")
+            ("per_bore_hole", self._bore_start_radius(),              self.stator_inner_diameter / 2, True),
+            ("per_core", self.stator_inner_diameter / 2,              slot_bottom,                    True),
+            ("per_slot_bottom", slot_bottom,                         r_bs0,                           False),  # reaproveita aresta do lóbulo
+            ("per_slot_throat", r_bs0,                                self.stator_outer_diameter / 2,  True),
+            ("per_airgap", self.stator_outer_diameter / 2,           self.rotor_inner_diameter / 2,    True),
+            ("per_pole_ring", self.rotor_inner_diameter / 2,          self.rotor_inner_diameter / 2 + self.pole_thickness, "pole0"),  # theta=0 reaproveita polo0
+            ("per_back_iron", self.rotor_inner_diameter / 2 + self.pole_thickness, self.rotor_outer_diameter / 2, "existing"),  # já desenhado por _create_sec
+            ("per_outer_margin", self.rotor_outer_diameter / 2,      self.outer_diameter / 2,          True),
+        ]
+
+        for name, r1, r2, mode in ranges:
+            femm.mi_addboundprop(name, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0)
+            if mode is True:
+                # sem geometria prévia em nenhum dos dois ângulos: desenha os 2
+                self._draw_radial_cut(r1, r2, 0, name)
+                self._draw_radial_cut(r1, r2, 120, name)
+            elif mode is False:
+                # aresta já existe nos 2 ângulos (lóbulo vp/vn da bobina)
+                self._apply_periodic_existing(r1, r2, 0, name)
+                self._apply_periodic_existing(r1, r2, 120, name)
+            elif mode == "pole0":
+                # theta=0: aresta do polo 0 já existe; theta=120: precisa de novo segmento
+                self._apply_periodic_existing(r1, r2, 0, name)
+                self._draw_radial_cut(r1, r2, 120, name)
+            elif mode == "existing":
+                # back iron: _create_sec já desenhou os 2 segmentos (seg_1/seg_2), só falta a propriedade
+                self._apply_periodic_existing(r1, r2, 0, name)
+                self._apply_periodic_existing(r1, r2, 120, name)
+
+
+class BLDC_FEMM_Model_Sym120_Annular(BLDC_FEMM_Model_Sym120):
+    """Setor de 120 graus + truncamento radial em [inner_diameter/2,
+    outer_diameter/2] — a mesma janela já usada para amostrar os dados hoje
+    (save_B_grid_pts etc.), em vez de ir até o centro (r=0). Só sobrescreve
+    _bore_start_radius — o resto da geometria (arco interno A=0, label de
+    vácuo na fatia remanescente, corte periódico até esse raio) já é
+    parametrizado no pai.
+
+    Promovido de tests/proto_femm_sym120_annular.py (validado 2026-07-22,
+    promovido 2026-07-23). Usada como base do método de geração via malha
+    real do FEMM (ver src/data_gen/femm_mesh.py).
+    """
+
+    def _bore_start_radius(self):
+        return self.inner_diameter / 2

@@ -736,13 +736,13 @@ def generate_one_batch(mode,
 _PREFIXES = {
     # [REMOVIDO] "Magnetization_", "Mu_avg_" — usavam média por disco; abolidas
     'grid':  ["Material_",
-              "Mu_r_grid_", "Mag_M_grid_", "Mag_Bx_grid_", "Mag_By_grid_"],
+              "Mu_r_grid_", "Mag_M_grid_", "Mag_Bx_grid_", "Mag_By_grid_", "Mag_A_grid_"],
     # [REMOVIDO] Mu_depth_qt_, Mag_M_depth_qt_, Mag_B_depth_qt_ — unificados em depth_qt_
-    'qtree': ["Mag_Bx_qt_", "Mag_By_qt_",
+    'qtree': ["Mag_Bx_qt_", "Mag_By_qt_", "Mag_A_qt_",
               "Mag_M_qt_",
               "Mu_r_qt_", "depth_qt_", "Frac_dom_qt_",
               # grade base — point queries diretos H×W, sem averaging qtree
-              "Mu_r_grid_", "Mag_M_grid_", "Mag_Bx_grid_", "Mag_By_grid_"],
+              "Mu_r_grid_", "Mag_M_grid_", "Mag_Bx_grid_", "Mag_By_grid_", "Mag_A_grid_"],
 }
 
 def check_data(mode, n_phases=1):

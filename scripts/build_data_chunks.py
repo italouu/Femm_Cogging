@@ -23,6 +23,7 @@ import torch
 from scripts.gen_npz_structures import run as gen_run
 from src.configs.datagen import DatagenConfig
 _dg        = DatagenConfig()
+MODE       = _dg.mode
 CHUNK_SIZE = _dg.chunk_size
 DATASET    = _dg.dataset
 
@@ -152,6 +153,14 @@ def build(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE):
 
 
 def main():
+    if MODE == 'femm_mesh':
+        # pipeline via malha real do FEMM (ver src/data_gen/femm_mesh.py) — não
+        # passa por gen_npz_structures/CSV; fluxo próprio, reaproveitado aqui
+        # em vez de duplicado (mesmo padrão de scripts/generate_data.py).
+        from scripts.build_data_chunks_femm_mesh import main as main_femm_mesh
+        main_femm_mesh()
+        return
+
     print("=== Etapa 1: gen_npz_structures ===")
     gen_run(MAX_SAMPLES)
     build(MAX_SAMPLES)

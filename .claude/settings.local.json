@@ -55,7 +55,12 @@
       "Bash(echo \"exit=$?\")",
       "Bash(git status *)",
       "Bash(python -m tests.smoke_test_refactor)",
-      "Bash(rm -f smoke_out.txt)"
+      "Bash(rm -f smoke_out.txt)",
+      "Bash(awk 'NR>4072 && NR<=4072+110032 {if \\($1+0>38.70 && $1+0<38.71 && $2+0>0.605 && $2+0<0.62\\) print NR, $0}' data/temp/tmp_mesh_files/model.ans)",
+      "Bash(awk '/\\\\[NumSegments\\\\]/{flag=1; next} /\\\\[NumArcSegments\\\\]/{flag=0} flag' data/temp/tmp_debug_sym120/model.fem)",
+      "Bash(awk '{print $4}')",
+      "Bash(awk '/\\\\[NumPoints\\\\]/{flag=1;n=0;next} flag && n<200 {print NR-1-1142+0, $0; n++} /\\\\[NumSegments\\\\]/{exit}' data/temp/tmp_debug_sym120/model.fem)",
+      "Bash(awk 'NR>1142 && NR<1142+185+1 {print NR-1143, $0}' data/temp/tmp_debug_sym120/model.fem)"
     ]
   }
 }

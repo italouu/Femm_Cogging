@@ -38,17 +38,30 @@ _DROP_KEYS = frozenset({'r_in_mm', 'r_ext_mm', 'ang_1_deg', 'ang_2_deg'})
 
 # chaves cujos arrays por amostra têm shape [C,H,W] ou [H,W] — precisam de
 # stack (empilha um eixo de batch novo), não concat
-_STACK_KEYS = frozenset({'x_hw_grid', 'y_hw_grid', 'a_hw_grid'})
+_STACK_KEYS = frozenset({'x_hw', 'y_hw', 'a_hw_grid'})
+
+# x_hw_grid/y_hw_grid -> x_hw/y_hw -- mesmo nome de chave usado pelos
+# pipelines grid/qtree. Sem essa renomeação, ChunkStreamDataset (usado por
+# build_loaders(mode='grid'), consumido por FNO2d/MaskedFNO2d) quebra com
+# KeyError: 'x_hw' -- os chunks femm_mesh nunca tiveram essa chave (ver
+# histórico 2026-07-24). Sem perda de informação: este pipeline não tem
+# variante "suavizada" (média por área do qtree) -- x_hw_grid JÁ é a única
+# grade existente aqui, o sufixo _grid só distinguia da variante que não
+# existe neste modo. a_hw_grid fica como está (não consumido pelo loader
+# 'grid', sem colisão de nome com nada).
+_RENAME_KEYS = {'x_hw_grid': 'x_hw', 'y_hw_grid': 'y_hw'}
 
 
 def _load_npz(path: Path) -> dict:
-    """Carrega um .npz, descarta metadados de geometria e reconstrói 'dim'
+    """Carrega um .npz, descarta metadados de geometria, renomeia
+    x_hw_grid/y_hw_grid -> x_hw/y_hw (ver _RENAME_KEYS) e reconstrói 'dim'
     como tupla — mesma convenção de build_data_chunks.py."""
     d = np.load(path)
     result = {'dim': (int(d['dim_H']), int(d['dim_W']))}
     for key in d.files:
-        if key not in ('dim_H', 'dim_W') and key not in _DROP_KEYS:
-            result[key] = d[key]
+        if key in ('dim_H', 'dim_W') or key in _DROP_KEYS:
+            continue
+        result[_RENAME_KEYS.get(key, key)] = d[key]
     return result
 
 
@@ -68,7 +81,7 @@ def _flush(chunk_idx: int, bufs: dict, dim: tuple):
     _OUT_DIR.mkdir(parents=True, exist_ok=True)
     torch.save(merged, _OUT_DIR / f"data_chunk_{chunk_idx:04d}.pt")
 
-    n = merged['x_hw_grid'].shape[0]
+    n = merged['x_hw'].shape[0]
     print(f"  [chunk {chunk_idx:04d}] {n} amostras  "
           f"S_tot={merged['node_x'].shape[0]}  E_tot={merged['edge_index'].shape[1]}")
 
@@ -128,14 +141,14 @@ def build(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE):
             if k not in ('edge_index', 'E_L'):
                 bufs[k].append(s[k])
 
-        if len(bufs['x_hw_grid']) == chunk_size:
+        if len(bufs['x_hw']) == chunk_size:
             _flush(chunk_idx, bufs, dim)
             chunk_idx   += 1
             node_offset  = 0
             dim          = None
             bufs         = {}
 
-    if bufs and bufs.get('x_hw_grid'):
+    if bufs and bufs.get('x_hw'):
         _flush(chunk_idx, bufs, dim)
         chunk_idx += 1
 

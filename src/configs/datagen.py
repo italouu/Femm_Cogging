@@ -4,11 +4,11 @@ from typing import Optional
 
 @dataclass
 class DatagenConfig:
-    dataset: str = 'mesh_135x270'
+    dataset: str = 'mesh_138x276'
 
     # Grade / Geometria
-    n_r: int = 135
-    n_a: int = 270
+    n_r: int = 138
+    n_a: int = 276
     ang_1: int = 0
     ang_2: int = 120
 
@@ -21,7 +21,7 @@ class DatagenConfig:
     mode: str = 'femm_mesh'
     distribution: str = 'uniform'
     sample_method: str = 'legacy'  # 'fixed_geometry' |'constrained' | 'legacy' | 'constrained_lhs'
-    n_samples: int = 3
+    n_samples: int = 4000
     max_depth: int = 1
     datagen_seed: int = 12
     cascade_buffer: Optional[int] = 1

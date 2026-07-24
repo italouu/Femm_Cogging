@@ -36,6 +36,20 @@ x_hw_grid/y_hw_grid/a_hw_grid deixaram de usar Shapely e point-query live
 baricêntrica, ver _assign_mesh_to_grid abaixo). Único custo de COM que resta
 é o loop de B por nó (necessário pro grafo — B não dá pra reconstruir de A
 com precisão).
+
+ATUALIZAÇÃO 2026-07-23 (mesmo dia, reversão parcial): A/Bx/By de
+x_hw_grid/y_hw_grid/a_hw_grid voltam a vir de point-query AO VIVO
+(mo_getpointvalues, ver _query_grid_pointvalues abaixo) — decisão do usuário
+após benchmark (ver histórico/conversa): validado que A bate exato (MAE=0)
+com a versão via malha e Bx/By têm ~1,5% de ruído de discretização, então a
+troca não perde qualidade, só custa ~10x mais tempo nesse passo (~0,4s →
+~4s por amostra em 135×270; passo pequeno frente ao solve ~4s e ao loop de B
+por nó ~3,5s). material_id/mu_r/M CONTINUAM vindo da malha
+([BlockProps]/_assign_mesh_to_grid) — testado e confirmado que não dá pra
+substituir por point-query: `Mu1` do cobre resolve exatamente 1.0 (idêntico
+a vácuo/ar, 0% de acerto por limiar) e não existe campo de magnetização
+consultável por ponto (`Jm`, único candidato, sempre retorna 0 mesmo dentro
+de ímãs) — limitações da própria API do FEMM, não do método de acesso.
 """
 
 from pathlib import Path
@@ -303,31 +317,39 @@ def _build_bidirectional_edge_attrs(nodes: np.ndarray, edges_undirected: np.ndar
 # grade H×W a partir da malha (trifinder + interpolação baricêntrica)
 # ---------------------------------------------------------------------------
 
+def _grid_polar_xy(r_in: float, r_ext: float, ang_1_rad: float, ang_2_rad: float,
+                    n_r: int, n_a: int):
+    """Coordenadas (x,y) do centro de cada pixel da grade H×W (flattened,
+    ordem row-major r depois c) -- fatorado pra ser reaproveitado tanto por
+    _assign_mesh_to_grid (Mu_r/M) quanto por _query_grid_pointvalues (A/Bx/By)."""
+    dr = (r_ext - r_in) / n_r
+    da = (ang_2_rad - ang_1_rad) / n_a
+    r_vals = r_in + (np.arange(n_r) + 0.5) * dr
+    a_vals = ang_1_rad + (np.arange(n_a) + 0.5) * da
+    Rg, Ag = np.meshgrid(r_vals, a_vals, indexing='ij')
+    return (Rg * np.cos(Ag)).ravel(), (Rg * np.sin(Ag)).ravel()
+
+
 def _assign_mesh_to_grid(nodes: np.ndarray, elems: np.ndarray,
                           elem_mu: np.ndarray, elem_M: np.ndarray,
                           node_mu: np.ndarray, node_M: np.ndarray,
-                          node_bx: np.ndarray, node_by: np.ndarray, node_A: np.ndarray,
                           r_in: float, r_ext: float, ang_1_rad: float, ang_2_rad: float,
                           n_r: int, n_a: int):
-    """Projeta os campos da malha real na grade H×W regular -- SEM Shapely,
-    SEM chamada COM adicional ao FEMM por pixel (só os dados já extraídos do
-    .ans + node_bx/node_by, que vêm do loop mo_getb por-nó de qualquer forma,
-    necessário pro grafo). Promovido de
-    tests/proto_femm_mesh_plot.py::_assign_mesh_to_grid (validado nessa sessão
-    contra o point-query antigo; ver docstring lá para a justificativa
-    completa dos dois regimes de atribuição usados abaixo). 2026-07-23.
+    """Projeta Mu_r/M da malha real na grade H×W regular -- SEM Shapely, SEM
+    chamada COM ao FEMM (só os dados já extraídos do .ans). Promovido de
+    tests/proto_femm_mesh_plot.py::_assign_mesh_to_grid. 2026-07-23.
 
-    Regimes de atribuição (mesma lógica do protótipo):
-      - Mu_r/M: PIECEWISE-CONSTANT por elemento -- localiza o triângulo que
-        contém o centro do pixel via trifinder e copia o valor CONSTANTE
-        desse elemento. Preserva fronteiras nítidas (sem blending) -- mesmo
-        espírito do point-query antigo, só que "point-query" agora é
-        "localizar o triângulo real" em vez de reavaliar geometria Shapely.
-      - Bx/By/A: interpolação BARICÊNTRICA (LinearTriInterpolator) a partir
-        dos 3 valores nodais do elemento -- é literalmente a mesma avaliação
-        que o FEM linear faz internamente num ponto arbitrário dentro de um
-        elemento (funções de forma), então é o análogo correto de "consultar
-        o FEMM naquele ponto exato".
+    Mu_r/M: PIECEWISE-CONSTANT por elemento -- localiza o triângulo que
+    contém o centro do pixel via trifinder e copia o valor CONSTANTE desse
+    elemento. Preserva fronteiras nítidas (sem blending).
+
+    # [REMOVIDO 2026-07-23, mesmo dia] regime 2 (Bx/By/A via interpolação
+    # baricêntrica/LinearTriInterpolator) -- revertido pra point-query ao
+    # vivo (mo_getpointvalues) a pedido do usuário, ver
+    # _query_grid_pointvalues abaixo e nota no topo do arquivo. Mu_r/M
+    # continuam aqui (via malha) porque point-query NÃO tem como recuperar
+    # essas duas colunas corretamente (cobre vira ar por Mu1, magnetização
+    # não é consultável — Jm sempre 0 mesmo em ímãs, testado empiricamente).
 
     Pixels fora da triangulação (trifinder retorna -1 -- esperado raro, só
     arredondamento de ponto flutuante na borda do setor, já que a malha foi
@@ -337,20 +359,15 @@ def _assign_mesh_to_grid(nodes: np.ndarray, elems: np.ndarray,
     tri = mtri.Triangulation(nodes[:, 0], nodes[:, 1], triangles=elems[:, :3])
     trifinder = tri.get_trifinder()
 
-    dr = (r_ext - r_in) / n_r
-    da = (ang_2_rad - ang_1_rad) / n_a
-    r_vals = r_in + (np.arange(n_r) + 0.5) * dr
-    a_vals = ang_1_rad + (np.arange(n_a) + 0.5) * da
-    Rg, Ag = np.meshgrid(r_vals, a_vals, indexing='ij')
-    Xg, Yg = Rg * np.cos(Ag), Rg * np.sin(Ag)
+    Xg, Yg = _grid_polar_xy(r_in, r_ext, ang_1_rad, ang_2_rad, n_r, n_a)
 
-    elem_idx = trifinder(Xg.ravel(), Yg.ravel())
+    elem_idx = trifinder(Xg, Yg)
     valid = elem_idx >= 0
     n_invalid = int((~valid).sum())
     if n_invalid:
         from scipy.spatial import cKDTree
         nearest = cKDTree(nodes[:, :2]).query(
-            np.stack([Xg.ravel()[~valid], Yg.ravel()[~valid]], axis=1))[1]
+            np.stack([Xg[~valid], Yg[~valid]], axis=1))[1]
 
     def _assign_const(elem_field, node_fallback):
         out = np.empty(n_r * n_a, dtype=np.float32)
@@ -359,19 +376,42 @@ def _assign_mesh_to_grid(nodes: np.ndarray, elems: np.ndarray,
             out[~valid] = node_fallback[nearest]
         return out.reshape(n_r, n_a)
 
-    def _assign_interp(node_field):
-        interp = mtri.LinearTriInterpolator(tri, node_field)
-        out = np.ma.filled(interp(Xg, Yg).astype(np.float32), 0.0).reshape(-1)
-        if n_invalid:
-            out[~valid] = node_field[nearest].astype(np.float32)
-        return out.reshape(n_r, n_a)
-
     Mu_hw = _assign_const(elem_mu, node_mu)
     M_hw  = _assign_const(elem_M, node_M)
-    Bx_hw = _assign_interp(node_bx)
-    By_hw = _assign_interp(node_by)
-    A_hw  = _assign_interp(node_A)
-    return Mu_hw, M_hw, Bx_hw, By_hw, A_hw
+    return Mu_hw, M_hw
+
+
+def _query_grid_pointvalues(r_in: float, r_ext: float, ang_1_rad: float, ang_2_rad: float,
+                             n_r: int, n_a: int):
+    """A/Bx/By na grade H×W via point-query AO VIVO no FEMM
+    (mo_getpointvalues, 1 chamada COM por pixel -- devolve A, B1, B2, ...,
+    Mu1, Mu2 num só round-trip, evitando as 2-3 chamadas redundantes de
+    mo_geta+mo_getb+mo_getmu separadas). Precisa ser chamada com a sessão do
+    FEMM AINDA ABERTA (antes de femm.closefemm()), com mi_loadsolution() já
+    feito. 2026-07-23, decisão do usuário após benchmark: A bate exato
+    (MAE=0) com a interpolação baricêntrica da malha; Bx/By têm ~1,5% de
+    ruído de discretização — mesma ordem de grandeza do ruído de malha↔malha
+    entre rodadas independentes, não uma perda de qualidade real. Custo:
+    ~10x mais lento que a versão via malha nesse passo (~0,4s → ~4s por
+    amostra em 135×270 — pequeno frente ao solve completo, ~4s, e ao loop de
+    B por nó do grafo, ~3,5s).
+
+    NÃO cobre Mu_r/M (ver _assign_mesh_to_grid) — point-query não distingue
+    cobre de ar (Mu1 resolve exatamente 1.0 pros dois no ponto convergido) e
+    não tem magnetização consultável por ponto (Jm sempre 0, mesmo em
+    ímãs) — limitações da própria API do FEMM, confirmadas empiricamente.
+    """
+    Xg, Yg = _grid_polar_xy(r_in, r_ext, ang_1_rad, ang_2_rad, n_r, n_a)
+    n = n_r * n_a
+    A_hw = np.empty(n, dtype=np.float32)
+    Bx_hw = np.empty(n, dtype=np.float32)
+    By_hw = np.empty(n, dtype=np.float32)
+    for k in range(n):
+        z = femm.mo_getpointvalues(Xg[k], Yg[k])
+        A_hw[k] = z[0]
+        Bx_hw[k] = z[1]
+        By_hw[k] = z[2]
+    return A_hw.reshape(n_r, n_a), Bx_hw.reshape(n_r, n_a), By_hw.reshape(n_r, n_a)
 
 
 # ---------------------------------------------------------------------------
@@ -392,10 +432,11 @@ def generate_mesh_sample(motor_params: dict, tmp_dir: Path, out_path: Path,
         edge_index   [2,E]  int64    bidirecional (malha + wrap periódico)
         edge_attr    [E,4]  float32  delta_r,delta_c,center_dist,delta_mu
         x_hw_grid    [2,H,W] float32 Mu_r,M (derivado da malha -- trifinder, valor
-                                             constante do elemento; ver _assign_mesh_to_grid)
-        y_hw_grid    [2,H,W] float32 Bx,By  (derivado da malha -- interp. baricêntrica
-                                             a partir dos nós; ver _assign_mesh_to_grid)
-        a_hw_grid    [H,W]   float32 A      (idem Bx/By, interp. baricêntrica)
+                                             constante do elemento; ver _assign_mesh_to_grid.
+                                             NÃO vem de point-query -- ver nota 2026-07-23)
+        y_hw_grid    [2,H,W] float32 Bx,By  (point-query AO VIVO no FEMM --
+                                             mo_getpointvalues; ver _query_grid_pointvalues)
+        a_hw_grid    [H,W]   float32 A      (idem Bx/By, point-query ao vivo)
         L            [1]     int64   número de nós desta amostra
         dim_H, dim_W [ ]      int64   n_r, n_a (dim reconstruído como tupla no agrupamento)
         r_in_mm, r_ext_mm, ang_1_deg, ang_2_deg — metadados de geometria (descartados no
@@ -459,6 +500,15 @@ def generate_mesh_sample(motor_params: dict, tmp_dir: Path, out_path: Path,
         b = femm.mo_getb(nodes[k, 0], nodes[k, 1])
         bx[k], by[k] = b[0], b[1]
 
+    # --- grade H×W: A/Bx/By via point-query ao vivo (mo_getpointvalues) --
+    # PRECISA rodar com a sessão ainda aberta. Ver _query_grid_pointvalues
+    # acima (decisão do usuário 2026-07-23, mesmo dia da troca anterior pra
+    # malha -- benchmark mostrou A exato e Bx/By ~1,5% de ruído, sem perda
+    # real de qualidade; custo ~10x maior nesse passo, pequeno frente ao
+    # solve+loop de B por nó).
+    A_hw, Bx_hw, By_hw = _query_grid_pointvalues(
+        r_in, r_ext, ang_1_rad, ang_2_rad, n_r, n_a)
+
     femm.closefemm()
 
     # [REMOVIDO] grade H×W via point-query live (mo_getb/mo_geta por pixel,
@@ -496,8 +546,11 @@ def generate_mesh_sample(motor_params: dict, tmp_dir: Path, out_path: Path,
     # Mu_hw = np.asarray(mu_hw_list, dtype=np.float32).reshape(n_r, n_a)
     # M_hw = np.asarray(m_hw_list, dtype=np.float32).reshape(n_r, n_a)
 
-    Mu_hw, M_hw, Bx_hw, By_hw, A_hw = _assign_mesh_to_grid(
-        nodes, elems, elem_mu, elem_M, node_mu, node_M, bx, by, nodes[:, 2],
+    # Mu_r/M continuam vindo da malha (ver _assign_mesh_to_grid) -- point-query
+    # não recupera essas duas colunas corretamente (ver notas acima/topo do
+    # arquivo). A/Bx/By já vieram de _query_grid_pointvalues, acima.
+    Mu_hw, M_hw = _assign_mesh_to_grid(
+        nodes, elems, elem_mu, elem_M, node_mu, node_M,
         r_in, r_ext, ang_1_rad, ang_2_rad, n_r, n_a)
 
     # --- monta node_x [S,9] no layout de produção ---

@@ -78,7 +78,11 @@ def multi_process(indices, motor_params_list, out_dir, n_r, n_a, ang_1, ang_2, m
                           n_r, n_a, ang_1, ang_2)
 
     while pending:
-        ex = ProcessPoolExecutor(max_workers=num_workers)
+        # max_tasks_per_child=1: recicla o worker a cada amostra -- a mesma
+        # mitigacao usada em generate_data.py (linha ~45) para o vazamento de
+        # memoria do ciclo openfemm()/closefemm() via COM (pywin32), que nao
+        # libera 100% por chamada dentro do mesmo processo hospedeiro.
+        ex = ProcessPoolExecutor(max_workers=num_workers, max_tasks_per_child=1)
         fut2meta = {}
         try:
             for _ in range(min(len(pending), window)):

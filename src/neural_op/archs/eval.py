@@ -62,6 +62,20 @@ def _qtree_render(values, node_x, H, W):
     return (grid / count).view(H, W, C).permute(2, 0, 1)
 
 
+def _node_density_map(node_x, H, W):
+    """
+    Nós por pixel H×W (scatter por r_base/c_base). Usado no lugar do depth map
+    (qtree) para dados de malha real do FEMM (mode='femm_mesh'), onde não existe
+    profundidade — mostra onde a malha do FEMM refina mais (ex: interfaces).
+    """
+    rows  = (node_x[:, 3] * H).long().clamp(0, H - 1)
+    cols  = (node_x[:, 4] * W).long().clamp(0, W - 1)
+    flat  = rows * W + cols
+    count = torch.zeros(H * W)
+    count.scatter_add_(0, flat, torch.ones(len(flat)))
+    return count.view(H, W).numpy()
+
+
 def _qtree_render_as_grid(values, node_x, H, W):
     """
     Renderiza nós quadtree na extensão espacial real de cada folha.
@@ -261,13 +275,22 @@ def fno_eval_fn(model, d, eval_cfg):
 def fno_gnn_eval_fn(model, d, eval_cfg):
     """
     Eval FNO_GNN: carrega amostra + grafo, infere e plota grid 4×4.
-    Linha 0: Mu_r (qtree), M (qtree), máscara (H×W), depth map (qtree)
-    Linha 1: GT Bx (qtree), GT By (qtree), GT |B| (qtree), —
+    Linha 0: Mu_r (nós), M (nós), máscara (H×W), depth map (qtree) / densidade de nós (malha)
+    Linha 1: GT Bx (nós), GT By (nós), GT |B| (nós), —
     Linha 2: FNO pred (H×W), FNO pred, FNO pred |B|, FNO erro
-    Linha 3: GNN pred (qtree), GNN pred, GNN pred |B|, GNN erro (H×W)
+    Linha 3: GNN pred (nós), GNN pred, GNN pred |B|, GNN erro (H×W)
+
+    Suporta dois layouts de grafo (mesmo arch FNO_GNN, dataset decide):
+    - qtree (mode='qtree'): node_x[:,2]=cell_area, folhas alinhadas em retângulos
+      exatos da grade base → renderizado via _qtree_render_as_grid (DFS).
+    - malha real do FEMM (mode='femm_mesh', chunk tem chave 'node_A'): node_x[:,2]
+      é node_dual_area (mm², sem relação com potências de 4) — a malha não é uma
+      subdivisão em retângulos, então usa scatter por r_base/c_base
+      (_qtree_render), igual ao que já era usado só para as métricas H×W.
     """
     i   = eval_cfg.sample_idx
     thr = eval_cfg.irrelevance_threshold
+    is_mesh = 'node_A' in d
 
     L, E_L = d['L'], d['E_L']
     H, W   = int(d['dim'][0]), int(d['dim'][1])
@@ -290,16 +313,24 @@ def fno_gnn_eval_fn(model, d, eval_cfg):
     with torch.no_grad():
         y_hw_fno, y_nodes = model(x_hw, node_x, edge_index, edge_attr, Li)
 
-    # ── Renders em qtree real (input, GT, predição GNN) ──────────────────────
-    # node_x: col 0=mu_r, col 1=M, col 2=cell_area, col 3=r_base, col 4=c_base
-    node_x_qt  = _qtree_render_as_grid(node_x[:, :2], node_x, H, W)   # [2, H*s, W*s]
-    node_y_qt  = _qtree_render_as_grid(node_y[:, :2], node_x, H, W)   # [2, H*s, W*s]
-    y_nodes_qt = _qtree_render_as_grid(y_nodes,       node_x, H, W)   # [2, H*s, W*s]
+    # ── Renders dos nós (input, GT, predição GNN) ────────────────────────────
+    # node_x: col 0=mu_r, col 1=M, col 2=cell_area/node_dual_area, col 3=r_base, col 4=c_base
+    if is_mesh:
+        node_x_qt  = _qtree_render(node_x[:, :2], node_x, H, W)   # [2, H, W]
+        node_y_qt  = _qtree_render(node_y[:, :2], node_x, H, W)   # [2, H, W]
+        y_nodes_qt = _qtree_render(y_nodes,       node_x, H, W)   # [2, H, W]
+        depth_map      = _node_density_map(node_x, H, W)
+        depth_map_title = 'Densidade de nós (malha)'
+    else:
+        node_x_qt  = _qtree_render_as_grid(node_x[:, :2], node_x, H, W)   # [2, H*s, W*s]
+        node_y_qt  = _qtree_render_as_grid(node_y[:, :2], node_x, H, W)   # [2, H*s, W*s]
+        y_nodes_qt = _qtree_render_as_grid(y_nodes,       node_x, H, W)   # [2, H*s, W*s]
 
-    # depth map: profundidade de cada folha → mostra onde a qtree refina
-    cell_area  = node_x[:, 2].clamp(min=1e-12)
-    depths_val = torch.round(-torch.log2(cell_area) / 2).unsqueeze(1)  # [S, 1]
-    depth_map  = _qtree_render_as_grid(depths_val, node_x, H, W)[0].numpy()
+        # depth map: profundidade de cada folha → mostra onde a qtree refina
+        cell_area  = node_x[:, 2].clamp(min=1e-12)
+        depths_val = torch.round(-torch.log2(cell_area) / 2).unsqueeze(1)  # [S, 1]
+        depth_map      = _qtree_render_as_grid(depths_val, node_x, H, W)[0].numpy()
+        depth_map_title = 'Depth map (qtree)'
 
     # ── Métricas: scatter_add H×W contra y_hw_grid ───────────────────────────
     y_nodes_hw = _qtree_render(y_nodes, node_x, H, W)   # [2, H, W]
@@ -339,6 +370,8 @@ def fno_gnn_eval_fn(model, d, eval_cfg):
     mag_lim = _lim(mag_tq, mag_fno, mag_gnn)
     err_vmax = _err_vmax([en_fno, en_gnn], eval_cfg)
 
+    tag = '(malha)' if is_mesh else '(qtree)'
+
     fig, axes = plt.subplots(4, 4, figsize=(18, 13))
     fig.suptitle(
         f"{type(model).__name__} — amostra {i}  |  B_ref={B_ref:.4f}  "
@@ -346,18 +379,18 @@ def fno_gnn_eval_fn(model, d, eval_cfg):
         fontsize=12,
     )
 
-    # Linha 0 — entradas qtree + depth map
-    _imshow(axes[0, 0], mu_qt, 'Entrada: Mu_r (qtree)')
-    _imshow(axes[0, 1], m_qt,  'Entrada: M (qtree)')
+    # Linha 0 — entradas (nós) + depth map / densidade de nós
+    _imshow(axes[0, 0], mu_qt, f'Entrada: Mu_r {tag}')
+    _imshow(axes[0, 1], m_qt,  f'Entrada: M {tag}')
     axes[0, 2].imshow(mask.astype(float), origin='lower', aspect='auto',
                       cmap='gray', vmin=0, vmax=1)
     axes[0, 2].set_title(f'Máscara |B|≥{thr}', fontsize=9)
-    _imshow(axes[0, 3], depth_map, 'Depth map (qtree)', cmap='Blues')
+    _imshow(axes[0, 3], depth_map, depth_map_title, cmap='Blues')
 
-    # Linha 1 — GT em qtree
-    _imshow(axes[1, 0], bx_tq,  'GT: Bx (qtree)',  vmin=bx_lim[0],  vmax=bx_lim[1])
-    _imshow(axes[1, 1], by_tq,  'GT: By (qtree)',  vmin=by_lim[0],  vmax=by_lim[1])
-    _imshow(axes[1, 2], mag_tq, 'GT: |B| (qtree)', vmin=mag_lim[0], vmax=mag_lim[1])
+    # Linha 1 — GT nos nós
+    _imshow(axes[1, 0], bx_tq,  f'GT: Bx {tag}',  vmin=bx_lim[0],  vmax=bx_lim[1])
+    _imshow(axes[1, 1], by_tq,  f'GT: By {tag}',  vmin=by_lim[0],  vmax=by_lim[1])
+    _imshow(axes[1, 2], mag_tq, f'GT: |B| {tag}', vmin=mag_lim[0], vmax=mag_lim[1])
     axes[1, 3].axis('off')
 
     # Linha 2 — FNO (grade H×W)
@@ -368,10 +401,10 @@ def fno_gnn_eval_fn(model, d, eval_cfg):
             f'FNO {en_fno_label}\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
             cmap=cmap_nan, vmin=0, vmax=err_vmax)
 
-    # Linha 3 — GNN (qtree real); erro em H×W
-    _imshow(axes[3, 0], bx_gnn,  'GNN pred: Bx (qtree)',  vmin=bx_lim[0],  vmax=bx_lim[1])
-    _imshow(axes[3, 1], by_gnn,  'GNN pred: By (qtree)',  vmin=by_lim[0],  vmax=by_lim[1])
-    _imshow(axes[3, 2], mag_gnn, 'GNN pred: |B| (qtree)', vmin=mag_lim[0], vmax=mag_lim[1])
+    # Linha 3 — GNN (nós reais); erro em H×W
+    _imshow(axes[3, 0], bx_gnn,  f'GNN pred: Bx {tag}',  vmin=bx_lim[0],  vmax=bx_lim[1])
+    _imshow(axes[3, 1], by_gnn,  f'GNN pred: By {tag}',  vmin=by_lim[0],  vmax=by_lim[1])
+    _imshow(axes[3, 2], mag_gnn, f'GNN pred: |B| {tag}', vmin=mag_lim[0], vmax=mag_lim[1])
     _imshow(axes[3, 3], en_gnn,
             f'GNN {en_gnn_label} (H×W vs GT grid)\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
             cmap=cmap_nan, vmin=0, vmax=err_vmax)

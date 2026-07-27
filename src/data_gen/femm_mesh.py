@@ -431,12 +431,12 @@ def generate_mesh_sample(motor_params: dict, tmp_dir: Path, out_path: Path,
         node_A       [S]    float32  A (potencial vetor, valor nodal exato do .ans)
         edge_index   [2,E]  int64    bidirecional (malha + wrap periódico)
         edge_attr    [E,4]  float32  delta_r,delta_c,center_dist,delta_mu
-        x_hw_grid    [2,H,W] float32 Mu_r,M (derivado da malha -- trifinder, valor
+        x_hw         [2,H,W] float32 Mu_r,M (derivado da malha -- trifinder, valor
                                              constante do elemento; ver _assign_mesh_to_grid.
                                              NÃO vem de point-query -- ver nota 2026-07-23)
-        y_hw_grid    [2,H,W] float32 Bx,By  (point-query AO VIVO no FEMM --
+        y_hw         [2,H,W] float32 Bx,By  (point-query AO VIVO no FEMM --
                                              mo_getpointvalues; ver _query_grid_pointvalues)
-        a_hw_grid    [H,W]   float32 A      (idem Bx/By, point-query ao vivo)
+        a_hw         [H,W]   float32 A      (idem Bx/By, point-query ao vivo)
         L            [1]     int64   número de nós desta amostra
         dim_H, dim_W [ ]      int64   n_r, n_a (dim reconstruído como tupla no agrupamento)
         r_in_mm, r_ext_mm, ang_1_deg, ang_2_deg — metadados de geometria (descartados no
@@ -577,9 +577,14 @@ def generate_mesh_sample(motor_params: dict, tmp_dir: Path, out_path: Path,
         'node_A':     nodes[:, 2].astype(np.float32),
         'edge_index': edge_index,
         'edge_attr':  edge_attr,
-        'x_hw_grid':  np.stack([Mu_hw, M_hw], axis=0),
-        'y_hw_grid':  np.stack([Bx_hw, By_hw], axis=0),
-        'a_hw_grid':  A_hw,
+        # 'x_hw_grid'/'y_hw_grid'/'a_hw_grid' -- renomeadas para 'x_hw'/'y_hw'/'a_hw'
+        # (2026-07-27): femm_mesh não tem variante "suavizada" separada (ao contrário
+        # do qtree, onde x_hw_grid/x_hw coexistem com significados diferentes), então
+        # o sufixo _grid só causava confusão/exigia rename tardio no agrupamento em
+        # chunks. Já sai com o nome final na fonte.
+        'x_hw':       np.stack([Mu_hw, M_hw], axis=0),
+        'y_hw':       np.stack([Bx_hw, By_hw], axis=0),
+        'a_hw':       A_hw,
         'L':          np.array([n_nodes], dtype=np.int64),
         'dim_H':      np.array(n_r, dtype=np.int64),
         'dim_W':      np.array(n_a, dtype=np.int64),

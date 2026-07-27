@@ -30,11 +30,27 @@ class DatagenConfig:
     # Prepare / chunks
     chunk_size: int = 32
 
-    # gen_npz_structures (só mode='grid'/'qtree')
-    npz_parser:             str           = 'FNO_GNN'
+    # npz_parser: chave em PARSER_REGISTRY. Em ambos os modos, consumido por
+    # gen_npz_structures.py (mesmo comando `python -m scripts.gen_npz_structures`
+    # pros três modos):
+    #   mode='grid'/'qtree'  -> filtra colunas na criação do .npz a partir das
+    #                           CSVs de data/raw/<dataset>/
+    #   mode='femm_mesh'     -> branch próprio em gen_npz_structures.py, filtra
+    #                           colunas do staging bruto já gerado em
+    #                           data/raw/<dataset>/ (sample_*.npz) — usar
+    #                           'FEMM_MESH' ou variante futura
+    npz_parser:             str           = 'FEMM_MESH'
     npz_samples_per_worker: int           = 2
     npz_max_workers:        int           = 12
     npz_max_samples:        Optional[int] = None
 
     # generate_data_femm_mesh (só mode='femm_mesh')
     femm_mesh_max_workers: int = 8
+
+    @property
+    def parsed_dataset_name(self) -> str:
+        """Nome combinado dataset+parser (mode='femm_mesh') — usado como
+        subdiretório em data/temp/samples_mesh_parsed/ e
+        data/torch/data_chunks/, pra não misturar chunks de parsers
+        diferentes (o layout de node_x/edge_attr muda conforme o parser)."""
+        return f"{self.dataset}_{self.npz_parser}"

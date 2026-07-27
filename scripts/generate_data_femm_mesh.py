@@ -8,7 +8,10 @@ grafo já acontece na mesma sessão FEMM — ver
 src/data_gen/femm_mesh.generate_mesh_sample) — mesma convenção .npz de
 sample_processor.py/gen_npz_structures.py no pipeline qtree.
 
-Saída: data/temp/samples_mesh/<dataset>/sample_XXXXXX.npz
+Saída: data/raw/<dataset>/sample_XXXXXX.npz — mesmo papel de "fonte única"
+que as CSVs do pipeline qtree/grid (1 solve FEM por amostra, caro, nunca
+regenerado só porque um parser mudou), por isso NÃO fica em data/temp/
+(gitignored, descartável a qualquer momento) — corrigido 2026-07-27.
 Agrupamento final em data_chunk_*.pt: scripts/build_data_chunks_femm_mesh.py
 
 Execução (a partir da raiz do projeto):
@@ -33,8 +36,12 @@ N_SAMPLES   = _dg.n_samples
 MAX_WORKERS = _dg.femm_mesh_max_workers
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TEMP_DIR     = PROJECT_ROOT / "data" / "temp"
-OUT_DIR      = TEMP_DIR / "samples_mesh" / DATASET
+TEMP_DIR     = PROJECT_ROOT / "data" / "temp"   # só workdirs tmp_femm_mesh_*/ (scratch por amostra)
+# [REMOVIDO] OUT_DIR = TEMP_DIR / "samples_mesh" / DATASET -- staging bruto é
+# fonte única (1 solve FEM por amostra), não dado descartável; data/temp/ é
+# gitignored e pode ser limpo a qualquer momento -- mesmo motivo pelo qual o
+# CSV raw do pipeline qtree/grid fica em data/raw/, não em data/temp/.
+OUT_DIR      = PROJECT_ROOT / "data" / "raw" / DATASET
 
 _SAMPLE_METHODS = {
     'constrained':     BLDC_Process.generate_samples_constrained,

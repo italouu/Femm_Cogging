@@ -1,16 +1,27 @@
 """
 build_data_chunks_femm_mesh.py
 -------------------------------
-Agrupa os .npz de staging gerados por generate_data_femm_mesh.py
-(data/temp/samples_mesh/<dataset>/sample_XXXXXX.npz) em data_chunk_XXXX.pt
-finais, no mesmo espírito de build_data_chunks.py (offset de edge_index,
-E_L calculado no agrupamento) — mas sem passar pela etapa
-gen_npz_structures.py, já que o .npz de staging já sai no formato final
-(ver src/data_gen/femm_mesh.generate_mesh_sample).
+Agrupa os .npz JÁ FILTRADOS PELO PARSER (data/temp/samples_npz/
+<dataset>_<npz_parser>/sample_XXXXXX.npz — ver o branch mode='femm_mesh'
+de scripts/gen_npz_structures.py) em data_chunk_XXXX.pt finais, no mesmo
+espírito de build_data_chunks.py (offset de edge_index, E_L calculado no
+agrupamento).
 
-Saída: data/torch/data_chunks/<dataset>/data_chunk_XXXX.pt — mesmo diretório
-usado pelo pipeline qtree/grid, como um dataset normal (o `dataset` deve ser
-um nome próprio, não reaproveitado entre modos, senão os chunks se misturam).
+Simetria com o pipeline qtree/grid (2026-07-27): mesmos 3 comandos, mesmas
+pastas-base (data/raw/, data/temp/samples_npz/, data/torch/data_chunks/) —
+    1. generate_data.py       -> dispatcha p/ generate_data_femm_mesh.py ->
+                                  staging BRUTO em data/raw/<dataset>/
+                                  (fonte única, não fica em data/temp/)
+    2. gen_npz_structures.py  -> branch mode='femm_mesh' -> aplica parser,
+                                  grava em data/temp/samples_npz/<dataset>_<npz_parser>/
+    3. build_data_chunks.py   -> dispatcha p/ este módulo -> main() abaixo
+                                  chama gen_npz_structures + build()
+
+Saída: data/torch/data_chunks/<dataset>_<npz_parser>/data_chunk_XXXX.pt —
+mesmo diretório-base do pipeline qtree/grid; o sufixo _<npz_parser> (mantido
+também no npz intermediário, diferente do pipeline qtree/grid que não sufixa)
+evita misturar chunks de parsers diferentes enquanto os chunks ainda são
+apontados manualmente no treino (NnCfg.dataset).
 
 Execução (a partir da raiz do projeto):
     python -m scripts.build_data_chunks_femm_mesh
@@ -29,39 +40,44 @@ DATASET    = _dg.dataset
 MAX_SAMPLES = None
 
 PROJECT_ROOT  = Path(__file__).resolve().parents[1]
-_STAGING_DIR  = PROJECT_ROOT / "data" / "temp" / "samples_mesh" / DATASET
-_OUT_DIR      = PROJECT_ROOT / "data" / "torch" / "data_chunks" / DATASET
+# [REMOVIDO] lia direto do staging bruto (sem parser aplicado) -- desde a
+# introdução do branch mode='femm_mesh' em gen_npz_structures.py, o
+# agrupamento em chunks passa a ler do staging JÁ FILTRADO pelo parser
+# (node_x/node_y/edge_attr com as colunas do PARSER_REGISTRY[npz_parser]),
+# não mais do staging bruto de 9/4 colunas completas.
+# _STAGING_DIR = PROJECT_ROOT / "data" / "temp" / "samples_mesh" / DATASET
+# _OUT_DIR     = PROJECT_ROOT / "data" / "torch" / "data_chunks" / DATASET
+# [REMOVIDO] _STAGING_DIR apontava para data/temp/samples_mesh_parsed/ (nome
+# próprio do femm_mesh) -- unificado com data/temp/samples_npz/ (mesma pasta
+# usada por gen_npz_structures.py no pipeline qtree/grid, ver docstring acima).
+# _STAGING_DIR = PROJECT_ROOT / "data" / "temp" / "samples_mesh_parsed" / _dg.parsed_dataset_name
+_STAGING_DIR  = PROJECT_ROOT / "data" / "temp" / "samples_npz" / _dg.parsed_dataset_name
+_OUT_DIR      = PROJECT_ROOT / "data" / "torch" / "data_chunks" / _dg.parsed_dataset_name
 
-# metadados de geometria por amostra que não entram no chunk final (não
-# usados no treino; ficam só no .npz de staging para depuração/rastreabilidade)
-_DROP_KEYS = frozenset({'r_in_mm', 'r_ext_mm', 'ang_1_deg', 'ang_2_deg'})
+# [REMOVIDO] _DROP_KEYS (r_in_mm/r_ext_mm/ang_1_deg/ang_2_deg) -- este módulo
+# passa a ser concatenação PURA (sem decidir o que é dado final ou não). O
+# descarte desses metadados de geometria (não usados no treino, só
+# rastreabilidade do staging bruto) agora acontece em apply_parser_femm_mesh.py
+# -- o .npz que chega aqui já É o formato final, chave por chave.
+# _DROP_KEYS = frozenset({'r_in_mm', 'r_ext_mm', 'ang_1_deg', 'ang_2_deg'})
 
 # chaves cujos arrays por amostra têm shape [C,H,W] ou [H,W] — precisam de
 # stack (empilha um eixo de batch novo), não concat
-_STACK_KEYS = frozenset({'x_hw', 'y_hw', 'a_hw_grid'})
-
-# x_hw_grid/y_hw_grid -> x_hw/y_hw -- mesmo nome de chave usado pelos
-# pipelines grid/qtree. Sem essa renomeação, ChunkStreamDataset (usado por
-# build_loaders(mode='grid'), consumido por FNO2d/MaskedFNO2d) quebra com
-# KeyError: 'x_hw' -- os chunks femm_mesh nunca tiveram essa chave (ver
-# histórico 2026-07-24). Sem perda de informação: este pipeline não tem
-# variante "suavizada" (média por área do qtree) -- x_hw_grid JÁ é a única
-# grade existente aqui, o sufixo _grid só distinguia da variante que não
-# existe neste modo. a_hw_grid fica como está (não consumido pelo loader
-# 'grid', sem colisão de nome com nada).
-_RENAME_KEYS = {'x_hw_grid': 'x_hw', 'y_hw_grid': 'y_hw'}
+_STACK_KEYS = frozenset({'x_hw', 'y_hw', 'a_hw'})
 
 
 def _load_npz(path: Path) -> dict:
-    """Carrega um .npz, descarta metadados de geometria, renomeia
-    x_hw_grid/y_hw_grid -> x_hw/y_hw (ver _RENAME_KEYS) e reconstrói 'dim'
-    como tupla — mesma convenção de build_data_chunks.py."""
+    """Carrega um .npz (já no formato final, sem chaves a descartar/renomear)
+    e reconstrói 'dim' como tupla — mesma convenção de build_data_chunks.py
+    (np.savez não tem tupla nativa, por isso dim_H/dim_W são salvos separados
+    e remontados aqui; não é uma decisão de conteúdo, é mecânica de
+    serialização, igual no pipeline qtree)."""
     d = np.load(path)
     result = {'dim': (int(d['dim_H']), int(d['dim_W']))}
     for key in d.files:
-        if key in ('dim_H', 'dim_W') or key in _DROP_KEYS:
+        if key in ('dim_H', 'dim_W'):
             continue
-        result[_RENAME_KEYS.get(key, key)] = d[key]
+        result[key] = d[key]
     return result
 
 
@@ -158,9 +174,17 @@ def build(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE):
 
 
 def main():
-    print("=== Etapa 1: generate_data_femm_mesh ===")
-    from scripts.generate_data_femm_mesh import run as gen_run
-    gen_run()
+    # [REMOVIDO] etapa 1 chamava generate_data_femm_mesh.run() automaticamente
+    # -- geração do staging bruto (1 solve FEM por amostra) agora é comando
+    # próprio e explícito (python -m scripts.generate_data, que já dispatcha
+    # pra generate_data_femm_mesh.py), igual ao pipeline qtree/grid onde
+    # build_data_chunks.py NÃO chama generate_data.py -- espera o raw já
+    # existir. Simetria com build_data_chunks.py::main() abaixo.
+    # from scripts.generate_data_femm_mesh import run as gen_run
+    # gen_run()
+    print("=== Etapa 1: gen_npz_structures (aplica parser sobre staging bruto) ===")
+    from scripts.gen_npz_structures import run as gen_npz_run
+    gen_npz_run()
     print("\n=== Etapa 2: agrupamento em chunks ===")
     build()
 

@@ -316,9 +316,13 @@ def fno_gnn_eval_fn(model, d, eval_cfg):
     # ── Renders dos nós (input, GT, predição GNN) ────────────────────────────
     # node_x: col 0=mu_r, col 1=M, col 2=cell_area/node_dual_area, col 3=r_base, col 4=c_base
     if is_mesh:
-        node_x_qt  = _qtree_render(node_x[:, :2], node_x, H, W)   # [2, H, W]
-        node_y_qt  = _qtree_render(node_y[:, :2], node_x, H, W)   # [2, H, W]
-        y_nodes_qt = _qtree_render(y_nodes,       node_x, H, W)   # [2, H, W]
+        # x_hw/y_hw_grid já são as grades densas corretas (trifinder / point-query
+        # ao vivo no FEMM) — usar scatter de nós aqui reintroduziria os furos dos
+        # pixels sem nó (malha é bem mais esparsa que a grade). Só a predição do
+        # GNN (y_nodes) não tem equivalente denso — essa continua via scatter.
+        node_x_qt  = x_hw[0, :2]                                  # [2, H, W]
+        node_y_qt  = y_hw_grid[0, :2]                              # [2, H, W]
+        y_nodes_qt = _qtree_render(y_nodes, node_x, H, W)          # [2, H, W]
         depth_map      = _node_density_map(node_x, H, W)
         depth_map_title = 'Densidade de nós (malha)'
     else:

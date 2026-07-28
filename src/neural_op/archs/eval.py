@@ -12,6 +12,24 @@ def _imshow(ax, data, title, cmap='viridis', vmin=None, vmax=None):
     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
 
+def _scatter(ax, r, c, values, title, cmap='viridis', vmin=None, vmax=None, s=3):
+    """
+    Scatter de nós na posição real (r_base, c_base) — usado para dados de malha
+    real do FEMM (mode='femm_mesh') em vez de rasterizar em H×W: a malha tem
+    densidade muito variável (refina perto de interfaces), e rasterizar dilui o
+    erro em regiões densas e cria buracos em regiões esparsas. NaN em `values`
+    usa cmap.set_bad (mesma convenção do cmap_nan já usado em _imshow).
+    Ordena por valor crescente para que os valores mais altos (ex: erro maior)
+    sejam desenhados por cima em regiões de sobreposição.
+    """
+    order = np.argsort(np.where(np.isfinite(values), values, -np.inf))
+    sc = ax.scatter(c[order], r[order], c=values[order], cmap=cmap,
+                     vmin=vmin, vmax=vmax, s=s, edgecolors='none')
+    ax.set_title(title, fontsize=9)
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+    plt.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
+
+
 def _masked_metrics(err, mask, B_ref):
     e = err[mask] / B_ref * 100
     return np.mean(e), np.median(e), np.percentile(e, 95)
@@ -62,18 +80,17 @@ def _qtree_render(values, node_x, H, W):
     return (grid / count).view(H, W, C).permute(2, 0, 1)
 
 
-def _node_density_map(node_x, H, W):
-    """
-    Nós por pixel H×W (scatter por r_base/c_base). Usado no lugar do depth map
-    (qtree) para dados de malha real do FEMM (mode='femm_mesh'), onde não existe
-    profundidade — mostra onde a malha do FEMM refina mais (ex: interfaces).
-    """
-    rows  = (node_x[:, 3] * H).long().clamp(0, H - 1)
-    cols  = (node_x[:, 4] * W).long().clamp(0, W - 1)
-    flat  = rows * W + cols
-    count = torch.zeros(H * W)
-    count.scatter_add_(0, flat, torch.ones(len(flat)))
-    return count.view(H, W).numpy()
+# [REMOVIDO] _node_density_map — rasterizava contagem de nós em pixels H×W para o
+# painel "Densidade de nós (malha)". Substituído por scatter direto dos nós
+# (ver _plot_fno_gnn_mesh) — a própria densidade de pontos no scatter já mostra
+# onde a malha refina mais, sem precisar binar em pixels.
+# def _node_density_map(node_x, H, W):
+#     rows  = (node_x[:, 3] * H).long().clamp(0, H - 1)
+#     cols  = (node_x[:, 4] * W).long().clamp(0, W - 1)
+#     flat  = rows * W + cols
+#     count = torch.zeros(H * W)
+#     count.scatter_add_(0, flat, torch.ones(len(flat)))
+#     return count.view(H, W).numpy()
 
 
 def _qtree_render_as_grid(values, node_x, H, W):
@@ -272,21 +289,119 @@ def fno_eval_fn(model, d, eval_cfg):
     plt.show()
 
 
+def _plot_fno_gnn_mesh(model, y_hw_fno, y_nodes, node_x, node_y, Li, thr, eval_cfg, i):
+    """
+    Eval FNO_GNN/GNN_PostBase para malha real do FEMM (mode='femm_mesh') — plota
+    só os nós reais (scatter em r_base/c_base), sem rasterizar em H×W. A malha
+    tem densidade muito variável (refina perto de interfaces), e rasterizar
+    dilui o erro em pixels densos e cria buracos em pixels sem nó nenhum.
+
+    Erro sempre nó-a-nó: node_y é o GT exato por nó; a saída do FNO (grade
+    regular) é interpolada para a posição exata de cada nó via
+    _interpolate_fno_to_nodes (mesma interpolação usada internamente pelo
+    modelo) antes de comparar — FNO, GNN e GT ficam no mesmo conjunto de pontos.
+
+    node_x: col 0=mu_r, col 1=M, col 2=node_dual_area, col 3=r_base, col 4=c_base
+    """
+    from src.neural_op.archs.fno_gnn import _interpolate_fno_to_nodes
+
+    r = node_x[:, 3].numpy()
+    c = node_x[:, 4].numpy()
+
+    mu_n = node_x[:, 0].numpy()
+    m_n  = node_x[:, 1].numpy()
+
+    bx_true = node_y[:, 0].numpy()
+    by_true = node_y[:, 1].numpy()
+
+    fno_at_nodes = _interpolate_fno_to_nodes(y_hw_fno, node_x, Li)
+    bx_fno = fno_at_nodes[:, 0].numpy()
+    by_fno = fno_at_nodes[:, 1].numpy()
+
+    bx_gnn = y_nodes[:, 0].numpy()
+    by_gnn = y_nodes[:, 1].numpy()
+
+    mag_true = np.sqrt(bx_true**2 + by_true**2)
+    mag_fno  = np.sqrt(bx_fno**2  + by_fno**2)
+    mag_gnn  = np.sqrt(bx_gnn**2  + by_gnn**2)
+    err_fno  = np.abs(mag_fno - mag_true)
+    err_gnn  = np.abs(mag_gnn - mag_true)
+
+    mask  = mag_true >= thr
+    B_ref = np.sqrt(np.mean(mag_true[mask]**2)) if mask.any() else 1.0
+
+    fno_m, fno_med, fno_p95 = _masked_metrics(err_fno, mask, B_ref)
+    gnn_m, gnn_med, gnn_p95 = _masked_metrics(err_gnn, mask, B_ref)
+    print(f"B_ref = {B_ref:.4f}  |  região relevante: {mask.mean()*100:.1f}%  "
+          f"({int(mask.sum())} nós relevantes / {len(mask)})")
+    print(f"FNO  — média={fno_m:.1f}%  mediana={fno_med:.1f}%  p95={fno_p95:.1f}%")
+    print(f"GNN  — média={gnn_m:.1f}%  mediana={gnn_med:.1f}%  p95={gnn_p95:.1f}%")
+
+    en_fno, en_label = _err_display(err_fno, mask, B_ref, eval_cfg.error_plot_mode)
+    en_gnn, _        = _err_display(err_gnn, mask, B_ref, eval_cfg.error_plot_mode)
+    cmap_nan = plt.cm.hot.copy(); cmap_nan.set_bad(color='#444444')
+    err_vmax = _err_vmax([en_fno, en_gnn], eval_cfg)
+
+    def _lim(*a): return min(x.min() for x in a), max(x.max() for x in a)
+    bx_lim  = _lim(bx_true, bx_fno, bx_gnn)
+    by_lim  = _lim(by_true, by_fno, by_gnn)
+    mag_lim = _lim(mag_true, mag_fno, mag_gnn)
+
+    fig, axes = plt.subplots(4, 4, figsize=(18, 13))
+    fig.suptitle(
+        f"{type(model).__name__} — amostra {i} (malha, {len(mag_true)} nós)  |  "
+        f"B_ref={B_ref:.4f}  região relevante: {mask.mean()*100:.1f}%",
+        fontsize=12,
+    )
+
+    # Linha 0 — entradas (nós) + máscara + densidade de nós
+    _scatter(axes[0, 0], r, c, mu_n, 'Entrada: Mu_r (nós)')
+    _scatter(axes[0, 1], r, c, m_n,  'Entrada: M (nós)')
+    _scatter(axes[0, 2], r, c, mask.astype(float), f'Máscara |B|>={thr}',
+             cmap='gray', vmin=0, vmax=1)
+    axes[0, 3].scatter(c, r, s=2, color='steelblue', alpha=0.4, edgecolors='none')
+    axes[0, 3].set_title(f'Densidade de nós (malha) — {len(r)} nós', fontsize=9)
+    axes[0, 3].set_xlim(0, 1); axes[0, 3].set_ylim(0, 1)
+
+    # Linha 1 — GT nos nós (exato, node_y)
+    _scatter(axes[1, 0], r, c, bx_true,  'GT: Bx (nós)',  vmin=bx_lim[0],  vmax=bx_lim[1])
+    _scatter(axes[1, 1], r, c, by_true,  'GT: By (nós)',  vmin=by_lim[0],  vmax=by_lim[1])
+    _scatter(axes[1, 2], r, c, mag_true, 'GT: |B| (nós)', vmin=mag_lim[0], vmax=mag_lim[1])
+    axes[1, 3].axis('off')
+
+    # Linha 2 — FNO interpolado na posição exata de cada nó
+    _scatter(axes[2, 0], r, c, bx_fno,  'FNO@nós: Bx',  vmin=bx_lim[0],  vmax=bx_lim[1])
+    _scatter(axes[2, 1], r, c, by_fno,  'FNO@nós: By',  vmin=by_lim[0],  vmax=by_lim[1])
+    _scatter(axes[2, 2], r, c, mag_fno, 'FNO@nós: |B|', vmin=mag_lim[0], vmax=mag_lim[1])
+    _scatter(axes[2, 3], r, c, en_fno,
+             f'FNO {en_label} (nó-a-nó)\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
+             cmap=cmap_nan, vmin=0, vmax=err_vmax)
+
+    # Linha 3 — GNN nos nós reais
+    _scatter(axes[3, 0], r, c, bx_gnn,  'GNN: Bx (nós)',  vmin=bx_lim[0],  vmax=bx_lim[1])
+    _scatter(axes[3, 1], r, c, by_gnn,  'GNN: By (nós)',  vmin=by_lim[0],  vmax=by_lim[1])
+    _scatter(axes[3, 2], r, c, mag_gnn, 'GNN: |B| (nós)', vmin=mag_lim[0], vmax=mag_lim[1])
+    _scatter(axes[3, 3], r, c, en_gnn,
+             f'GNN {en_label} (nó-a-nó)\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
+             cmap=cmap_nan, vmin=0, vmax=err_vmax)
+
+    plt.tight_layout()
+    plt.show()
+
+
 def fno_gnn_eval_fn(model, d, eval_cfg):
     """
-    Eval FNO_GNN: carrega amostra + grafo, infere e plota grid 4×4.
-    Linha 0: Mu_r (nós), M (nós), máscara (H×W), depth map (qtree) / densidade de nós (malha)
-    Linha 1: GT Bx (nós), GT By (nós), GT |B| (nós), —
-    Linha 2: FNO pred (H×W), FNO pred, FNO pred |B|, FNO erro
-    Linha 3: GNN pred (nós), GNN pred, GNN pred |B|, GNN erro (H×W)
+    Eval FNO_GNN/GNN_PostBase: carrega amostra + grafo, infere e plota.
 
-    Suporta dois layouts de grafo (mesmo arch FNO_GNN, dataset decide):
+    Suporta dois layouts de grafo (mesmo arch, dataset decide via 'node_A' in d):
     - qtree (mode='qtree'): node_x[:,2]=cell_area, folhas alinhadas em retângulos
-      exatos da grade base → renderizado via _qtree_render_as_grid (DFS).
-    - malha real do FEMM (mode='femm_mesh', chunk tem chave 'node_A'): node_x[:,2]
-      é node_dual_area (mm², sem relação com potências de 4) — a malha não é uma
-      subdivisão em retângulos, então usa scatter por r_base/c_base
-      (_qtree_render), igual ao que já era usado só para as métricas H×W.
+      exatos da grade base → renderizado via _qtree_render_as_grid (DFS). Grid 4×4:
+      linha 0 = Mu_r/M (qtree) + máscara + depth map; linha 1 = GT (qtree);
+      linha 2 = FNO (H×W) + erro; linha 3 = GNN (qtree) + erro (H×W vs GT grid).
+    - malha real do FEMM (mode='femm_mesh', chunk tem chave 'node_A'): despachado
+      para _plot_fno_gnn_mesh — a malha não é uma subdivisão em retângulos e tem
+      densidade muito variável, então todo o plot é por scatter dos nós reais,
+      sem rasterizar em H×W, com erro sempre nó-a-nó contra node_y.
     """
     i   = eval_cfg.sample_idx
     thr = eval_cfg.irrelevance_threshold
@@ -313,28 +428,21 @@ def fno_gnn_eval_fn(model, d, eval_cfg):
     with torch.no_grad():
         y_hw_fno, y_nodes = model(x_hw, node_x, edge_index, edge_attr, Li)
 
-    # ── Renders dos nós (input, GT, predição GNN) ────────────────────────────
-    # node_x: col 0=mu_r, col 1=M, col 2=cell_area/node_dual_area, col 3=r_base, col 4=c_base
     if is_mesh:
-        # x_hw/y_hw_grid já são as grades densas corretas (trifinder / point-query
-        # ao vivo no FEMM) — usar scatter de nós aqui reintroduziria os furos dos
-        # pixels sem nó (malha é bem mais esparsa que a grade). Só a predição do
-        # GNN (y_nodes) não tem equivalente denso — essa continua via scatter.
-        node_x_qt  = x_hw[0, :2]                                  # [2, H, W]
-        node_y_qt  = y_hw_grid[0, :2]                              # [2, H, W]
-        y_nodes_qt = _qtree_render(y_nodes, node_x, H, W)          # [2, H, W]
-        depth_map      = _node_density_map(node_x, H, W)
-        depth_map_title = 'Densidade de nós (malha)'
-    else:
-        node_x_qt  = _qtree_render_as_grid(node_x[:, :2], node_x, H, W)   # [2, H*s, W*s]
-        node_y_qt  = _qtree_render_as_grid(node_y[:, :2], node_x, H, W)   # [2, H*s, W*s]
-        y_nodes_qt = _qtree_render_as_grid(y_nodes,       node_x, H, W)   # [2, H*s, W*s]
+        _plot_fno_gnn_mesh(model, y_hw_fno, y_nodes, node_x, node_y, Li, thr, eval_cfg, i)
+        return
 
-        # depth map: profundidade de cada folha → mostra onde a qtree refina
-        cell_area  = node_x[:, 2].clamp(min=1e-12)
-        depths_val = torch.round(-torch.log2(cell_area) / 2).unsqueeze(1)  # [S, 1]
-        depth_map      = _qtree_render_as_grid(depths_val, node_x, H, W)[0].numpy()
-        depth_map_title = 'Depth map (qtree)'
+    # ── Renders dos nós (input, GT, predição GNN) — qtree ────────────────────
+    # node_x: col 0=mu_r, col 1=M, col 2=cell_area, col 3=r_base, col 4=c_base
+    node_x_qt  = _qtree_render_as_grid(node_x[:, :2], node_x, H, W)   # [2, H*s, W*s]
+    node_y_qt  = _qtree_render_as_grid(node_y[:, :2], node_x, H, W)   # [2, H*s, W*s]
+    y_nodes_qt = _qtree_render_as_grid(y_nodes,       node_x, H, W)   # [2, H*s, W*s]
+
+    # depth map: profundidade de cada folha → mostra onde a qtree refina
+    cell_area  = node_x[:, 2].clamp(min=1e-12)
+    depths_val = torch.round(-torch.log2(cell_area) / 2).unsqueeze(1)  # [S, 1]
+    depth_map      = _qtree_render_as_grid(depths_val, node_x, H, W)[0].numpy()
+    depth_map_title = 'Depth map (qtree)'
 
     # ── Métricas: scatter_add H×W contra y_hw_grid ───────────────────────────
     y_nodes_hw = _qtree_render(y_nodes, node_x, H, W)   # [2, H, W]
@@ -374,7 +482,7 @@ def fno_gnn_eval_fn(model, d, eval_cfg):
     mag_lim = _lim(mag_tq, mag_fno, mag_gnn)
     err_vmax = _err_vmax([en_fno, en_gnn], eval_cfg)
 
-    tag = '(malha)' if is_mesh else '(qtree)'
+    tag = '(qtree)'
 
     fig, axes = plt.subplots(4, 4, figsize=(18, 13))
     fig.suptitle(

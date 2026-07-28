@@ -1,14 +1,5 @@
 from dataclasses import dataclass
 
-# [REMOVIDO] LossCfg único — substituído por classes individuais por loss (2026-07-01).
-# Mantido como alias de retrocompatibilidade abaixo (LossCfg = MseLossCfg).
-#
-# @dataclass
-# class LossCfg:
-#     tail_alpha:  float = 0.2
-#     tail_k_frac: float = 0.05
-
-
 @dataclass
 class MseLossCfg:
     """
@@ -18,8 +9,8 @@ class MseLossCfg:
     subtract_fno  → FNO_GNN / GNN_PostBase: loss de nós em delta (output bruto do GNN)
                     vs y_node em vez de (fno_at_nodes + delta) vs y_node.
     """
-    tail_alpha:   float = 0.2
-    tail_k_frac:  float = 0.05
+    tail_alpha:   float = 0.0
+    tail_k_frac:  float = 0.00
     subtract_fno: bool  = False
 
 

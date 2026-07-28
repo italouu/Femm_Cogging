@@ -12,7 +12,7 @@ def _imshow(ax, data, title, cmap='viridis', vmin=None, vmax=None):
     plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
 
-def _scatter(ax, r, c, values, title, cmap='viridis', vmin=None, vmax=None, s=3):
+def _scatter(ax, r, c, values, title, cmap='viridis', vmin=None, vmax=None, s=6):
     """
     Scatter de nós na posição real (r_base, c_base) — usado para dados de malha
     real do FEMM (mode='femm_mesh') em vez de rasterizar em H×W: a malha tem
@@ -21,13 +21,29 @@ def _scatter(ax, r, c, values, title, cmap='viridis', vmin=None, vmax=None, s=3)
     usa cmap.set_bad (mesma convenção do cmap_nan já usado em _imshow).
     Ordena por valor crescente para que os valores mais altos (ex: erro maior)
     sejam desenhados por cima em regiões de sobreposição.
+
+    `s` pode ser escalar (tamanho fixo) ou array do mesmo tamanho de `values`
+    (tamanho por ponto — usado nos painéis de erro para que erro maior também
+    seja um ponto maior, não só mais quente na cor; sem isso, a concentração de
+    erro nas quinas de alta densidade de malha fica visualmente afogada entre
+    milhares de pontos do mesmo tamanho).
     """
     order = np.argsort(np.where(np.isfinite(values), values, -np.inf))
+    s_arr = s[order] if hasattr(s, '__len__') else s
     sc = ax.scatter(c[order], r[order], c=values[order], cmap=cmap,
-                     vmin=vmin, vmax=vmax, s=s, edgecolors='none')
+                     vmin=vmin, vmax=vmax, s=s_arr, edgecolors='none')
     ax.set_title(title, fontsize=9)
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
     plt.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
+
+
+def _err_sizes(en, vmax, s_min=3, s_max=50):
+    """Tamanho do marcador crescente com o erro (área ~ erro/vmax), para os
+    painéis de erro em _plot_fno_gnn_mesh. `en` pode ter NaN (nós irrelevantes,
+    fora da máscara) — tratados como erro 0 (tamanho mínimo)."""
+    v = np.where(np.isfinite(en), en, 0.0)
+    norm = np.clip(v / max(vmax, 1e-9), 0.0, 1.0)
+    return s_min + (s_max - s_min) * norm
 
 
 def _masked_metrics(err, mask, B_ref):
@@ -359,7 +375,7 @@ def _plot_fno_gnn_mesh(model, y_hw_fno, y_nodes, node_x, node_y, Li, thr, eval_c
     _scatter(axes[0, 1], r, c, m_n,  'Entrada: M (nós)')
     _scatter(axes[0, 2], r, c, mask.astype(float), f'Máscara |B|>={thr}',
              cmap='gray', vmin=0, vmax=1)
-    axes[0, 3].scatter(c, r, s=2, color='steelblue', alpha=0.4, edgecolors='none')
+    axes[0, 3].scatter(c, r, s=5, color='steelblue', alpha=0.4, edgecolors='none')
     axes[0, 3].set_title(f'Densidade de nós (malha) — {len(r)} nós', fontsize=9)
     axes[0, 3].set_xlim(0, 1); axes[0, 3].set_ylim(0, 1)
 
@@ -373,17 +389,19 @@ def _plot_fno_gnn_mesh(model, y_hw_fno, y_nodes, node_x, node_y, Li, thr, eval_c
     _scatter(axes[2, 0], r, c, bx_fno,  'FNO@nós: Bx',  vmin=bx_lim[0],  vmax=bx_lim[1])
     _scatter(axes[2, 1], r, c, by_fno,  'FNO@nós: By',  vmin=by_lim[0],  vmax=by_lim[1])
     _scatter(axes[2, 2], r, c, mag_fno, 'FNO@nós: |B|', vmin=mag_lim[0], vmax=mag_lim[1])
+    size_fno = _err_sizes(en_fno, err_vmax)
     _scatter(axes[2, 3], r, c, en_fno,
              f'FNO {en_label} (nó-a-nó)\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
-             cmap=cmap_nan, vmin=0, vmax=err_vmax)
+             cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_fno)
 
     # Linha 3 — GNN nos nós reais
     _scatter(axes[3, 0], r, c, bx_gnn,  'GNN: Bx (nós)',  vmin=bx_lim[0],  vmax=bx_lim[1])
     _scatter(axes[3, 1], r, c, by_gnn,  'GNN: By (nós)',  vmin=by_lim[0],  vmax=by_lim[1])
     _scatter(axes[3, 2], r, c, mag_gnn, 'GNN: |B| (nós)', vmin=mag_lim[0], vmax=mag_lim[1])
+    size_gnn = _err_sizes(en_gnn, err_vmax)
     _scatter(axes[3, 3], r, c, en_gnn,
              f'GNN {en_label} (nó-a-nó)\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
-             cmap=cmap_nan, vmin=0, vmax=err_vmax)
+             cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_gnn)
 
     plt.tight_layout()
     plt.show()

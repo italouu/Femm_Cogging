@@ -61,6 +61,14 @@ class MotorQtreeParserConfig:
     edge_attr_cols : list = field(default_factory=lambda: [0, 1, 2, 3, 4])  # canais de edge_attr
     build_graph    : bool = True   # incluir edge_index e edge_attr no output
 
+    # 'B' (padrão) -> node_y/y_hw vêm de node_y/y_hw brutos (Bx,By), fatiados por
+    # node_y_cols/y_hw_cols. 'A' -> node_y/y_hw são reconstruídos a partir de
+    # node_A/a_hw (potencial vetor escalar) -- só suportado no pipeline
+    # mode='femm_mesh' (_apply_parser_femm_mesh em scripts/gen_npz_structures.py);
+    # node_y_cols/y_hw_cols são ignorados nesse caso. apply_parser_config (caminho
+    # qtree/grid) não tem node_A disponível -- ver assert abaixo.
+    target_field   : str = 'B'
+
 
 def apply_parser_config(sample: dict, cfg: MotorQtreeParserConfig) -> dict:
     """Seleciona features de um dict *completo* (node_x com todas as 9 colunas).
@@ -86,6 +94,11 @@ def apply_parser_config(sample: dict, cfg: MotorQtreeParserConfig) -> dict:
     -------
     dict com os mesmos campos, mas node_x/node_y/x_hw/y_hw filtrados.
     """
+    assert cfg.target_field == 'B', (
+        f"apply_parser_config: target_field='{cfg.target_field}' não suportado aqui — "
+        "'A' só é válido no pipeline mode='femm_mesh' (_apply_parser_femm_mesh), "
+        "que tem node_A/a_hw disponíveis. Este caminho (qtree/grid) não tem."
+    )
     out = dict(sample)                                    # shallow copy
 
     out['node_x'] = sample['node_x'][:, cfg.node_x_cols] # [S, len(node_x_cols)]

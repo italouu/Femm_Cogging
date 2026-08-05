@@ -111,12 +111,25 @@ def _load_npz_femm_mesh(path: Path) -> dict:
 def _apply_parser_femm_mesh(d: dict, cfg) -> dict:
     """Filtra node_x/node_y/x_hw/y_hw/edge_attr pelas colunas do parser.
     Demais chaves (node_A, a_hw, edge_index, L, dim_H/W) passam inalteradas
-    — não têm variante "cheia" a filtrar."""
+    — não têm variante "cheia" a filtrar.
+
+    cfg.target_field:
+        'B' (padrão) -> node_y/y_hw fatiados dos brutos node_y/y_hw (Bx,By).
+        'A'          -> node_y/y_hw reconstruídos a partir de node_A/a_hw
+                        (potencial vetor, 1 canal); node_y_cols/y_hw_cols
+                        ignorados. node_A/a_hw brutos NÃO são removidos do
+                        output — eval.py::fno_gnn_eval_fn usa 'node_A' in d
+                        para detectar chunks femm_mesh e escolher o plot certo.
+    """
     out = dict(d)
     out['node_x'] = d['node_x'][:, cfg.node_x_cols]
-    out['node_y'] = d['node_y'][:, cfg.node_y_cols]
     out['x_hw']   = d['x_hw'][cfg.x_hw_cols]
-    out['y_hw']   = d['y_hw'][cfg.y_hw_cols]
+    if cfg.target_field == 'A':
+        out['node_y'] = d['node_A'][:, None]   # [S] -> [S, 1]
+        out['y_hw']   = d['a_hw'][None]         # [H, W] -> [1, H, W]
+    else:
+        out['node_y'] = d['node_y'][:, cfg.node_y_cols]
+        out['y_hw']   = d['y_hw'][cfg.y_hw_cols]
     if cfg.build_graph:
         out['edge_attr'] = d['edge_attr'][:, cfg.edge_attr_cols]
     else:

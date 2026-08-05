@@ -55,14 +55,17 @@ class FNO_GNN(torch.nn.Module):
     Parâmetros GNN  : gnn_node_width, gnn_n_layers
     """
 
-    _GRID_IN_CH  = 2
-    _GRID_OUT_CH = 2
-    _NODE_IN_CH  = 5
-    # [REMOVIDO] _EDGE_DIM = 4 hardcoded — quebrava com edge_attr de dimensão
-    # diferente (ex: FNO_GNN_V2_PARSER, 5 cols com delta_mu). edge_dim agora é
-    # detectado automaticamente em FNO_GNNConfig/NnCfg.__post_init__ e passado
-    # explicitamente ao construtor.
-    _GNN_IN_CH   = _NODE_IN_CH + _GRID_OUT_CH    # 7
+    # [REMOVIDO] _GRID_IN_CH/_GRID_OUT_CH/_NODE_IN_CH/_GNN_IN_CH constantes de
+    # classe hardcoded (2/2/5/7) — quebravam com datasets de parser diferente
+    # (ex: FEMM_MESH_A_PARSER: y_hw/node_y de 1 canal em vez de 2). Viraram
+    # parâmetros do construtor (grid_in_ch/grid_out_ch/node_in_ch), auto-
+    # detectados a partir dos chunks reais em FNO_GNNConfig/NnCfg.__post_init__
+    # (helper _detect_chunk_dims) — mesmo padrão já usado para edge_dim.
+    #
+    # _GRID_IN_CH  = 2
+    # _GRID_OUT_CH = 2
+    # _NODE_IN_CH  = 5
+    # _GNN_IN_CH   = _NODE_IN_CH + _GRID_OUT_CH    # 7
 
     def __init__(self,
                  fno_modes1,
@@ -77,12 +80,15 @@ class FNO_GNN(torch.nn.Module):
                  gnn_node_width,
                  # gnn_msg_width,  # [REMOVIDO] — gate escalar não usa msg_width
                  gnn_n_layers,
-                 edge_dim):
+                 edge_dim,
+                 grid_in_ch,
+                 grid_out_ch,
+                 node_in_ch):
         super().__init__()
 
         self.fno = FNO2d(
-            in_channels=self._GRID_IN_CH,
-            out_channels=self._GRID_OUT_CH,
+            in_channels=grid_in_ch,
+            out_channels=grid_out_ch,
             modes1=fno_modes1,   modes2=fno_modes2,
             conv_width=fno_conv_width, conv_layers=fno_conv_layers,
             lift_width=fno_lift_width, lift_layers=fno_lift_layers,
@@ -90,8 +96,8 @@ class FNO_GNN(torch.nn.Module):
             data_res=data_res,
         )
         self.gnn = GNN(
-            in_node_features=self._GNN_IN_CH,
-            out_node_features=self._GRID_OUT_CH,
+            in_node_features=node_in_ch + grid_out_ch,
+            out_node_features=grid_out_ch,
             edge_dim=edge_dim,
             node_width=gnn_node_width,
             n_layers=gnn_n_layers,
@@ -118,7 +124,11 @@ def make_fno_gnn_step(lambda_loss, loss_cfg=None):
         edge_attr  = batch['edge_attr'].to(device)
         L          = batch['L'].to(device)
         y_hw       = batch['y_hw'].to(device)
-        y_node     = batch['node_y'][:, :2].to(device)
+        # [REMOVIDO] batch['node_y'][:, :2] — fatiava 2 colunas fixas (Bx,By);
+        # node_y já vem do parser só com as colunas-alvo (2 pra B, 1 pra A), o
+        # slice era redundante e presumia B. grid_out_ch (auto-detectado) já
+        # garante que a saída do modelo bate com node_y.shape[1] sem slicing.
+        y_node     = batch['node_y'].to(device)
         if subtract:
             y_hw_fno, fno_at_nodes, delta = model(x_hw, node_x, edge_index, edge_attr, L,
                                                    return_components=True)
@@ -148,7 +158,7 @@ def fno_gnn_metric_fn(batch, model, device):
     edge_attr  = batch['edge_attr'].to(device)
     L          = batch['L'].to(device)
     y_hw       = batch['y_hw'].to(device)
-    y_node     = batch['node_y'][:, :2].to(device)
+    y_node     = batch['node_y'].to(device)   # [REMOVIDO] [:, :2] — ver fno_gnn_step
     with torch.no_grad():
         y_hw_fno, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
         mae_hw    = torch.mean(torch.abs(y_hw_fno - y_hw)).item()

@@ -9,15 +9,36 @@ from src.configs.loss    import (            # noqa: F401  re-exportado daqui po
 )
 
 
-def _detect_edge_dim_from_dataset(dataset: str) -> int:
-    """
-    Lê edge_attr.shape[-1] do primeiro chunk de data/torch/data_chunks/{dataset}/.
+# [REMOVIDO] _detect_edge_dim_from_dataset — só detectava edge_dim. Generalizada
+# para _detect_chunk_dims (abaixo), que lê também in/out channels de x_hw/y_hw e
+# node_x/node_y no mesmo torch.load (evita reabrir o chunk uma vez por campo) —
+# necessário desde que FEMM_MESH_A_PARSER passou a gerar chunks com y_hw/node_y
+# de 1 canal em vez de 2 (ver src/data_gen/parsers/femm_mesh_a.py), o que exige
+# que FNOConfig/FNO_GNNConfig também parem de hardcodar 2 canais.
+#
+# def _detect_edge_dim_from_dataset(dataset: str) -> int:
+#     import glob
+#     import torch
+#     chunk_paths = sorted(glob.glob(f'data/torch/data_chunks/{dataset}/data_chunk_*.pt'))
+#     if not chunk_paths:
+#         raise FileNotFoundError(...)
+#     sample = torch.load(chunk_paths[0], map_location='cpu', weights_only=False)
+#     if 'edge_attr' not in sample:
+#         raise ValueError(...)
+#     return sample['edge_attr'].shape[-1]
 
-    Fonte de verdade para arch_cfgs com GNN interno (FNO_GNN, FNO_GNN_v2,
-    MaskedFNO_GNN, GNN_PostBase) — evita hardcode de edge_dim quando parsers
-    diferentes geram edge_attr com número de colunas diferente (ex:
-    FNO_GNN_PARSER=4 cols vs FNO_GNN_V2_PARSER=5 cols, delta_mu direcional).
-    Chamado por NnCfg.__post_init__.
+
+def _detect_chunk_dims(dataset: str) -> dict:
+    """
+    Lê shapes reais do primeiro chunk de data/torch/data_chunks/{dataset}/.
+
+    Fonte de verdade para in/out channels (x_hw/y_hw), features de nó
+    (node_x/node_y) e de aresta (edge_attr) de todos os arch_cfgs com
+    dimensões dependentes do dataset (FNOConfig, FNO_GNNConfig,
+    FNO_GNN_v2Config, GNN_PostBaseConfig) — evita hardcode quando parsers
+    diferentes mudam esses números (ex: FEMM_MESH_A_PARSER: y_hw/node_y de
+    2→1 canal; FNO_GNN_V2_PARSER: edge_attr de 4→5 colunas). Chamado por
+    NnCfg.__post_init__.
     """
     import glob
     import torch
@@ -25,16 +46,27 @@ def _detect_edge_dim_from_dataset(dataset: str) -> int:
     chunk_paths = sorted(glob.glob(f'data/torch/data_chunks/{dataset}/data_chunk_*.pt'))
     if not chunk_paths:
         raise FileNotFoundError(
-            f"_detect_edge_dim_from_dataset: nenhum chunk encontrado em "
-            f"'data/torch/data_chunks/{dataset}/' — não foi possível detectar edge_dim."
+            f"_detect_chunk_dims: nenhum chunk encontrado em "
+            f"'data/torch/data_chunks/{dataset}/' — não foi possível detectar dimensões."
         )
     sample = torch.load(chunk_paths[0], map_location='cpu', weights_only=False)
-    if 'edge_attr' not in sample:
-        raise ValueError(
-            f"_detect_edge_dim_from_dataset: chunks de '{dataset}' não têm 'edge_attr' "
-            f"(dataset sem grafo) — este arch requer chunks qtree com grafo (build_graph=True)."
-        )
-    return sample['edge_attr'].shape[-1]
+
+    dims = {
+        'x_hw_ch': sample['x_hw'].shape[1],
+        'y_hw_ch': sample['y_hw'].shape[1],
+    }
+    if 'node_x' in sample:
+        dims['node_x_ch'] = sample['node_x'].shape[1]
+        dims['node_y_ch'] = sample['node_y'].shape[1]
+        if dims['node_y_ch'] != dims['y_hw_ch']:
+            raise ValueError(
+                f"_detect_chunk_dims: node_y tem {dims['node_y_ch']} coluna(s) mas "
+                f"y_hw tem {dims['y_hw_ch']} canal(is) em '{dataset}' — parser "
+                f"inconsistente (esperado o mesmo número dos dois lados)."
+            )
+    if 'edge_attr' in sample:
+        dims['edge_dim'] = sample['edge_attr'].shape[-1]
+    return dims
 
 
 def _from_dict_generic(cls, d: dict):
@@ -63,8 +95,12 @@ def _from_dict_generic(cls, d: dict):
 
 @dataclass
 class FNOConfig:
-    in_channels: int = 2
-    out_channels: int = 2
+    # in_channels/out_channels: auto-detectados a partir de x_hw/y_hw do dataset
+    # em NnCfg.__post_init__ (helper _detect_chunk_dims) — igual edge_dim em
+    # FNO_GNNConfig. init=False pra impedir mismatch manual (ex: setar
+    # out_channels=2 num dataset FEMM_MESH_A, que tem y_hw de 1 canal).
+    in_channels: int = field(default=2, init=False)
+    out_channels: int = field(default=2, init=False)
     modes1: int = 270
     modes2: int = 270
     conv_width: int = 6
@@ -75,6 +111,14 @@ class FNOConfig:
     proj_width: int = 64
     proj_layers: int = 3
     data_res: tuple = (135, 270)
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        # in_channels/out_channels são init=False — scripts/eval.py detecta este
+        # método (hasattr) e o usa em vez de cfg_cls(**arch_cfg_dict), que quebraria
+        # por esses campos não serem kwargs do construtor. Mesmo padrão de
+        # FNO_GNNConfig.from_dict (edge_dim).
+        return _from_dict_generic(cls, d)
 
 
 @dataclass
@@ -135,13 +179,18 @@ class FNO_GNNConfig:
     gnn_n_layers: int = 3
     lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
 
-    # edge_dim do GNN interno — detectado automaticamente em NnCfg.__post_init__
-    # (helper _detect_edge_dim_from_dataset) a partir do edge_attr dos chunks do
-    # dataset de treino (self.dataset). Default 4 só é usado se este arch_cfg for
-    # reconstruído fora de NnCfg (ex: scripts/eval.py faz cfg_cls(**arch_cfg_dict)
-    # direto do config.json salvo — nesse caso o valor gravado na própria run é
-    # usado, não o default).
-    edge_dim: int = field(default=4, init=False)
+    # edge_dim / grid_in_ch / grid_out_ch / node_in_ch — todos detectados
+    # automaticamente em NnCfg.__post_init__ (helper _detect_chunk_dims) a
+    # partir dos chunks reais do dataset de treino (self.dataset): edge_dim de
+    # edge_attr, grid_in_ch de x_hw, grid_out_ch de y_hw, node_in_ch de node_x.
+    # Defaults abaixo (4/2/2/5) só são usados se este arch_cfg for reconstruído
+    # fora de NnCfg (ex: scripts/eval.py faz cfg_cls.from_dict(arch_cfg_dict)
+    # direto do config.json salvo — nesse caso os valores gravados na própria
+    # run são usados, não o default).
+    edge_dim:     int = field(default=4, init=False)
+    grid_in_ch:   int = field(default=2, init=False)
+    grid_out_ch:  int = field(default=2, init=False)
+    node_in_ch:   int = field(default=5, init=False)
 
     @classmethod
     def from_dict(cls, d: dict):
@@ -182,10 +231,19 @@ class GNN_PostBaseConfig:
     base_arch_cfg : dict          = field(default_factory=dict, init=False)
     base_epoch    : Optional[int] = field(default=None, init=False)
 
-    # edge_dim do GNN interno — auto-detectado em NnCfg.__post_init__ (helper
-    # _detect_edge_dim_from_dataset), a partir do dataset de treino (self.dataset
-    # do NnCfg, não de base_run_dir) — ver FNO_GNNConfig para detalhes.
-    edge_dim: int = field(default=4, init=False)
+    # edge_dim / node_in_ch do GNN interno — auto-detectados em NnCfg.__post_init__
+    # (helper _detect_chunk_dims), a partir do dataset de treino (self.dataset do
+    # NnCfg, não de base_run_dir) — ver FNO_GNNConfig para detalhes.
+    edge_dim:   int = field(default=4, init=False)
+    node_in_ch: int = field(default=5, init=False)
+
+    # base_out_ch: número de canais de saída do modelo base congelado (2 para
+    # Bx,By; 1 para A) — lido do PRÓPRIO base_run_dir/config.json (não do
+    # dataset desta run nova), já que é uma propriedade fixa da arquitetura já
+    # treinada, não algo a redetectar. 'FNO2d' grava em 'out_channels';
+    # 'FNO_GNN'/'FNO_GNN_v2'/'FNO_GNN_Field' gravam em 'grid_out_ch'. Default 2
+    # cobre configs salvos antes desse campo existir (runs antigas, sempre B).
+    base_out_ch: int = field(default=2, init=False)
 
     def __post_init__(self):
         import json
@@ -196,6 +254,11 @@ class GNN_PostBaseConfig:
         cfg_dict = json.loads((run_dir / 'config.json').read_text())
         self.base_arch     = cfg_dict['arch']
         self.base_arch_cfg = cfg_dict['arch_cfg']
+        self.base_out_ch   = (
+            self.base_arch_cfg.get('out_channels')
+            if self.base_arch == 'FNO2d'
+            else self.base_arch_cfg.get('grid_out_ch')
+        ) or 2
 
         ckpt_path = (run_dir / 'model_final.pth') if self.base_checkpoint == 'final' \
             else (run_dir / 'checkpoints' / f'{self.base_checkpoint}.pth')
@@ -335,11 +398,31 @@ class NnCfg:
                 f"arch='{self.arch}' espera arch_cfg do tipo {expected.__name__}, "
                 f"recebido {type(self.arch_cfg).__name__}"
             )
-        if hasattr(self.arch_cfg, 'edge_dim'):
-            # archs qtree com GNN interno (FNO_GNN, FNO_GNN_v2, MaskedFNO_GNN,
-            # GNN_PostBase) — edge_dim sempre recalculado a partir dos chunks reais
-            # de self.dataset, nunca deixado no default da dataclass.
-            self.arch_cfg.edge_dim = _detect_edge_dim_from_dataset(self.dataset)
+        # [REMOVIDO] só cobria edge_dim — generalizado abaixo para também cobrir
+        # in/out channels da grade (FNOConfig.in_channels/out_channels;
+        # FNO_GNNConfig/GNN_PostBaseConfig.grid_in_ch/grid_out_ch) e features de nó
+        # (node_in_ch), todos sempre recalculados a partir dos chunks reais de
+        # self.dataset, nunca deixados no default da dataclass.
+        #
+        # if hasattr(self.arch_cfg, 'edge_dim'):
+        #     self.arch_cfg.edge_dim = _detect_edge_dim_from_dataset(self.dataset)
+        _dim_fields = ('grid_in_ch', 'grid_out_ch', 'node_in_ch', 'edge_dim')
+        if isinstance(self.arch_cfg, FNOConfig) or any(hasattr(self.arch_cfg, f) for f in _dim_fields):
+            dims = _detect_chunk_dims(self.dataset)
+            if isinstance(self.arch_cfg, FNOConfig):
+                # FNO2d "puro" (mode='grid') — campos com nomes próprios (não
+                # grid_in_ch/grid_out_ch) porque são passados direto ao construtor
+                # de FNO2d via asdict(cfg), que espera in_channels/out_channels.
+                self.arch_cfg.in_channels  = dims['x_hw_ch']
+                self.arch_cfg.out_channels = dims['y_hw_ch']
+            if hasattr(self.arch_cfg, 'grid_in_ch'):
+                self.arch_cfg.grid_in_ch = dims['x_hw_ch']
+            if hasattr(self.arch_cfg, 'grid_out_ch'):
+                self.arch_cfg.grid_out_ch = dims['y_hw_ch']
+            if hasattr(self.arch_cfg, 'node_in_ch'):
+                self.arch_cfg.node_in_ch = dims['node_x_ch']
+            if hasattr(self.arch_cfg, 'edge_dim'):
+                self.arch_cfg.edge_dim = dims['edge_dim']
         if self.loss_cfg is None:
             cls = LOSS_CFG_REGISTRY.get(self.loss, MseLossCfg)
             self.loss_cfg = cls()

@@ -98,24 +98,27 @@ class GNN_PostBase(torch.nn.Module):
         y_nodes = base_at_nodes + Δ
     """
 
-    _NODE_IN_CH  = 5
-    # [REMOVIDO] _EDGE_DIM = 4 hardcoded — quebrava com chunks de parsers com edge_attr
-    # de dimensão diferente (ex: FNO_GNN_V2_PARSER, 5 cols com delta_mu). edge_dim agora
-    # é detectado automaticamente em GNN_PostBaseConfig.__post_init__ a partir dos
-    # chunks do dataset e passado explicitamente aqui.
-    _BASE_OUT_CH = 2
-    _GNN_IN_CH   = _NODE_IN_CH + _BASE_OUT_CH
+    # [REMOVIDO] _NODE_IN_CH/_BASE_OUT_CH/_GNN_IN_CH constantes de classe
+    # hardcoded (5/2/7) — mesmo motivo de FNO_GNN: quebravam com datasets/bases
+    # de canal diferente (ex: base treinada em A, 1 canal, em vez de B).
+    # Viraram parâmetros do construtor (node_in_ch/base_out_ch), auto-
+    # detectados em GNN_PostBaseConfig (node_in_ch a partir do dataset desta
+    # run, base_out_ch a partir do config.json de base_run_dir).
+    #
+    # _NODE_IN_CH  = 5
+    # _BASE_OUT_CH = 2
+    # _GNN_IN_CH   = _NODE_IN_CH + _BASE_OUT_CH
 
     def __init__(self, base_run_dir, base_checkpoint, gnn_node_width, gnn_n_layers,
-                 edge_dim, base_arch=None, base_arch_cfg=None):
+                 edge_dim, node_in_ch, base_out_ch, base_arch=None, base_arch_cfg=None):
         super().__init__()
         self.base_arch, self.base_model = _load_frozen_base(
             base_run_dir, base_checkpoint,
             fallback_arch=base_arch, fallback_arch_cfg=base_arch_cfg,
         )
         self.gnn = GNN(
-            in_node_features=self._GNN_IN_CH,
-            out_node_features=self._BASE_OUT_CH,
+            in_node_features=node_in_ch + base_out_ch,
+            out_node_features=base_out_ch,
             edge_dim=edge_dim,
             node_width=gnn_node_width,
             n_layers=gnn_n_layers,
@@ -149,7 +152,7 @@ def make_gnn_post_base_step_fn(loss_cfg=None):
         edge_index = batch['edge_index'].to(device)
         edge_attr  = batch['edge_attr'].to(device)
         L          = batch['L'].to(device)
-        y_node     = batch['node_y'][:, :2].to(device)
+        y_node     = batch['node_y'].to(device)   # [REMOVIDO] [:, :2] — ver fno_gnn_step
         if subtract:
             _, base_at_nodes, delta = model(x_hw, node_x, edge_index, edge_attr, L,
                                              return_components=True)
@@ -177,7 +180,7 @@ def gnn_post_base_metric_fn(batch, model, device):
     edge_attr  = batch['edge_attr'].to(device)
     L          = batch['L'].to(device)
     y_hw       = batch['y_hw'].to(device)
-    y_node     = batch['node_y'][:, :2].to(device)
+    y_node     = batch['node_y'].to(device)   # [REMOVIDO] [:, :2] — ver fno_gnn_step
     with torch.no_grad():
         y_hw_base, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
         mae_hw    = torch.mean(torch.abs(y_hw_base - y_hw)).item()

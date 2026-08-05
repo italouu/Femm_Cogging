@@ -216,7 +216,11 @@ def fno_eval_fn(model, d, eval_cfg):
     # e compara contra node_y (GT exato por folha, nunca promediado). Revela o
     # erro que a saída em grade uniforme escapa em células mistas/interfaces.
     # Cada folha conta como 1 amostra (sem peso por área).
-    qtree_ok = eval_cfg.qtree_metric_enabled and ('node_x' in d) and ('node_y' in d)
+    # 'node_A' in d -> chunk é malha real do FEMM (mode='femm_mesh'): node_x[:,2] ali
+    # é node_dual_area (mm² real), não cell_area (potência de 4) como no qtree —
+    # _qtree_render_as_grid/depths abaixo pressupõem qtree e dariam lixo nesse caso.
+    qtree_ok = (eval_cfg.qtree_metric_enabled and ('node_x' in d) and ('node_y' in d)
+                and ('node_A' not in d))
     en_qt_render = None
     if qtree_ok:
         H, W  = int(d['dim'][0]), int(d['dim'][1])
@@ -318,6 +322,11 @@ def _plot_fno_gnn_mesh(model, y_hw_fno, y_nodes, node_x, node_y, Li, thr, eval_c
     modelo) antes de comparar — FNO, GNN e GT ficam no mesmo conjunto de pontos.
 
     node_x: col 0=mu_r, col 1=M, col 2=node_dual_area, col 3=r_base, col 4=c_base
+
+    Suporta alvo vetorial (node_y [S,2] = Bx,By, ex: FEMM_MESH_PARSER) ou
+    escalar (node_y [S,1] = A, ex: FEMM_MESH_A_PARSER) — detectado via
+    node_y.shape[1]. No caso escalar os painéis de By/|B| ficam em branco
+    (axis('off')), só a coluna 0 (valor) e a de erro são preenchidas.
     """
     from src.neural_op.archs.fno_gnn import _interpolate_fno_to_nodes
 
@@ -327,19 +336,21 @@ def _plot_fno_gnn_mesh(model, y_hw_fno, y_nodes, node_x, node_y, Li, thr, eval_c
     mu_n = node_x[:, 0].numpy()
     m_n  = node_x[:, 1].numpy()
 
-    bx_true = node_y[:, 0].numpy()
-    by_true = node_y[:, 1].numpy()
+    vec = node_y.shape[1] >= 2   # False -> alvo escalar (A), True -> vetorial (Bx,By)
+    c0_label = 'Bx' if vec else 'A'
 
     fno_at_nodes = _interpolate_fno_to_nodes(y_hw_fno, node_x, Li)
-    bx_fno = fno_at_nodes[:, 0].numpy()
-    by_fno = fno_at_nodes[:, 1].numpy()
 
-    bx_gnn = y_nodes[:, 0].numpy()
-    by_gnn = y_nodes[:, 1].numpy()
+    c0_true, c0_fno, c0_gnn = node_y[:, 0].numpy(), fno_at_nodes[:, 0].numpy(), y_nodes[:, 0].numpy()
+    if vec:
+        c1_true, c1_fno, c1_gnn = node_y[:, 1].numpy(), fno_at_nodes[:, 1].numpy(), y_nodes[:, 1].numpy()
+        mag_true = np.sqrt(c0_true**2 + c1_true**2)
+        mag_fno  = np.sqrt(c0_fno**2  + c1_fno**2)
+        mag_gnn  = np.sqrt(c0_gnn**2  + c1_gnn**2)
+    else:
+        c1_true = c1_fno = c1_gnn = None
+        mag_true, mag_fno, mag_gnn = np.abs(c0_true), np.abs(c0_fno), np.abs(c0_gnn)
 
-    mag_true = np.sqrt(bx_true**2 + by_true**2)
-    mag_fno  = np.sqrt(bx_fno**2  + by_fno**2)
-    mag_gnn  = np.sqrt(bx_gnn**2  + by_gnn**2)
     err_fno  = np.abs(mag_fno - mag_true)
     err_gnn  = np.abs(mag_gnn - mag_true)
 
@@ -359,8 +370,8 @@ def _plot_fno_gnn_mesh(model, y_hw_fno, y_nodes, node_x, node_y, Li, thr, eval_c
     err_vmax = _err_vmax([en_fno, en_gnn], eval_cfg)
 
     def _lim(*a): return min(x.min() for x in a), max(x.max() for x in a)
-    bx_lim  = _lim(bx_true, bx_fno, bx_gnn)
-    by_lim  = _lim(by_true, by_fno, by_gnn)
+    c0_lim  = _lim(c0_true, c0_fno, c0_gnn)
+    c1_lim  = _lim(c1_true, c1_fno, c1_gnn) if vec else None
     mag_lim = _lim(mag_true, mag_fno, mag_gnn)
 
     fig, axes = plt.subplots(4, 4, figsize=(18, 13))
@@ -373,31 +384,34 @@ def _plot_fno_gnn_mesh(model, y_hw_fno, y_nodes, node_x, node_y, Li, thr, eval_c
     # Linha 0 — entradas (nós) + máscara + densidade de nós
     _scatter(axes[0, 0], r, c, mu_n, 'Entrada: Mu_r (nós)')
     _scatter(axes[0, 1], r, c, m_n,  'Entrada: M (nós)')
-    _scatter(axes[0, 2], r, c, mask.astype(float), f'Máscara |B|>={thr}',
+    _scatter(axes[0, 2], r, c, mask.astype(float), f'Máscara |{c0_label}|>={thr}',
              cmap='gray', vmin=0, vmax=1)
     axes[0, 3].scatter(c, r, s=5, color='steelblue', alpha=0.4, edgecolors='none')
     axes[0, 3].set_title(f'Densidade de nós (malha) — {len(r)} nós', fontsize=9)
     axes[0, 3].set_xlim(0, 1); axes[0, 3].set_ylim(0, 1)
 
-    # Linha 1 — GT nos nós (exato, node_y)
-    _scatter(axes[1, 0], r, c, bx_true,  'GT: Bx (nós)',  vmin=bx_lim[0],  vmax=bx_lim[1])
-    _scatter(axes[1, 1], r, c, by_true,  'GT: By (nós)',  vmin=by_lim[0],  vmax=by_lim[1])
-    _scatter(axes[1, 2], r, c, mag_true, 'GT: |B| (nós)', vmin=mag_lim[0], vmax=mag_lim[1])
+    # Linhas 1-3 — GT / FNO@nós / GNN, coluna 0 sempre preenchida (Bx ou A);
+    # colunas 1 (By) e 2 (|B|) só existem no caso vetorial — ver docstring.
+    for row, (label, v0, v1, vmag) in enumerate([
+        ('GT',      c0_true, c1_true, mag_true),
+        ('FNO@nós', c0_fno,  c1_fno,  mag_fno),
+        ('GNN',     c0_gnn,  c1_gnn,  mag_gnn),
+    ], start=1):
+        _scatter(axes[row, 0], r, c, v0, f'{label}: {c0_label} (nós)', vmin=c0_lim[0], vmax=c0_lim[1])
+        if vec:
+            _scatter(axes[row, 1], r, c, v1,    f'{label}: By (nós)',  vmin=c1_lim[0],  vmax=c1_lim[1])
+            _scatter(axes[row, 2], r, c, vmag,  f'{label}: |B| (nós)', vmin=mag_lim[0], vmax=mag_lim[1])
+        else:
+            axes[row, 1].axis('off')
+            axes[row, 2].axis('off')
+
     axes[1, 3].axis('off')
 
-    # Linha 2 — FNO interpolado na posição exata de cada nó
-    _scatter(axes[2, 0], r, c, bx_fno,  'FNO@nós: Bx',  vmin=bx_lim[0],  vmax=bx_lim[1])
-    _scatter(axes[2, 1], r, c, by_fno,  'FNO@nós: By',  vmin=by_lim[0],  vmax=by_lim[1])
-    _scatter(axes[2, 2], r, c, mag_fno, 'FNO@nós: |B|', vmin=mag_lim[0], vmax=mag_lim[1])
     size_fno = _err_sizes(en_fno, err_vmax)
     _scatter(axes[2, 3], r, c, en_fno,
              f'FNO {en_label} (nó-a-nó)\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
              cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_fno)
 
-    # Linha 3 — GNN nos nós reais
-    _scatter(axes[3, 0], r, c, bx_gnn,  'GNN: Bx (nós)',  vmin=bx_lim[0],  vmax=bx_lim[1])
-    _scatter(axes[3, 1], r, c, by_gnn,  'GNN: By (nós)',  vmin=by_lim[0],  vmax=by_lim[1])
-    _scatter(axes[3, 2], r, c, mag_gnn, 'GNN: |B| (nós)', vmin=mag_lim[0], vmax=mag_lim[1])
     size_gnn = _err_sizes(en_gnn, err_vmax)
     _scatter(axes[3, 3], r, c, en_gnn,
              f'GNN {en_label} (nó-a-nó)\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',

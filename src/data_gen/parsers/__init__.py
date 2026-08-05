@@ -21,6 +21,7 @@ from .fno2d            import FNO2D_PARSER
 from .masked_fno2d     import MASKED_FNO2D_PARSER
 from .masked_fno_gnn   import MASKED_FNO_GNN_PARSER
 from .femm_mesh        import FEMM_MESH_PARSER
+from .femm_mesh_a       import FEMM_MESH_A_PARSER
 
 PARSER_REGISTRY = {
     'FNO_GNN':        FNO_GNN_PARSER,
@@ -29,6 +30,7 @@ PARSER_REGISTRY = {
     'MaskedFNO2d':    MASKED_FNO2D_PARSER,
     'MaskedFNO_GNN':  MASKED_FNO_GNN_PARSER,
     'FEMM_MESH':      FEMM_MESH_PARSER,    # mode='femm_mesh' — layout de 9/4 colunas, sem shared_length
+    'FEMM_MESH_A':    FEMM_MESH_A_PARSER,  # mode='femm_mesh' — alvo A (1 canal) em vez de B
 }
 
 __all__ = [
@@ -40,5 +42,6 @@ __all__ = [
     'MASKED_FNO2D_PARSER',
     'MASKED_FNO_GNN_PARSER',
     'FEMM_MESH_PARSER',
+    'FEMM_MESH_A_PARSER',
     'PARSER_REGISTRY',
 ]

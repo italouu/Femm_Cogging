@@ -39,6 +39,23 @@ class DatagenConfig:
     #                           colunas do staging bruto já gerado em
     #                           data/raw/<dataset>/ (sample_*.npz) — usar
     #                           'FEMM_MESH' ou variante futura
+    #
+    # Parsers disponíveis (PARSER_REGISTRY, src/data_gen/parsers/__init__.py):
+    #   Chave           | Parser                | Uso
+    #   ----------------|-----------------------|---------------------------------------
+    #   FNO_GNN         | FNO_GNN_PARSER        | pipeline qtree — arch FNO_GNN
+    #   FNO_GNN_v2      | FNO_GNN_V2_PARSER     | idem + delta_mu direcional em edge_attr
+    #                   |                       | ([E,5]) — arch FNO_GNN_v2
+    #   FNO2D           | FNO2D_PARSER          | pipeline grid — arch FNO2d
+    #   MaskedFNO2d     | MASKED_FNO2D_PARSER   | pipeline grid — arch MaskedFNO2d
+    #   MaskedFNO_GNN   | MASKED_FNO_GNN_PARSER | pipeline qtree — arch MaskedFNO_GNN
+    #   FEMM_MESH       | FEMM_MESH_PARSER      | mode='femm_mesh' — malha real do FEMM,
+    #                   |                       | alvo B (Bx,By)
+    #   FEMM_MESH_A     | FEMM_MESH_A_PARSER    | mode='femm_mesh' — mesma entrada,
+    #                   |                       | alvo escalar A
+    #
+    # Só FEMM_MESH/FEMM_MESH_A são compatíveis com mode='femm_mesh'; os demais
+    # são do pipeline CSV (grid/qtree).
     npz_parser:             str           = 'FEMM_MESH'
     npz_samples_per_worker: int           = 2
     npz_max_workers:        int           = 12

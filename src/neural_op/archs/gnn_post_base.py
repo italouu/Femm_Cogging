@@ -110,12 +110,24 @@ class GNN_PostBase(torch.nn.Module):
     # _GNN_IN_CH   = _NODE_IN_CH + _BASE_OUT_CH
 
     def __init__(self, base_run_dir, base_checkpoint, gnn_node_width, gnn_n_layers,
-                 edge_dim, node_in_ch, base_out_ch, base_arch=None, base_arch_cfg=None):
+                 edge_dim, node_in_ch, base_out_ch, base_arch=None, base_arch_cfg=None,
+                 base_normalize=False, base_norm_stats=None):
         super().__init__()
         self.base_arch, self.base_model = _load_frozen_base(
             base_run_dir, base_checkpoint,
             fallback_arch=base_arch, fallback_arch_cfg=base_arch_cfg,
         )
+        # Normalização (src/neural_op/normalization.py) usada no TREINO do
+        # modelo base — pode diferir da normalização desta run (self.normalizer,
+        # atribuído externamente após a construção — ver scripts/train.py/eval.py).
+        # _base_pred_at_nodes faz o round-trip decode(normalizer)/encode(base
+        # normalizer) só ao redor da chamada a self.base_model, pra ele sempre
+        # receber x_hw na escala exata que aprendeu.
+        from src.neural_op.normalization import Normalizer
+        self._base_normalizer = (
+            Normalizer.from_dict(base_norm_stats) if base_normalize and base_norm_stats else None
+        )
+        self.normalizer = None   # atribuído externamente (ver scripts/train.py/eval.py)
         self.gnn = GNN(
             in_node_features=node_in_ch + base_out_ch,
             out_node_features=base_out_ch,
@@ -125,12 +137,35 @@ class GNN_PostBase(torch.nn.Module):
         )
 
     def _base_pred_at_nodes(self, x_hw, node_x, edge_index, edge_attr, L):
+        # Round-trip pra escala do modelo base: x_hw chega normalizado pelas
+        # stats DESTA run (self.normalizer, se houver) — decodifica pra bruto e
+        # reencoda pelas stats que o base aprendeu (self._base_normalizer, se
+        # houver) antes de chamá-lo; o inverso na saída, de volta pra escala
+        # desta run (usada na concatenação com node_x pro GNN treinável).
+        # Sem normalização em nenhum dos dois lados: no-op, comportamento
+        # idêntico ao anterior a essa mudança.
+        normalizer = self.normalizer
+        base_norm  = self._base_normalizer
+
+        x_hw_base = normalizer.decode(x_hw, 'x_hw') if normalizer is not None else x_hw
+        if base_norm is not None:
+            x_hw_base = base_norm.encode(x_hw_base, 'x_hw')
+
         with torch.no_grad():
             if self.base_arch == 'FNO2d':
-                y_hw_base    = self.base_model(x_hw)
+                y_hw_base     = self.base_model(x_hw_base)
                 base_at_nodes = _interpolate_fno_to_nodes(y_hw_base, node_x, L)
-            else:  # 'FNO_GNN'
-                y_hw_base, base_at_nodes = self.base_model(x_hw, node_x, edge_index, edge_attr, L)
+                base_key      = 'y_hw'
+            else:  # 'FNO_GNN' / 'FNO_GNN_v2'
+                y_hw_base, base_at_nodes = self.base_model(x_hw_base, node_x, edge_index, edge_attr, L)
+                base_key      = 'node_y'
+
+        if base_norm is not None:
+            y_hw_base     = base_norm.decode(y_hw_base, 'y_hw')
+            base_at_nodes = base_norm.decode(base_at_nodes, base_key)
+        if normalizer is not None:
+            y_hw_base     = normalizer.encode(y_hw_base, 'y_hw')
+            base_at_nodes = normalizer.encode(base_at_nodes, 'node_y')
         return y_hw_base, base_at_nodes
 
     def forward(self, x_hw, node_x, edge_index, edge_attr, L, return_components=False):
@@ -173,7 +208,12 @@ def gnn_post_base_metric_fn(batch, model, device):
     MAE bruto: mae_hw compara a saída em grade H×W do modelo base congelado
     (FNO2d ou estágio FNO do FNO_GNN) contra y_hw; mae_graph compara a saída
     final do GNN_PostBase (base + delta) nos nós contra node_y.
+
+    batch já chega normalizado (CUDAPrefetcher.encode_batch, se normalize=True)
+    — decodifica pred/y de volta pra unidade física (Tesla) antes do MAE, pra
+    manter o significado documentado de mae_hw/mae_graph em metrics.jsonl.
     """
+    normalizer = getattr(model, 'normalizer', None)
     x_hw       = batch['x_hw'].to(device)
     node_x     = batch['node_x'].to(device)
     edge_index = batch['edge_index'].to(device)
@@ -183,6 +223,11 @@ def gnn_post_base_metric_fn(batch, model, device):
     y_node     = batch['node_y'].to(device)   # [REMOVIDO] [:, :2] — ver fno_gnn_step
     with torch.no_grad():
         y_hw_base, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
+        if normalizer is not None:
+            y_hw_base = normalizer.decode(y_hw_base, 'y_hw')
+            y_nodes   = normalizer.decode(y_nodes,   'node_y')
+            y_hw      = normalizer.decode(y_hw,      'y_hw')
+            y_node    = normalizer.decode(y_node,    'node_y')
         mae_hw    = torch.mean(torch.abs(y_hw_base - y_hw)).item()
         mae_graph = torch.mean(torch.abs(y_nodes   - y_node)).item()
     return mae_hw, mae_graph

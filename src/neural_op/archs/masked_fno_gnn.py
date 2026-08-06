@@ -104,7 +104,11 @@ def masked_fno_gnn_metric_fn(batch, model, device):
     """
     MAE bruto: mae_hw compara o FNO assemblado por material (grade H×W) contra y_hw;
     mae_graph compara a saída final da GNN nos nós contra node_y.
+
+    batch já chega normalizado (CUDAPrefetcher.encode_batch, se normalize=True)
+    — decodifica pred/y de volta pra unidade física antes do MAE.
     """
+    normalizer = getattr(model, 'normalizer', None)
     x_hw       = batch['x_hw'].to(device)
     node_x     = batch['node_x'].to(device)
     edge_index = batch['edge_index'].to(device)
@@ -115,6 +119,11 @@ def masked_fno_gnn_metric_fn(batch, model, device):
     with torch.no_grad():
         y_hw_8, masks, y_nodes_2 = model(x_hw, node_x, edge_index, edge_attr, L)
         y_hw_assembled = model.assemble_grid(y_hw_8, masks)
+        if normalizer is not None:
+            y_hw_assembled = normalizer.decode(y_hw_assembled, 'y_hw')
+            y_nodes_2       = normalizer.decode(y_nodes_2,      'node_y')
+            y_hw            = normalizer.decode(y_hw,           'y_hw')
+            y_node          = normalizer.decode(y_node,         'node_y')
         mae_hw    = torch.mean(torch.abs(y_hw_assembled - y_hw)).item()
         mae_graph = torch.mean(torch.abs(y_nodes_2 - y_node)).item()
     return mae_hw, mae_graph

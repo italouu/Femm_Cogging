@@ -181,8 +181,16 @@ def fno_eval_fn(model, d, eval_cfg):
     x = d['x_hw'][i]   # [C_in, H, W]
     y = d['y_hw'][i]   # [C_out, H, W]
 
+    # eval.py carrega o chunk bruto direto (sem passar pelo CUDAPrefetcher que
+    # normaliza no treino) — encode manual da entrada / decode da saída, usando
+    # as mesmas stats gravadas em config.json (model.normalizer, atribuído em
+    # scripts/eval.py). x/y seguem crus pro resto da função (plots/máscaras).
+    normalizer = getattr(model, 'normalizer', None)
     with torch.no_grad():
-        pred = model(x.unsqueeze(0)).squeeze(0)   # [C_out, H, W]
+        x_in = normalizer.encode(x.unsqueeze(0), 'x_hw') if normalizer is not None else x.unsqueeze(0)
+        pred = model(x_in).squeeze(0)   # [C_out, H, W]
+        if normalizer is not None:
+            pred = normalizer.decode(pred.unsqueeze(0), 'y_hw').squeeze(0)
 
     C_in  = x.shape[0]
     C_out = y.shape[0]
@@ -457,8 +465,19 @@ def fno_gnn_eval_fn(model, d, eval_cfg):
     edge_attr  = d['edge_attr'][es:ee]
     Li         = L[i:i + 1]
 
+    # eval.py carrega o chunk bruto direto (sem CUDAPrefetcher) — encode manual
+    # da entrada / decode da saída. node_x_in só existe pra alimentar o modelo;
+    # node_x cru segue pro resto da função (plots usam mu_r/cell_area/r_base/
+    # c_base crus de qualquer forma — normalização não toca essas colunas — mas
+    # M cru é preservado nos plots em vez do valor normalizado).
+    normalizer = getattr(model, 'normalizer', None)
     with torch.no_grad():
-        y_hw_fno, y_nodes = model(x_hw, node_x, edge_index, edge_attr, Li)
+        x_hw_in   = normalizer.encode(x_hw,   'x_hw')   if normalizer is not None else x_hw
+        node_x_in = normalizer.encode(node_x, 'node_x') if normalizer is not None else node_x
+        y_hw_fno, y_nodes = model(x_hw_in, node_x_in, edge_index, edge_attr, Li)
+        if normalizer is not None:
+            y_hw_fno = normalizer.decode(y_hw_fno, 'y_hw')
+            y_nodes  = normalizer.decode(y_nodes,  'node_y')
 
     if is_mesh:
         _plot_fno_gnn_mesh(model, y_hw_fno, y_nodes, node_x, node_y, Li, thr, eval_cfg, i)
@@ -577,8 +596,16 @@ def single_mat_fno_eval_fn(model, d, eval_cfg):
     x = d['x_hw'][i]   # [2, H, W]
     y = d['y_hw'][i]   # [2, H, W]
 
+    # encode manual (eval.py não passa pelo CUDAPrefetcher) — masks calculada
+    # sobre x cru: coluna mu_r (x[0]) fica de fora da normalização pra esse
+    # arch mesmo se normalizer.encode fosse chamado nela, mas usamos x cru
+    # aqui de qualquer forma, por clareza.
+    normalizer = getattr(model, 'normalizer', None)
     with torch.no_grad():
-        pred  = model(x.unsqueeze(0)).squeeze(0)                      # [2, H, W]
+        x_in  = normalizer.encode(x.unsqueeze(0), 'x_hw') if normalizer is not None else x.unsqueeze(0)
+        pred  = model(x_in).squeeze(0)                                 # [2, H, W]
+        if normalizer is not None:
+            pred = normalizer.decode(pred.unsqueeze(0), 'y_hw').squeeze(0)
         masks = _make_material_masks(x[0].unsqueeze(0)).squeeze(0)    # [4, H, W]
 
     # material_id armazenado como atributo na instância do modelo (injetado pelo __init__.py)
@@ -675,10 +702,18 @@ def masked_fno_eval_fn(model, d, eval_cfg):
     x = d['x_hw'][i]   # [2, H, W]
     y = d['y_hw'][i]   # [2, H, W]
 
+    # encode manual da entrada (eval.py não passa pelo CUDAPrefetcher); masks
+    # calculada sobre x cru; assemble já reduz 8→2 canais escolhendo por pixel
+    # entre 4 blocos idênticos em stats (derivados de 'y_hw'), então decode
+    # direto (não tiled) depois do assemble já é correto.
+    normalizer = getattr(model, 'normalizer', None)
     with torch.no_grad():
-        pred8     = model(x.unsqueeze(0))                          # [1, 8, H, W]
+        x_in      = normalizer.encode(x.unsqueeze(0), 'x_hw') if normalizer is not None else x.unsqueeze(0)
+        pred8     = model(x_in)                                     # [1, 8, H, W]
         masks     = _make_material_masks(x[0].unsqueeze(0))          # [1, 4, H, W]
         assembled = model.assemble(pred8, masks).squeeze(0)        # [2, H, W]
+        if normalizer is not None:
+            assembled = normalizer.decode(assembled.unsqueeze(0), 'y_hw').squeeze(0)
 
     pred8 = pred8.squeeze(0)   # [8, H, W]
     masks = masks.squeeze(0)   # [4, H, W]
@@ -769,14 +804,24 @@ def masked_fno_gnn_eval_fn(model, d, eval_cfg):
     edge_attr  = d['edge_attr'][es:ee]
     Li         = L[i:i + 1]
 
+    # encode manual da entrada (eval.py não passa pelo CUDAPrefetcher)
+    normalizer = getattr(model, 'normalizer', None)
     with torch.no_grad():
-        y_hw_8, masks, y_nodes_2 = model(x_hw, node_x, edge_index, edge_attr, Li)
+        x_hw_in   = normalizer.encode(x_hw,   'x_hw')   if normalizer is not None else x_hw
+        node_x_in = normalizer.encode(node_x, 'node_x') if normalizer is not None else node_x
+        y_hw_8, masks, y_nodes_2 = model(x_hw_in, node_x_in, edge_index, edge_attr, Li)
         # y_hw_8:    [1, 8, H, W]  — saída FNO por material
         # masks:     [1, 4, H, W]  — calculado internamente no forward
         # y_nodes_2: [S_i, 2]      — já assemblado (GNN opera pós-assemble)
 
     fno_assembled  = model.assemble_grid(y_hw_8, masks).squeeze(0)   # [2, H, W]
     node_assembled = y_nodes_2                                         # [S_i, 2]
+    if normalizer is not None:
+        # assemble_grid já reduz 8→2 canais escolhendo por pixel entre 4 blocos
+        # idênticos em stats (derivados de 'y_hw') — decode direto após o
+        # assemble é equivalente e mais simples que decode_tiled antes dele.
+        fno_assembled  = normalizer.decode(fno_assembled.unsqueeze(0), 'y_hw').squeeze(0)
+        node_assembled = normalizer.decode(node_assembled, 'node_y')
 
     # ── Renders em qtree real ────────────────────────────────────────────────
     node_x_qt  = _qtree_render_as_grid(node_x[:, :2], node_x, H, W)   # [2, H*s, W*s]

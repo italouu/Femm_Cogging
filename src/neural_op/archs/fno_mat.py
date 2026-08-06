@@ -78,8 +78,14 @@ def make_single_mat_step_fn(material_id):
 
 
 def make_single_mat_metric_fn(material_id):
-    """MAE bruto restrito à região do material alvo. Sem grafo — mae_graph=None."""
+    """
+    MAE bruto restrito à região do material alvo. Sem grafo — mae_graph=None.
+
+    batch já chega normalizado (CUDAPrefetcher.encode_batch, se normalize=True)
+    — decodifica pred/y de volta pra unidade física antes do MAE.
+    """
     def metric_fn(batch, model, device):
+        normalizer = getattr(model, 'normalizer', None)
         x, y   = batch
         x_d    = x.to(device)
         y_d    = y.to(device)
@@ -87,6 +93,9 @@ def make_single_mat_metric_fn(material_id):
             masks    = _make_material_masks(x_d[:, 0])
             mask_m   = masks[:, material_id]                       # [B, H, W] bool
             pred     = model(x_d)                                   # [B, 2, H, W]
+            if normalizer is not None:
+                pred = normalizer.decode(pred, 'y_hw')
+                y_d  = normalizer.decode(y_d,  'y_hw')
             mask_exp = mask_m.unsqueeze(1).expand_as(pred)
             diff     = torch.abs(pred - y_d)[mask_exp]
             mae_hw   = diff.mean().item() if diff.numel() > 0 else 0.0
@@ -104,7 +113,15 @@ def masked_fno_step_fn(batch, model, loss_fn, device):
 
 
 def masked_fno_metric_fn(batch, model, device):
-    """MAE bruto (sem máscara) na grade H×W, após assemble por material. Sem mae_graph."""
+    """
+    MAE bruto (sem máscara) na grade H×W, após assemble por material. Sem mae_graph.
+
+    batch já chega normalizado (CUDAPrefetcher.encode_batch, se normalize=True)
+    — decodifica assembled/y de volta pra unidade física antes do MAE. assemble
+    já reduz 8→2 canais escolhendo por pixel entre 4 blocos idênticos em stats
+    (todos derivados de 'y_hw'), então decode direto (não tiled) já é correto.
+    """
+    normalizer = getattr(model, 'normalizer', None)
     x, y = batch
     x_d  = x.to(device)
     y_d  = y.to(device)
@@ -112,5 +129,8 @@ def masked_fno_metric_fn(batch, model, device):
         masks     = _make_material_masks(x_d[:, 0])
         pred8     = model(x_d)
         assembled = model.assemble(pred8, masks)
+        if normalizer is not None:
+            assembled = normalizer.decode(assembled, 'y_hw')
+            y_d       = normalizer.decode(y_d,        'y_hw')
         mae_hw    = torch.mean(torch.abs(assembled - y_d)).item()
     return mae_hw, None

@@ -245,6 +245,17 @@ class GNN_PostBaseConfig:
     # cobre configs salvos antes desse campo existir (runs antigas, sempre B).
     base_out_ch: int = field(default=2, init=False)
 
+    # base_normalize/base_norm_stats: snapshot da normalização (ver
+    # src/neural_op/normalization.py) usada no TREINO do modelo base congelado
+    # — lido do PRÓPRIO base_run_dir/config.json, não recalculado. Necessário
+    # porque o base pode ter sido treinado num dataset diferente do desta run
+    # nova (self.dataset), com stats diferentes; GNN_PostBase.forward faz um
+    # round-trip decode(normalizer)/encode(base_normalizer) só ao redor da
+    # chamada ao modelo base, para ele sempre receber x_hw na escala exata que
+    # aprendeu. Default False/{} cobre runs base salvas antes dessa feature.
+    base_normalize:  bool = field(default=False, init=False)
+    base_norm_stats: dict = field(default_factory=dict, init=False)
+
     def __post_init__(self):
         import json
         from pathlib import Path
@@ -259,6 +270,8 @@ class GNN_PostBaseConfig:
             if self.base_arch == 'FNO2d'
             else self.base_arch_cfg.get('grid_out_ch')
         ) or 2
+        self.base_normalize  = cfg_dict.get('normalize', False)
+        self.base_norm_stats = cfg_dict.get('norm_stats', {})
 
         ckpt_path = (run_dir / 'model_final.pth') if self.base_checkpoint == 'final' \
             else (run_dir / 'checkpoints' / f'{self.base_checkpoint}.pth')
@@ -382,6 +395,20 @@ class NnCfg:
     monitor_cfg:  MonitorCfg = field(default_factory=MonitorCfg)
     loss_cfg:     Any        = None   # None → auto-instanciado em __post_init__ via LOSS_CFG_REGISTRY
 
+    # Normalização (src/neural_op/normalization.py) — z-score por canal de
+    # x_hw/y_hw/node_x/node_y, aplicado de forma transparente no dataloader
+    # (loss calculada em espaço normalizado — corrige o caso de alvos com
+    # escala física pequena, ex: A/potencial vetor, onde MSE bruta cai perto
+    # de zero sem a rede aprender a estrutura espacial real). norm_stats é
+    # sempre recalculado (ou lido do cache em disco) a partir de self.dataset
+    # em __post_init__ — nunca deixado no default, mesmo padrão de
+    # _detect_chunk_dims. GNN_PostBase é exceção: usa suas próprias stats
+    # (fit sobre self.dataset) para o GNN treinável, e as stats do
+    # base_run_dir (arch_cfg.base_norm_stats) só para a chamada ao modelo
+    # base congelado — ver GNN_PostBase.forward.
+    normalize:  bool = True
+    norm_stats: dict = field(default_factory=dict, init=False)
+
     def __post_init__(self):
         from pathlib import Path
         from src.neural_op.archs import ARCH_REGISTRY
@@ -423,6 +450,9 @@ class NnCfg:
                 self.arch_cfg.node_in_ch = dims['node_x_ch']
             if hasattr(self.arch_cfg, 'edge_dim'):
                 self.arch_cfg.edge_dim = dims['edge_dim']
+        if self.normalize:
+            from src.neural_op.normalization import Normalizer
+            self.norm_stats = Normalizer.fit(self.dataset, self.arch).to_dict()
         if self.loss_cfg is None:
             cls = LOSS_CFG_REGISTRY.get(self.loss, MseLossCfg)
             self.loss_cfg = cls()

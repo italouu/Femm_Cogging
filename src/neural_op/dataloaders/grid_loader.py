@@ -214,16 +214,22 @@ class CUDAPrefetcher:
     Agnóstico ao tipo de batch — suporta tuple (x, y), dict, ou qualquer
     estrutura aninhada de tensores via _to_device / _record_stream.
 
+    normalizer : Normalizer|None — se fornecido, aplica encode_batch() logo
+        após mover o batch pro device (ver src/neural_op/normalization.py).
+        Transparente para step_fn: a loss passa a ser calculada em espaço
+        normalizado sem nenhuma mudança no step_fn de cada arch.
+
     Uso:
         loader   = DataLoader(dataset, ...)
-        prefetch = CUDAPrefetcher(loader, device)
-        for batch in prefetch:   # batch já está no device
+        prefetch = CUDAPrefetcher(loader, device, normalizer=normalizer)
+        for batch in prefetch:   # batch já está no device (e normalizado)
             ...
     """
 
-    def __init__(self, loader, device):
+    def __init__(self, loader, device, normalizer=None):
         self.loader     = loader
         self.device     = torch.device(device)
+        self.normalizer = normalizer
         self._stream    = (torch.cuda.Stream()
                            if self.device.type == 'cuda' else None)
         self._iter      = None
@@ -256,8 +262,12 @@ class CUDAPrefetcher:
         if self._stream is not None:
             with torch.cuda.stream(self._stream):
                 self.next_batch = _to_device(raw, self.device, non_blocking=True)
+                if self.normalizer is not None:
+                    self.next_batch = self.normalizer.encode_batch(self.next_batch)
         else:
             self.next_batch = _to_device(raw, self.device)
+            if self.normalizer is not None:
+                self.next_batch = self.normalizer.encode_batch(self.next_batch)
 
     def __len__(self):
         return len(self.loader)

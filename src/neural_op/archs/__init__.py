@@ -62,15 +62,17 @@ def _gnn_post_base_kwargs(cfg):
     # construtor — não fazem parte do model_kwargs "normal", mas precisam chegar até
     # GNN_PostBase para reconstrução resiliente caso base_run_dir não exista mais.
     return {
-        'base_run_dir':    cfg.base_run_dir,
-        'base_checkpoint': cfg.base_checkpoint,
-        'gnn_node_width':  cfg.gnn_node_width,
-        'gnn_n_layers':    cfg.gnn_n_layers,
-        'base_arch':       cfg.base_arch,
-        'base_arch_cfg':   cfg.base_arch_cfg,
-        'edge_dim':        cfg.edge_dim,
-        'node_in_ch':      cfg.node_in_ch,
-        'base_out_ch':     cfg.base_out_ch,
+        'base_run_dir':     cfg.base_run_dir,
+        'base_checkpoint':  cfg.base_checkpoint,
+        'gnn_node_width':   cfg.gnn_node_width,
+        'gnn_n_layers':     cfg.gnn_n_layers,
+        'base_arch':        cfg.base_arch,
+        'base_arch_cfg':    cfg.base_arch_cfg,
+        'edge_dim':         cfg.edge_dim,
+        'node_in_ch':       cfg.node_in_ch,
+        'base_out_ch':      cfg.base_out_ch,
+        'base_normalize':   cfg.base_normalize,
+        'base_norm_stats':  cfg.base_norm_stats,
     }
 
 

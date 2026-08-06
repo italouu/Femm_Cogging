@@ -56,9 +56,20 @@ def fno_step_fn(batch, model, loss_fn, device):
 
 
 def fno_metric_fn(batch, model, device):
-    """MAE bruto (sem máscara) na grade H×W. Sem estrutura de grafo — mae_graph=None."""
+    """
+    MAE bruto (sem máscara) na grade H×W. Sem estrutura de grafo — mae_graph=None.
+
+    batch já chega normalizado (CUDAPrefetcher.encode_batch, se normalize=True)
+    — decodifica pred/y de volta pra unidade física antes do MAE, pra manter o
+    significado documentado de mae_hw em metrics.jsonl.
+    """
+    normalizer = getattr(model, 'normalizer', None)
     x, y = batch
     with torch.no_grad():
-        pred   = model(x.to(device))
-        mae_hw = torch.mean(torch.abs(pred - y.to(device))).item()
+        pred = model(x.to(device))
+        y_d  = y.to(device)
+        if normalizer is not None:
+            pred = normalizer.decode(pred, 'y_hw')
+            y_d  = normalizer.decode(y_d,  'y_hw')
+        mae_hw = torch.mean(torch.abs(pred - y_d)).item()
     return mae_hw, None

@@ -5,6 +5,7 @@ from pathlib import Path
 from src.configs.eval import EvalCfg
 from src.neural_op.archs import ARCH_REGISTRY
 from src.neural_op.dataloaders.grid_loader import split_chunk_paths
+from src.neural_op.normalization import Normalizer
 
 # ── Configuração ───────────────────────────────────────────────────────────────
 _eval = EvalCfg()
@@ -41,6 +42,15 @@ ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=False)
 sd   = {k: v for k, v in ckpt['model_state_dict'].items() if k != '_metadata'}
 model.load_state_dict(sd)
 print(f"Modelo carregado: {ckpt_path}  (epoch {ckpt['epoch']})")
+
+# normalizer reconstruído das stats gravadas no config.json da run (nunca
+# recalculado — precisa bater exatamente com a escala vista no treino).
+# cfg_dict.get(...) cobre runs salvas antes dessa feature existir (normalize
+# ausente -> None, comportamento idêntico ao anterior).
+model.normalizer = (
+    Normalizer.from_dict(cfg_dict['norm_stats'])
+    if cfg_dict.get('normalize') and cfg_dict.get('norm_stats') else None
+)
 
 # ── Resolver chunk dentro do split treino/teste da run ────────────────────────
 chunk_paths  = sorted(glob.glob(f'data/torch/data_chunks/{dataset}/data_chunk_*.pt'))

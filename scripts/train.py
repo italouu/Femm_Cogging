@@ -5,6 +5,7 @@ from src.configs.training import NnCfg
 from src.neural_op.archs import ARCH_REGISTRY
 from src.neural_op.dataloaders.grid_loader import build_loaders, CUDAPrefetcher
 from src.neural_op.losses import LOSS_REGISTRY
+from src.neural_op.normalization import Normalizer
 from src.neural_op.training_utils import fit
 from src.neural_op.monitor import TrainingMonitor
 from src.training.model_manager import ModelManager
@@ -38,6 +39,12 @@ if __name__ == '__main__':
         mode            = entry.loader_mode,
         test_split      = _nn.test_split,
     )
+
+    # normalizer : None se _nn.normalize=False; senão reconstruído das stats já
+    # calculadas em NnCfg.__post_init__ (Normalizer.fit, com cache em disco).
+    # Atrelado ao modelo (model.normalizer) logo após make_model — metric_fn e
+    # eval_fn leem de lá pra decodificar pred/y de volta pra unidade física.
+    normalizer = Normalizer.from_dict(_nn.norm_stats) if _nn.normalize and _nn.norm_stats else None
 
     step_fn   = entry.make_step_fn(_nn.arch_cfg, _nn.loss_cfg)
     metric_fn = entry.metric_fn(_nn.arch_cfg)
@@ -79,11 +86,13 @@ if __name__ == '__main__':
         scheduler = torch.optim.lr_scheduler.StepLR(
             optimizer, step_size=_nn.scheduler_step, gamma=_nn.scheduler_gamma)
 
+    model.normalizer = normalizer
+
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Device: {DEVICE}", flush=True)
 
-    train_loader = CUDAPrefetcher(train_loader, DEVICE)
-    test_loader  = CUDAPrefetcher(test_loader,  DEVICE)
+    train_loader = CUDAPrefetcher(train_loader, DEVICE, normalizer=normalizer)
+    test_loader  = CUDAPrefetcher(test_loader,  DEVICE, normalizer=normalizer)
 
     mgr     = ModelManager(_nn)
     mgr.open(model, DEVICE, resumed_from=_nn.resume_run,

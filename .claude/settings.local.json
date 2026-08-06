@@ -62,7 +62,10 @@
       "Bash(awk '/\\\\[NumPoints\\\\]/{flag=1;n=0;next} flag && n<200 {print NR-1-1142+0, $0; n++} /\\\\[NumSegments\\\\]/{exit}' data/temp/tmp_debug_sym120/model.fem)",
       "Bash(awk 'NR>1142 && NR<1142+185+1 {print NR-1143, $0}' data/temp/tmp_debug_sym120/model.fem)",
       "Bash(rm data/torch/data_chunks/mesh_138x276_FEMM_MESH/data_chunk_0000.pt)",
-      "Bash(rmdir data/torch/data_chunks/mesh_138x276_FEMM_MESH)"
+      "Bash(rmdir data/torch/data_chunks/mesh_138x276_FEMM_MESH)",
+      "Bash(PYTHONPATH=. python \"C:/Users/TALO~1/AppData/Local/Temp/claude/D--UDESC-MESTRADO-FEMM-cogging/5e7c5776-f297-447e-83b6-4df4b1c103da/scratchpad/test_normalization.py\")",
+      "Bash(PYTHONPATH=. python \"C:/Users/TALO~1/AppData/Local/Temp/claude/D--UDESC-MESTRADO-FEMM-cogging/5e7c5776-f297-447e-83b6-4df4b1c103da/scratchpad/test_normalization2.py\")",
+      "Bash(PYTHONPATH=. python -c ' *)"
     ]
   }
 }

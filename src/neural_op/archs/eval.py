@@ -926,6 +926,165 @@ def masked_fno_gnn_eval_fn(model, d, eval_cfg):
     plt.show()
 
 
+def _plot_femm_mesh_v2(model, x_hw_i, y_hw_fno_i, node_x, node_y, fno_at_nodes, y_nodes,
+                        thr, eval_cfg, i):
+    """
+    Eval FNO_BipartiteGNN (grafo duplo vértices+elementos, mode='femm_mesh_v2').
+
+    Duas fontes de dado bem diferentes coexistem: x_hw/y_hw_fno vêm de uma
+    grade regular H×W (plotados via _imshow, sem gaps/sobreposição) — o FNO
+    opera sobre essa grade. Já A (alvo e saída final da GNN) só existe nos
+    VÉRTICES da malha real (node_x/node_y), plotados via _scatter em
+    r_base/c_base — mesmo motivo de _plot_fno_gnn_mesh (mode='femm_mesh', v1):
+    densidade de nós muito variável (refina perto de interfaces), rasterizar
+    perderia estrutura e criaria buracos.
+
+    Diferença chave em relação a _plot_fno_gnn_mesh (v1): node_x aqui é só
+    [r_base, c_base] — SEM material (mu_r/M vivem no grafo de elementos,
+    elem_x, plotado só como fundo em x_hw — não há scatter de elementos aqui,
+    a grade já cobre esse papel). Alvo é sempre escalar (A) neste pipeline —
+    B não é mais alvo (ver src/data_gen/parsers/femm_mesh_v2.py) — então não
+    há branch vetorial (Bx,By) como em _plot_fno_gnn_mesh.
+
+    fno_at_nodes: A interpolado da grade do FNO na posição exata de cada
+    vértice (_interpolate_fno_to_nodes_v2, via model(...,
+    return_components=True)) — antes da correção da GNN. y_nodes = FNO@nós +
+    delta da GNN (saída final do modelo).
+    """
+    r = node_x[:, 0].numpy()
+    c = node_x[:, 1].numpy()
+
+    a_true = node_y[:, 0].numpy()
+    a_fno  = fno_at_nodes[:, 0].numpy()
+    a_gnn  = y_nodes[:, 0].numpy()
+
+    err_fno = np.abs(a_fno - a_true)
+    err_gnn = np.abs(a_gnn - a_true)
+
+    mask  = np.abs(a_true) >= thr
+    B_ref = np.sqrt(np.mean(a_true[mask]**2)) if mask.any() else 1.0
+
+    fno_m, fno_med, fno_p95 = _masked_metrics(err_fno, mask, B_ref)
+    gnn_m, gnn_med, gnn_p95 = _masked_metrics(err_gnn, mask, B_ref)
+    print(f"B_ref = {B_ref:.6f}  |  região relevante: {mask.mean()*100:.1f}%  "
+          f"({int(mask.sum())} nós relevantes / {len(mask)})")
+    print(f"FNO@nós — média={fno_m:.1f}%  mediana={fno_med:.1f}%  p95={fno_p95:.1f}%")
+    print(f"GNN     — média={gnn_m:.1f}%  mediana={gnn_med:.1f}%  p95={gnn_p95:.1f}%")
+
+    en_fno, en_label = _err_display(err_fno, mask, B_ref, eval_cfg.error_plot_mode)
+    en_gnn, _        = _err_display(err_gnn, mask, B_ref, eval_cfg.error_plot_mode)
+    cmap_nan = plt.cm.hot.copy(); cmap_nan.set_bad(color='#444444')
+    err_vmax = _err_vmax([en_fno, en_gnn], eval_cfg)
+
+    def _lim(*a): return min(x.min() for x in a), max(x.max() for x in a)
+    a_lim = _lim(a_true, a_fno, a_gnn)
+
+    delta = a_gnn - a_fno
+    delta_vmax = max(float(np.abs(delta).max()), 1e-12)
+
+    fig, axes = plt.subplots(3, 4, figsize=(18, 10))
+    fig.suptitle(
+        f"{type(model).__name__} — amostra {i}  ({len(a_true)} vértices)  |  "
+        f"B_ref={B_ref:.4f}  região relevante: {mask.mean()*100:.1f}%",
+        fontsize=12,
+    )
+
+    # Linha 0 — entradas (grade) + saída bruta do FNO (grade) + densidade de vértices
+    _imshow(axes[0, 0], x_hw_i[0].numpy(), 'Entrada: Mu_r')
+    _imshow(axes[0, 1], x_hw_i[1].numpy(), 'Entrada: M')
+    _imshow(axes[0, 2], y_hw_fno_i[0].numpy(), 'FNO (grade): A')
+    axes[0, 3].scatter(c, r, s=4, color='steelblue', alpha=0.4, edgecolors='none')
+    axes[0, 3].set_title(f'Densidade de vértices — {len(r)} nós', fontsize=9)
+    axes[0, 3].set_xlim(0, 1); axes[0, 3].set_ylim(0, 1)
+
+    # Linha 1 — A nos vértices: GT / FNO interpolado / GNN (final) / correção da GNN
+    _scatter(axes[1, 0], r, c, a_true, 'GT: A (nós)',      vmin=a_lim[0], vmax=a_lim[1])
+    _scatter(axes[1, 1], r, c, a_fno,  'FNO@nós: A',       vmin=a_lim[0], vmax=a_lim[1])
+    _scatter(axes[1, 2], r, c, a_gnn,  'GNN: A',           vmin=a_lim[0], vmax=a_lim[1])
+    _scatter(axes[1, 3], r, c, delta,  'Δ = GNN − FNO@nós',
+             cmap='RdBu_r', vmin=-delta_vmax, vmax=delta_vmax)
+
+    # Linha 2 — erro nó-a-nó (tamanho do marcador cresce com o erro)
+    size_fno = _err_sizes(en_fno, err_vmax)
+    _scatter(axes[2, 0], r, c, en_fno,
+             f'FNO@nós {en_label}\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
+             cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_fno)
+    size_gnn = _err_sizes(en_gnn, err_vmax)
+    _scatter(axes[2, 1], r, c, en_gnn,
+             f'GNN {en_label}\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
+             cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_gnn)
+    axes[2, 2].axis('off')
+    axes[2, 3].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+
+def femm_mesh_v2_eval_fn(model, d, eval_cfg):
+    """
+    Eval FNO_BipartiteGNN: carrega amostra do chunk femm_mesh_v2 (4 espaços de
+    índice — nó/elemento/aresta/aresta-cruzada, ver
+    src/data_gen/parsers/femm_mesh_v2.py e src/neural_op/dataloaders/
+    grid_loader.py::femm_mesh_v2_collate), infere e plota via
+    _plot_femm_mesh_v2.
+
+    Implementado 2026-08-13 — antes era um stub (NotImplementedError, ver
+    CLAUDE.md "Pendências conhecidas"); treino/metrics.jsonl (make_fno_bipartite_gnn_step/
+    fno_bipartite_gnn_metric_fn, acima) já funcionavam normalmente.
+    """
+    i   = eval_cfg.sample_idx
+    thr = eval_cfg.irrelevance_threshold
+
+    L, elem_L, E_L, C_L = d['L'], d['elem_L'], d['E_L'], d['C_L']
+    n_off = torch.cat([torch.zeros(1, dtype=torch.long), L.cumsum(0)])
+    m_off = torch.cat([torch.zeros(1, dtype=torch.long), elem_L.cumsum(0)])
+    e_off = torch.cat([torch.zeros(1, dtype=torch.long), E_L.cumsum(0)])
+    c_off = torch.cat([torch.zeros(1, dtype=torch.long), C_L.cumsum(0)])
+    ns, ne = int(n_off[i]), int(n_off[i + 1])
+    ms, me = int(m_off[i]), int(m_off[i + 1])
+    es, ee = int(e_off[i]), int(e_off[i + 1])
+    cs, ce = int(c_off[i]), int(c_off[i + 1])
+
+    x_hw   = d['x_hw'][i:i + 1]           # [1, 2, H, W]
+    node_x = d['node_x'][ns:ne]           # [S_i, 2]  r_base, c_base
+    node_y = d['node_y'][ns:ne]           # [S_i, 1]  A
+    elem_x = d['elem_x'][ms:me]           # [M_i, 5]  mu_r, M, area, r_base, c_base
+    edge_index = d['edge_index'][:, es:ee] - ns
+    edge_attr  = d['edge_attr'][es:ee]
+
+    # cross_edge_index tem as duas linhas offsetadas por índices DIFERENTES
+    # (linha 0 = elemento, linha 1 = vértice) — ver CLAUDE.md "Grafo duplo
+    # vértices+elementos".
+    cross_edge_index = d['cross_edge_index'][:, cs:ce].clone()
+    cross_edge_index[0] -= ms
+    cross_edge_index[1] -= ns
+    cross_edge_attr = d['cross_edge_attr'][cs:ce]
+
+    Li = L[i:i + 1]
+
+    # eval.py carrega o chunk bruto direto (sem CUDAPrefetcher) — encode manual
+    # da entrada / decode da saída, mesmo padrão de fno_gnn_eval_fn.
+    # return_components=True devolve (y_hw_fno, fno_at_nodes, delta) em vez de
+    # já somar — precisamos de fno_at_nodes separado pra comparar contra a
+    # saída final da GNN (y_nodes = fno_at_nodes + delta) no plot.
+    normalizer = getattr(model, 'normalizer', None)
+    with torch.no_grad():
+        x_hw_in   = normalizer.encode(x_hw,   'x_hw')   if normalizer is not None else x_hw
+        node_x_in = normalizer.encode(node_x, 'node_x') if normalizer is not None else node_x
+        elem_x_in = normalizer.encode(elem_x, 'elem_x') if normalizer is not None else elem_x
+        y_hw_fno, fno_at_nodes, delta = model(
+            x_hw_in, node_x_in, elem_x_in, edge_index, edge_attr,
+            cross_edge_index, cross_edge_attr, Li, return_components=True)
+        y_nodes = fno_at_nodes + delta
+        if normalizer is not None:
+            y_hw_fno     = normalizer.decode(y_hw_fno,     'y_hw')
+            fno_at_nodes = normalizer.decode(fno_at_nodes, 'node_y')
+            y_nodes      = normalizer.decode(y_nodes,      'node_y')
+
+    _plot_femm_mesh_v2(model, x_hw[0], y_hw_fno[0], node_x, node_y,
+                        fno_at_nodes, y_nodes, thr, eval_cfg, i)
+
+
 # [REMOVIDO] phi_deeponet_eval_fn — removida junto com PhiDeepONet (2026-05-27).
 # def phi_deeponet_eval_fn(model, d, eval_cfg):
 #     ...

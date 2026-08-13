@@ -4,7 +4,7 @@ from typing import Optional
 
 @dataclass
 class EvalCfg:
-    run_dir              : str   = 'data/logs/mesh_138x276_FEMM_MESH_A/FNO_GNN/run_0001' # caminho para run_XXXX/ (data/logs/{problem}/{arch}/run_XXXX)
+    run_dir              : str   = 'data/logs/mesh_ans_138x276/FNO_BipartiteGNN/run_0001' # caminho para run_XXXX/ (data/logs/{problem}/{arch}/run_XXXX)
     checkpoint           : str   = 'best'              # 'best', 'latest' ou 'final'
     split                : str   = 'test'               # 'train' ou 'test' — conjunto de onde o chunk vem
     chunk_index          : Optional[int] = 1         # N-ésimo chunk (0-indexed) dentro de `split`, reproduzindo

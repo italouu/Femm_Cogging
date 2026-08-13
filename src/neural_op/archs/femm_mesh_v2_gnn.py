@@ -167,14 +167,13 @@ def fno_bipartite_gnn_metric_fn(batch, model, device):
     return mae_hw, mae_graph
 
 
-def femm_mesh_v2_eval_fn(model, chunk_data, eval_cfg):
-    """[NÃO IMPLEMENTADO] Plot/avaliação de malha dupla vértice+elemento
-    ainda não existe -- treino e mae_hw/mae_graph (metrics.jsonl) já
-    funcionam via make_fno_bipartite_gnn_step/fno_bipartite_gnn_metric_fn
-    acima; só falta a parte de visualização (equivalente a
-    src/neural_op/archs/eval.py::fno_gnn_eval_fn/_plot_fno_gnn_mesh, mas
-    pro grafo duplo). Ver CLAUDE.md, "Pendências conhecidas"."""
-    raise NotImplementedError(
-        "femm_mesh_v2_eval_fn: plot/avaliação pra FNO_BipartiteGNN ainda não "
-        "implementado -- treino/métricas (metrics.jsonl) funcionam normalmente."
-    )
+# [REMOVIDO 2026-08-13] stub NotImplementedError -- plot/avaliação de malha
+# dupla vértice+elemento implementado em src/neural_op/archs/eval.py
+# (femm_mesh_v2_eval_fn + _plot_femm_mesh_v2, mesmo arquivo/padrão dos demais
+# *_eval_fn do projeto). Reimportado abaixo pra ARCH_REGISTRY
+# (src/neural_op/archs/__init__.py) continuar importando de
+# femm_mesh_v2_gnn.py sem mudança.
+# def femm_mesh_v2_eval_fn(model, chunk_data, eval_cfg):
+#     """[NÃO IMPLEMENTADO] ..."""
+#     raise NotImplementedError(...)
+from src.neural_op.archs.eval import femm_mesh_v2_eval_fn

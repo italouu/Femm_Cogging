@@ -46,6 +46,10 @@ SAMPLES_PER_WORKER = _dg.npz_samples_per_worker
 MAX_WORKERS        = _dg.npz_max_workers
 MAX_SAMPLES        = _dg.npz_max_samples
 
+# mode='femm_mesh_v2' apenas
+V2_TARGET_FIELD  = _dg.femm_mesh_v2_target_field
+V2_DATASET_NAME  = _dg.femm_mesh_v2_dataset_name
+
 def multi_process(indices: list, unifier: QtreeSampleUnifier, out_dir: Path):
     num_workers = min(os.cpu_count() or 1, MAX_WORKERS)
 
@@ -191,12 +195,14 @@ def _run_femm_mesh(max_samples):
 # Sem PARSER_REGISTRY aqui -- parse_ans_gzip_sample já produz o formato final
 # (grafo de vértices + grafo de elementos + arestas cruzadas + grade), não há
 # seleção de colunas a fazer (ao contrário de mode='femm_mesh', que tem várias
-# variantes de parser sobre o mesmo staging bruto). Por isso não usa
-# parsed_dataset_name (sufixo de parser) -- grava direto em
-# data/temp/samples_npz/<dataset>/, mesma convenção do grid/qtree.
+# variantes de parser sobre o mesmo staging bruto). Não usa parsed_dataset_name
+# (sufixo de npz_parser, ignorado neste mode) -- grava em
+# data/temp/samples_npz/<femm_mesh_v2_dataset_name>/ (sem sufixo quando
+# target_field='A', sufixado com '_B' quando target_field='B' -- ver
+# DatagenConfig.femm_mesh_v2_dataset_name).
 
 def _parse_and_save_one_v2(path: Path, r_in: float, r_ext: float, ang_1: float, ang_2: float,
-                            n_r: int, n_a: int, out_dir: Path) -> int:
+                            n_r: int, n_a: int, out_dir: Path, target_field: str) -> int:
     """Worker (processo novo, spawn) de UMA amostra: parse_ans_gzip_sample +
     escrita atômica do .npz. parse_ans_gzip_sample é numpy/matplotlib.tri puro
     (sem FEMM/COM), então o pool pode ser persistente (sem max_tasks_per_child=1
@@ -204,7 +210,7 @@ def _parse_and_save_one_v2(path: Path, r_in: float, r_ext: float, ang_1: float, 
     por causa do vazamento de memória do ciclo openfemm()/closefemm())."""
     idx = int(path.name.split('_')[1].split('.')[0])
     d = parse_ans_gzip_sample(path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
-                               n_r=n_r, n_a=n_a, tmp_dir=out_dir)
+                               n_r=n_r, n_a=n_a, tmp_dir=out_dir, target_field=target_field)
 
     stem     = path.name.removesuffix('.ans.gz')
     out_path = out_dir / f"{stem}.npz"
@@ -216,8 +222,11 @@ def _parse_and_save_one_v2(path: Path, r_in: float, r_ext: float, ang_1: float, 
 
 
 def _run_femm_mesh_v2(max_samples):
+    # raw (.ans.gz) é o mesmo .ans bruto independente do target_field -- só o
+    # staging (out_dir) muda de pasta conforme o alvo escolhido no parse (ver
+    # DatagenConfig.femm_mesh_v2_dataset_name).
     raw_dir = Path("data/raw") / DATASET
-    out_dir = Path("data/temp/samples_npz") / DATASET
+    out_dir = Path("data/temp/samples_npz") / V2_DATASET_NAME
     out_dir.mkdir(parents=True, exist_ok=True)
 
     ans_paths = sorted(raw_dir.glob("sample_*.ans.gz"),
@@ -238,8 +247,9 @@ def _run_femm_mesh_v2(max_samples):
     ja_prontos = total - len(pending)
 
     print(f"\n=== Parsing femm_mesh_v2 (.ans.gz -> grafo de vértices + grafo de elementos + grade) ===")
-    print(f"  origem  : {raw_dir}")
-    print(f"  destino : {out_dir}")
+    print(f"  origem       : {raw_dir}")
+    print(f"  destino      : {out_dir}")
+    print(f"  target_field : {V2_TARGET_FIELD}")
     print(f"  Já processados: {ja_prontos}  |  A processar: {len(pending)}")
 
     if not pending:
@@ -289,7 +299,7 @@ def _run_femm_mesh_v2(max_samples):
             r_in  = float(row['inner_diameter [mm]']) / 2
             r_ext = float(row['outer_diameter [mm]']) / 2
             fut = ex.submit(_parse_and_save_one_v2, path, r_in, r_ext, ANG_1, ANG_2,
-                             N_R, N_A, out_dir)
+                             N_R, N_A, out_dir, V2_TARGET_FIELD)
             fut2idx[fut] = idx
 
         for fut in as_completed(fut2idx):

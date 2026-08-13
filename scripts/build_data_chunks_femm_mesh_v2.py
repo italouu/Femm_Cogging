@@ -20,7 +20,10 @@ em parse_ans_gzip_sample) -- só concatenadas, não recalculadas aqui.
 
 Saída: data/torch/data_chunks/<dataset>/data_chunk_XXXX.pt -- sem sufixo de
 parser (não existe variante de parser pra este formato, ver
-gen_npz_structures.py::_run_femm_mesh_v2).
+gen_npz_structures.py::_run_femm_mesh_v2). <dataset> aqui é
+DatagenConfig.femm_mesh_v2_dataset_name, não .dataset direto -- sufixado com
+'_B' quando femm_mesh_v2_target_field='B' (2026-08-13), pra ler do staging
+certo (ver mesma property).
 
 Execução (a partir da raiz do projeto):
     python -m scripts.build_data_chunks_femm_mesh_v2
@@ -33,7 +36,7 @@ import torch
 from src.configs.datagen import DatagenConfig
 _dg        = DatagenConfig()
 CHUNK_SIZE = _dg.chunk_size
-DATASET    = _dg.dataset
+DATASET    = _dg.femm_mesh_v2_dataset_name
 
 # None = processa todas as amostras disponíveis
 MAX_SAMPLES = None

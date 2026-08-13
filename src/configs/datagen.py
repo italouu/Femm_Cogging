@@ -85,6 +85,29 @@ class DatagenConfig:
     # generate_data_femm_mesh (só mode='femm_mesh')
     femm_mesh_max_workers: int = 8
 
+    # target_field p/ mode='femm_mesh_v2' (2026-08-13, src/data_gen/parsers/femm_mesh_v2.py::
+    # parse_ans_gzip_sample) -- 'A' (padrão, potencial vetor escalar nos vértices, já em
+    # produção pras 4000 amostras de mesh_ans_138x276) ou 'B' (Bx,By -- curl(A) fechado por
+    # elemento, coordenadas reais em metros, + média nodal dos elementos incidentes; mesmo
+    # padrão de amostragem de A na grade H×W, ver docstring do módulo). Ignorado nos demais
+    # mode. Não afeta a etapa raw (.ans.gz é o mesmo .ans bruto independente do alvo
+    # escolhido no parse) -- só data/temp/samples_npz/ e data/torch/data_chunks/, via
+    # femm_mesh_v2_dataset_name abaixo.
+    femm_mesh_v2_target_field: str = 'B'
+
+    @property
+    def femm_mesh_v2_dataset_name(self) -> str:
+        """Nome do subdiretório usado por mode='femm_mesh_v2' em
+        data/temp/samples_npz/ e data/torch/data_chunks/ (gen_npz_structures.py/
+        build_data_chunks_femm_mesh_v2.py). Sem sufixo quando target_field='A'
+        (mantém compatibilidade com os 4000 .npz já processados em produção,
+        ver CLAUDE.md "Pendências conhecidas"); sufixado com '_B' só quando
+        target_field='B', pra não misturar/colidir com o staging de A já
+        existente (o raw .ans.gz continua o mesmo -- só o parse difere)."""
+        if self.femm_mesh_v2_target_field == 'A':
+            return self.dataset
+        return f"{self.dataset}_{self.femm_mesh_v2_target_field}"
+
     @property
     def parsed_dataset_name(self) -> str:
         """Nome combinado dataset+parser (mode='femm_mesh') — usado como

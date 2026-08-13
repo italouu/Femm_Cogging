@@ -926,6 +926,244 @@ def masked_fno_gnn_eval_fn(model, d, eval_cfg):
     plt.show()
 
 
+def _triangle_xy_from_edges(node_x, cross_edge_index, edge_index, edge_attr):
+    """
+    Reconstrói (x,y) reais em mm dos 3 vértices de cada elemento (triângulo)
+    do grafo duplo vértices+elementos (mode='femm_mesh_v2', ver
+    src/data_gen/parsers/femm_mesh_v2.py) -- sem nenhuma coordenada absoluta
+    disponível no chunk (node_x só tem r_base/c_base normalizados), só a
+    partir de distâncias REAIS (mm) já salvas em edge_attr[:,2] (center_dist)
+    para cada aresta vértice-vértice + a conectividade elemento->3 vértices
+    (cross_edge_index, ordem [elem,v0,v1,v2] repetida a cada 3 entradas).
+
+    Cada triângulo é reconstruído isoladamente via lei dos cossenos (3 lados
+    conhecidos -> forma exata, a menos de reflexão): v0 na origem, v1 no
+    eixo +x, v2 resolvido pelo ângulo em v0. A ambiguidade de reflexão
+    (sinal de y2) é resolvida comparando com a orientação de (r_base,c_base)
+    (node_x) tratado como pseudo-(x,y): o mapeamento (r_base,c_base)->(x,y)
+    real é composição de duas escalas positivas (r_base=(r-r_in)/(r_ext-r_in),
+    c_base=(θ-ang1)/(ang2-ang1)) com a mudança polar->cartesiana
+    (x=r·cosθ, y=r·senθ, jacobiano = r > 0 nesta janela anular) -- ambas
+    preservam orientação (determinante positivo), então o sinal do produto
+    vetorial calculado em (r_base,c_base) bate com o sinal em (x,y) real
+    para qualquer triângulo desta malha (elementos pequenos frente à escala
+    de curvatura do domínio -- mesma linearização local usada pelo próprio
+    FEM dentro de cada elemento).
+
+    Retorna (x0,y0,x1,y1,x2,y2) -- cada um array [M] em mm -- e vtx [M,3]
+    (índices locais dos 3 vértices por elemento, mesma ordem de elem_x).
+    """
+    ei = edge_index[0].tolist(); ej = edge_index[1].tolist()
+    ed = edge_attr[:, 2].tolist()
+    dist_map = {}
+    for a, b, dd in zip(ei, ej, ed):
+        dist_map[(a, b) if a < b else (b, a)] = dd
+
+    def _dist(a_arr, b_arr):
+        return np.array([dist_map[(a, b) if a < b else (b, a)]
+                          for a, b in zip(a_arr.tolist(), b_arr.tolist())])
+
+    vtx = cross_edge_index[1].numpy().reshape(-1, 3)   # [M,3] índices locais (v0,v1,v2)
+    v0, v1, v2 = vtx[:, 0], vtx[:, 1], vtx[:, 2]
+
+    d01 = _dist(v0, v1)
+    d12 = _dist(v1, v2)
+    d20 = _dist(v2, v0)
+
+    x0 = np.zeros_like(d01); y0 = np.zeros_like(d01)
+    x1 = d01.copy();         y1 = np.zeros_like(d01)
+
+    cos_a0 = np.clip((d01**2 + d20**2 - d12**2) / (2 * d01 * d20), -1.0, 1.0)
+    sin_a0 = np.sqrt(np.clip(1.0 - cos_a0**2, 0.0, None))
+    x2 = d20 * cos_a0
+    y2 = d20 * sin_a0   # sinal resolvido abaixo, via orientação de (r_base,c_base)
+
+    rb, cb = node_x[:, 0].numpy(), node_x[:, 1].numpy()
+    cross_rc = ((rb[v1] - rb[v0]) * (cb[v2] - cb[v0])
+                - (cb[v1] - cb[v0]) * (rb[v2] - rb[v0]))
+    y2 = np.where(cross_rc < 0, -y2, y2)
+
+    return (x0, y0, x1, y1, x2, y2), vtx
+
+
+def _element_gradient(x0, y0, x1, y1, x2, y2, F0, F1, F2):
+    """
+    Gradiente (dF/dx, dF/dy) constante por elemento (P1 linear) — mesma
+    fórmula fechada de _element_curl_A, sem a torção de 90° do curl.
+    Coordenadas em mm (sem conversão pra metro — usada só pra achar uma
+    DIREÇÃO, não uma magnitude física). Vetorizado — x0..F2 são arrays [M].
+    """
+    area2 = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)
+    b0, b1, b2 = y1 - y2, y2 - y0, y0 - y1
+    c0, c1, c2 = x2 - x1, x0 - x2, x1 - x0
+    dFdx = (F0 * b0 + F1 * b1 + F2 * b2) / area2
+    dFdy = (F0 * c0 + F1 * c1 + F2 * c2) / area2
+    return dFdx, dFdy
+
+
+def _element_curl_A(x0, y0, x1, y1, x2, y2, A0, A1, A2):
+    """
+    B=curl(A) constante por elemento (P1 linear), fórmula fechada já
+    validada em tests/proto_femm_element_b_check.py (bate com
+    mo_getb(smooth='off') a ~1e-16, desde que as coordenadas estejam em
+    metros -- por isso a conversão mm->m aqui). Convenção 2D planar:
+    Bx=dA/dy, By=-dA/dx. Vetorizado — x0..A2 são arrays [M].
+
+    IMPORTANTE: como (x0,y0,x1,y1,x2,y2) vêm de _triangle_xy_from_edges
+    (reconstrução por-elemento via lei dos cossenos), Bx/By aqui estão no
+    referencial LOCAL e ARBITRÁRIO de cada triângulo (rotacionado por um
+    ângulo desconhecido em relação ao referencial global) -- validado
+    numericamente (erro ~1e-9) que é EXATAMENTE o B real, só rotacionado.
+    |B|=hypot(Bx,By) é invariante à rotação (portanto exato) — mas Bx,By
+    isolados NÃO são fisicamente significativos nesse referencial. Ver
+    _element_radial_tangential, que projeta pra um referencial
+    radial/tangencial consistente entre elementos (a decomposição
+    fisicamente útil aqui, dado que não há coordenadas absolutas)."""
+    x0m, y0m = x0 * 1e-3, y0 * 1e-3
+    x1m, y1m = x1 * 1e-3, y1 * 1e-3
+    x2m, y2m = x2 * 1e-3, y2 * 1e-3
+
+    area2 = (x1m - x0m) * (y2m - y0m) - (x2m - x0m) * (y1m - y0m)
+    b0, b1, b2 = y1m - y2m, y2m - y0m, y0m - y1m
+    c0, c1, c2 = x2m - x1m, x0m - x2m, x1m - x0m
+
+    dAdx = (A0 * b0 + A1 * b1 + A2 * b2) / area2
+    dAdy = (A0 * c0 + A1 * c1 + A2 * c2) / area2
+    return dAdy, -dAdx   # Bx, By (referencial local/arbitrário por elemento)
+
+
+def _element_radial_tangential(x0, y0, x1, y1, x2, y2, r_base0, r_base1, r_base2,
+                                Bx_local, By_local):
+    """
+    Projeta B (calculado por _element_curl_A, num referencial arbitrário por
+    elemento) num referencial RADIAL/TANGENCIAL consistente -- fisicamente
+    significativo e comparável entre elementos, sem precisar de coordenadas
+    absolutas (que não existem no chunk).
+
+    Ideia: ∇(r_base) aponta na direção radial real (r_base é função só de r,
+    então seu gradiente é paralelo a r̂ em qualquer referencial -- rotação
+    preserva direção relativa de gradiente e do próprio B, calculados no
+    MESMO referencial arbitrário). Normaliza pra achar r̂_local, deriva
+    θ̂_local por rotação de 90° (mesma orientação já resolvida em
+    _triangle_xy_from_edges) e projeta Bx_local/By_local nessa base via
+    produto escalar -- invariante à rotação arbitrária do referencial local,
+    então Br/Bθ resultantes são os componentes radial/tangencial REAIS.
+
+    Precisão: r_base(x,y) não é afim (r_base ∝ sqrt(x²+y²)), então o
+    gradiente P1 (linear por elemento) é uma APROXIMAÇÃO de primeira ordem
+    de ∇r_base -- erro cai com o refino da malha (validado: ~2% de erro
+    relativo em malha grosseira ~n_r=9×n_a=15, ~0.13% em malha comparável à
+    de produção, ~60-70k elementos). |B|=hypot(Bx,By) continua EXATO
+    (invariante de rotação, não depende dessa aproximação) — só a
+    decomposição Br/Bθ tem essa margem de erro pequena.
+    """
+    r0v, r1v, r2v = r_base0, r_base1, r_base2
+    grad_rx, grad_ry = _element_gradient(x0, y0, x1, y1, x2, y2, r0v, r1v, r2v)
+    norm = np.hypot(grad_rx, grad_ry)
+    rhat_x, rhat_y = grad_rx / norm, grad_ry / norm
+    that_x, that_y = -rhat_y, rhat_x   # 90° CCW
+
+    Br = Bx_local * rhat_x + By_local * rhat_y
+    Bt = Bx_local * that_x + By_local * that_y
+    return Br, Bt
+
+
+def _plot_femm_mesh_v2_b(model, x_hw_i, y_hw_fno_i, elem_x,
+                          Br_true, Bt_true, Br_fno, Bt_fno, Br_gnn, Bt_gnn,
+                          thr, eval_cfg, i):
+    """
+    Variante de _plot_femm_mesh_v2 para eval_cfg.show_b=True: em vez de A
+    cru, mostra B=curl(A) por elemento -- derivado por PÓS-PROCESSAMENTO do
+    GT/FNO@nós/GNN de A já usados no plot normal -- B NÃO é o alvo de treino
+    deste arch (que é sempre A, ver src/data_gen/parsers/femm_mesh_v2.py).
+    B vive nos ELEMENTOS (scatter em r_base_elem/c_base_elem,
+    elem_x[:,3]/[:,4]), não nos vértices -- reflete o layout do grafo real
+    (mu_r/M também são feature de elemento neste design, não de vértice).
+
+    Componentes radial (Br)/tangencial (Bt), não Bx/By cartesiano: a malha
+    real é reconstruída por elemento sem coordenadas absolutas (só
+    distâncias, ver _triangle_xy_from_edges), então cada triângulo cai num
+    referencial rotacionado por um ângulo arbitrário e desconhecido -- Bx/By
+    isolados não seriam comparáveis entre elementos. Br/Bt (via
+    _element_radial_tangential) são invariantes a essa rotação -- a
+    decomposição fisicamente correta aqui. |B|=hypot(Br,Bt) é exato (~1e-9,
+    validado); Br/Bt têm um erro pequeno e decrescente com o refino da
+    malha (~0.1-0.3% em malha do tamanho de produção), pela aproximação
+    linear do gradiente de r_base usada pra achar a direção radial local.
+    """
+    r = elem_x[:, 3].numpy()
+    c = elem_x[:, 4].numpy()
+
+    mag_true = np.hypot(Br_true, Bt_true)
+    mag_fno  = np.hypot(Br_fno,  Bt_fno)
+    mag_gnn  = np.hypot(Br_gnn,  Bt_gnn)
+
+    err_fno = np.abs(mag_fno - mag_true)
+    err_gnn = np.abs(mag_gnn - mag_true)
+
+    mask  = mag_true >= thr
+    B_ref = np.sqrt(np.mean(mag_true[mask]**2)) if mask.any() else 1.0
+
+    fno_m, fno_med, fno_p95 = _masked_metrics(err_fno, mask, B_ref)
+    gnn_m, gnn_med, gnn_p95 = _masked_metrics(err_gnn, mask, B_ref)
+    print(f"[B=curl(A), pós-processado] B_ref = {B_ref:.4f}  |  região relevante: "
+          f"{mask.mean()*100:.1f}%  ({int(mask.sum())} elementos relevantes / {len(mask)})")
+    print(f"FNO@nós — média={fno_m:.1f}%  mediana={fno_med:.1f}%  p95={fno_p95:.1f}%")
+    print(f"GNN     — média={gnn_m:.1f}%  mediana={gnn_med:.1f}%  p95={gnn_p95:.1f}%")
+
+    en_fno, en_label = _err_display(err_fno, mask, B_ref, eval_cfg.error_plot_mode)
+    en_gnn, _        = _err_display(err_gnn, mask, B_ref, eval_cfg.error_plot_mode)
+    cmap_nan = plt.cm.hot.copy(); cmap_nan.set_bad(color='#444444')
+    err_vmax = _err_vmax([en_fno, en_gnn], eval_cfg)
+
+    def _lim(*a): return min(x.min() for x in a), max(x.max() for x in a)
+    br_lim  = _lim(Br_true, Br_fno, Br_gnn)
+    bt_lim  = _lim(Bt_true, Bt_fno, Bt_gnn)
+    mag_lim = _lim(mag_true, mag_fno, mag_gnn)
+
+    fig, axes = plt.subplots(4, 4, figsize=(18, 13))
+    fig.suptitle(
+        f"{type(model).__name__} — amostra {i}  |  B=curl(A) pós-processado "
+        f"({len(mag_true)} elementos)  |  B_ref={B_ref:.4f}  "
+        f"região relevante: {mask.mean()*100:.1f}%",
+        fontsize=12,
+    )
+
+    # Linha 0 — entradas (grade) + saída bruta do FNO (grade, A) + máscara (elementos)
+    _imshow(axes[0, 0], x_hw_i[0].numpy(), 'Entrada: Mu_r')
+    _imshow(axes[0, 1], x_hw_i[1].numpy(), 'Entrada: M')
+    _imshow(axes[0, 2], y_hw_fno_i[0].numpy(), 'FNO (grade): A')
+    _scatter(axes[0, 3], r, c, mask.astype(float), f'Máscara |B|>={thr}',
+             cmap='gray', vmin=0, vmax=1)
+
+    # Linha 1 — GT
+    _scatter(axes[1, 0], r, c, Br_true,  'GT: Br (radial, elem.)',      vmin=br_lim[0],  vmax=br_lim[1])
+    _scatter(axes[1, 1], r, c, Bt_true,  'GT: Bθ (tangencial, elem.)',  vmin=bt_lim[0],  vmax=bt_lim[1])
+    _scatter(axes[1, 2], r, c, mag_true, 'GT: |B| (elem.)',             vmin=mag_lim[0], vmax=mag_lim[1])
+    axes[1, 3].axis('off')
+
+    # Linha 2 — FNO@nós (A interpolado, antes da correção da GNN)
+    _scatter(axes[2, 0], r, c, Br_fno,  'FNO@nós: Br',  vmin=br_lim[0],  vmax=br_lim[1])
+    _scatter(axes[2, 1], r, c, Bt_fno,  'FNO@nós: Bθ',  vmin=bt_lim[0],  vmax=bt_lim[1])
+    _scatter(axes[2, 2], r, c, mag_fno, 'FNO@nós: |B|', vmin=mag_lim[0], vmax=mag_lim[1])
+    size_fno = _err_sizes(en_fno, err_vmax)
+    _scatter(axes[2, 3], r, c, en_fno,
+             f'FNO@nós {en_label}\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
+             cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_fno)
+
+    # Linha 3 — GNN (saída final)
+    _scatter(axes[3, 0], r, c, Br_gnn,  'GNN: Br',  vmin=br_lim[0],  vmax=br_lim[1])
+    _scatter(axes[3, 1], r, c, Bt_gnn,  'GNN: Bθ',  vmin=bt_lim[0],  vmax=bt_lim[1])
+    _scatter(axes[3, 2], r, c, mag_gnn, 'GNN: |B|', vmin=mag_lim[0], vmax=mag_lim[1])
+    size_gnn = _err_sizes(en_gnn, err_vmax)
+    _scatter(axes[3, 3], r, c, en_gnn,
+             f'GNN {en_label}\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
+             cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_gnn)
+
+    plt.tight_layout()
+    plt.show()
+
+
 def _plot_femm_mesh_v2(model, x_hw_i, y_hw_fno_i, node_x, node_y, fno_at_nodes, y_nodes,
                         thr, eval_cfg, i):
     """
@@ -1080,6 +1318,37 @@ def femm_mesh_v2_eval_fn(model, d, eval_cfg):
             y_hw_fno     = normalizer.decode(y_hw_fno,     'y_hw')
             fno_at_nodes = normalizer.decode(fno_at_nodes, 'node_y')
             y_nodes      = normalizer.decode(y_nodes,      'node_y')
+
+    if getattr(eval_cfg, 'show_b', False):
+        # Pós-processamento: deriva B=curl(A) por elemento a partir do GT/
+        # FNO@nós/GNN de A (ver _triangle_xy_from_edges/_element_curl_A) —
+        # a geometria do triângulo (x,y reais em mm) não depende de qual A é
+        # usado, só da malha, então é reconstruída 1x e reaproveitada pros
+        # 3 campos de A (GT, FNO@nós, GNN). _element_curl_A dá Bx/By num
+        # referencial arbitrário por elemento (sem coordenadas absolutas) —
+        # _element_radial_tangential projeta pra Br/Bθ, comparável entre
+        # elementos (ver docstrings).
+        (x0, y0, x1, y1, x2, y2), vtx = _triangle_xy_from_edges(
+            node_x, cross_edge_index, edge_index, edge_attr)
+        r_base_v = node_x[:, 0].numpy()
+        r0v, r1v, r2v = r_base_v[vtx[:, 0]], r_base_v[vtx[:, 1]], r_base_v[vtx[:, 2]]
+
+        a_true_v = node_y[:, 0].numpy()
+        a_fno_v  = fno_at_nodes[:, 0].numpy()
+        a_gnn_v  = y_nodes[:, 0].numpy()
+
+        def _b_radial_tangential(a_v):
+            Bx, By = _element_curl_A(x0, y0, x1, y1, x2, y2,
+                                      a_v[vtx[:, 0]], a_v[vtx[:, 1]], a_v[vtx[:, 2]])
+            return _element_radial_tangential(x0, y0, x1, y1, x2, y2, r0v, r1v, r2v, Bx, By)
+
+        Br_true, Bt_true = _b_radial_tangential(a_true_v)
+        Br_fno,  Bt_fno  = _b_radial_tangential(a_fno_v)
+        Br_gnn,  Bt_gnn  = _b_radial_tangential(a_gnn_v)
+        _plot_femm_mesh_v2_b(model, x_hw[0], y_hw_fno[0], elem_x,
+                              Br_true, Bt_true, Br_fno, Bt_fno, Br_gnn, Bt_gnn,
+                              thr, eval_cfg, i)
+        return
 
     _plot_femm_mesh_v2(model, x_hw[0], y_hw_fno[0], node_x, node_y,
                         fno_at_nodes, y_nodes, thr, eval_cfg, i)

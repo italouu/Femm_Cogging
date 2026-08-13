@@ -23,3 +23,15 @@ class EvalCfg:
     qtree_metric_enabled : bool  = False                # fno_eval_fn: projeta a predição (grade base) nas
                                                          # folhas da qtree e calcula erro vs node_y (GT fino);
                                                          # requer chunk com node_x/node_y/L (parser FNO_GNN)
+    show_b               : bool  = False                # femm_mesh_v2_eval_fn (FNO_BipartiteGNN, alvo=A):
+                                                         # False (padrão/'normal') -> plota A cru, sem pós-
+                                                         # processamento. True ('show B') -> deriva B=curl(A)
+                                                         # por elemento (fórmula P1 fechada, já validada contra
+                                                         # mo_getb) a partir de GT/FNO@nós/GNN e plota Br/Bθ/|B|
+                                                         # (radial/tangencial, não Bx/By -- malha reconstruída
+                                                         # sem coordenadas absolutas, ver eval.py::
+                                                         # _element_radial_tangential) em vez de A. B NÃO é o
+                                                         # alvo de treino deste arch — é só visualização pós-hoc;
+                                                         # reconstrói (x,y) reais em mm só a partir do próprio
+                                                         # chunk (sem tocar CSV/raw). |B| exato; Br/Bθ com erro
+                                                         # pequeno (~0.1-0.3% em malha de produção).

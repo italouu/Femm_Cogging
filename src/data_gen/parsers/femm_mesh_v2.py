@@ -80,9 +80,7 @@ from src.data_gen.parsers.ans_parsing import (
     _parse_solution, _parse_block_materials, _block_magnet_polarity,
     _build_edges, _element_areas, _wrap_edge_pairs, _grid_polar_xy,
 )
-from src.data_gen.motor_model import BLDC_FEMM_Model_Sym120_Annular
-
-_N_POLES_SECTOR = BLDC_FEMM_Model_Sym120_Annular.N_POLES_SECTOR  # 14 -- constante de classe, sem instanciar/abrir FEMM
+from src.data_gen.motor_constants import N_POLES_SECTOR as _N_POLES_SECTOR
 
 
 # ---------------------------------------------------------------------------

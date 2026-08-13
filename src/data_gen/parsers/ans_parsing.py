@@ -25,14 +25,14 @@ via COM, depois chama essas funções puras sobre o resultado).
 import numpy as np
 import matplotlib.tri as mtri
 
-from src.data_gen.motor_model import BLDC_Process
+from src.data_gen.motor_constants import MATERIAL_ID, PERMEABILITY, MAGNETIZATION
 
-_N_MATERIALS = len(set(BLDC_Process.MATERIAL_ID.values()))  # 4: ferro,ar,ima,cobre
-_MAGNET_ID = BLDC_Process.MATERIAL_ID['N35p']                # == MATERIAL_ID['N35n']
+_N_MATERIALS = len(set(MATERIAL_ID.values()))  # 4: ferro,ar,ima,cobre
+_MAGNET_ID = MATERIAL_ID['N35p']                # == MATERIAL_ID['N35n']
 
 _MU_BY_ID = np.zeros(_N_MATERIALS, dtype=np.float32)
-for _name, _mid in BLDC_Process.MATERIAL_ID.items():
-    _MU_BY_ID[_mid] = BLDC_Process.PERMEABILITY[_name]
+for _name, _mid in MATERIAL_ID.items():
+    _MU_BY_ID[_mid] = PERMEABILITY[_name]
 
 
 # ---------------------------------------------------------------------------
@@ -92,8 +92,8 @@ def _parse_block_materials(lines):
                 canon = 'copper'
             else:
                 canon = 'vacuum'
-            material_id[b] = BLDC_Process.MATERIAL_ID[canon]
-            mu_const[b] = BLDC_Process.PERMEABILITY[canon]
+            material_id[b] = MATERIAL_ID[canon]
+            mu_const[b] = PERMEABILITY[canon]
             b += 1
             mu_x = has_bh = None
         i += 1
@@ -131,7 +131,7 @@ def _block_magnet_polarity(block_material_id, n_poles_sector):
     block_M = np.zeros(len(block_material_id), dtype=np.float32)
     for pole_i, block_idx in enumerate(magnet_block_idx):
         name = 'N35p' if pole_i % 2 == 0 else 'N35n'
-        block_M[block_idx] = BLDC_Process.MAGNETIZATION[name]
+        block_M[block_idx] = MAGNETIZATION[name]
     return block_M
 
 
@@ -206,7 +206,7 @@ def _node_magnet_polarity(nodes: np.ndarray, elems: np.ndarray, area: np.ndarray
 
     touches_magnet = (area_pos + area_neg) > 0
     sign = np.where(area_pos >= area_neg, 1.0, -1.0)
-    node_M = np.where(touches_magnet, sign * BLDC_Process.MAGNETIZATION['N35p'], 0.0)
+    node_M = np.where(touches_magnet, sign * MAGNETIZATION['N35p'], 0.0)
     return node_M.astype(np.float32)
 
 

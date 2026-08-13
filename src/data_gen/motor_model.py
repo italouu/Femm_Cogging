@@ -7,6 +7,12 @@ import pandas as pd
 import random
 from pathlib import Path
 from src.configs.datagen import DatagenConfig
+from src.data_gen.motor_constants import (
+    MAGNETIZATION as _MOTOR_MAGNETIZATION,
+    PERMEABILITY as _MOTOR_PERMEABILITY,
+    MATERIAL_ID as _MOTOR_MATERIAL_ID,
+    N_POLES_SECTOR as _MOTOR_N_POLES_SECTOR,
+)
 _dg = DatagenConfig()
 DATASET                = _dg.dataset
 DISTRIBUTION           = _dg.distribution
@@ -19,12 +25,21 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 class BLDC_Process:
 
-    # Propriedades de materiais — fonte única para todas as subclasses
-    MAGNETIZATION = {'iron_1008': 0,      'N35p': 1,    'N35n': -1,  'copper': 0,     'vacuum': 0  }
-    PERMEABILITY  = {'iron_1008': 5000.0, 'N35p': 1.05, 'N35n': 1.05,'copper': 0.999, 'vacuum': 1.0}
-    # [REMOVIDO] MATERIAL_ID = {'iron_1008': 6, 'N35p': 1, 'N35n': 5, 'copper': 3, 'vacuum': 0}
-    # N35p e N35n unificados como ima=2; ferro=0, ar=1, bobina=3
-    MATERIAL_ID   = {'iron_1008': 0,      'N35p': 2,    'N35n': 2,   'copper': 3,     'vacuum': 1  }
+    # Propriedades de materiais — fonte única para todas as subclasses.
+    # [REMOVIDO 2026-08-13] literais movidos pra src/data_gen/motor_constants.py
+    # (módulo sem `import femm`/shapely/etc.) -- reimportados abaixo, pra
+    # BLDC_Process.MATERIAL_ID/PERMEABILITY/MAGNETIZATION continuarem
+    # funcionando idênticos sem duplicar os dicts. Motivo: src/data_gen/
+    # parsers/ans_parsing.py usava só esses 3 dicts e arrastava femm junto
+    # ao importar BLDC_Process (ver docstring de motor_constants.py).
+    # MAGNETIZATION = {'iron_1008': 0,      'N35p': 1,    'N35n': -1,  'copper': 0,     'vacuum': 0  }
+    # PERMEABILITY  = {'iron_1008': 5000.0, 'N35p': 1.05, 'N35n': 1.05,'copper': 0.999, 'vacuum': 1.0}
+    # # [REMOVIDO] MATERIAL_ID = {'iron_1008': 6, 'N35p': 1, 'N35n': 5, 'copper': 3, 'vacuum': 0}
+    # # N35p e N35n unificados como ima=2; ferro=0, ar=1, bobina=3
+    # MATERIAL_ID   = {'iron_1008': 0,      'N35p': 2,    'N35n': 2,   'copper': 3,     'vacuum': 1  }
+    MAGNETIZATION = _MOTOR_MAGNETIZATION
+    PERMEABILITY  = _MOTOR_PERMEABILITY
+    MATERIAL_ID   = _MOTOR_MATERIAL_ID
 
     # Limites de fração de área para critério de refinamento quadtree
     REFINEMENT_LOW  = 0.2
@@ -1763,7 +1778,11 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
     fecham exatamente em 120 graus.
     """
 
-    N_POLES_SECTOR = 14   # 120 / (360/42)
+    # [REMOVIDO 2026-08-13] N_POLES_SECTOR = 14 -- movido pra
+    # src/data_gen/motor_constants.py (mesmo motivo do bloco de materiais
+    # acima em BLDC_Process: src/data_gen/parsers/femm_mesh_v2.py usava só
+    # esse inteiro e arrastava femm junto ao importar esta classe).
+    N_POLES_SECTOR = _MOTOR_N_POLES_SECTOR   # 120 / (360/42) == 14
     N_SLOTS_SECTOR = 12   # 120 / (360/36)
     _PERIODIC = "periodic_120"
 

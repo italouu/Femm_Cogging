@@ -274,6 +274,60 @@ def _build_bidirectional_edge_attrs(nodes: np.ndarray, edges_undirected: np.ndar
     return edge_index.astype(np.int64), edge_attr.astype(np.float32)
 
 
+def _element_b_from_A(nodes: np.ndarray, elems: np.ndarray, node_A: np.ndarray):
+    """B=curl(A) constante por elemento (P1 linear) -- fórmula fechada
+    validada em tests/proto_femm_element_b_check.py (bate com
+    mo_getb(smooth='off') a ~1e-16), reaproveitada aqui pro pipeline
+    femm_mesh_v2 (src/data_gen/parsers/femm_mesh_v2.py, target_field='B').
+
+    Bx=dA/dy, By=-dA/dx. `nodes[:, :2]` está em mm (convenção mi_probdef do
+    projeto) -- convertido pra metro aqui, senão o erro é de ~1000x (achado
+    2026-08-07, ver CLAUDE.md "Extração de dados direto do arquivo .ans").
+
+    Diferente de eval.py::_element_curl_A (que reconstrói o triângulo por lei
+    dos cossenos, sem coordenadas absolutas no chunk final) -- aqui as
+    coordenadas reais já estão disponíveis (vêm direto do .ans), então B sai
+    no referencial global de verdade, sem ambiguidade de rotação por
+    elemento. Vetorizado -- retorna (Bx, By), cada um [n_elems].
+    """
+    xm = nodes[:, 0].astype(np.float64) * 1e-3
+    ym = nodes[:, 1].astype(np.float64) * 1e-3
+    x0, y0 = xm[elems[:, 0]], ym[elems[:, 0]]
+    x1, y1 = xm[elems[:, 1]], ym[elems[:, 1]]
+    x2, y2 = xm[elems[:, 2]], ym[elems[:, 2]]
+    A0 = node_A[elems[:, 0]].astype(np.float64)
+    A1 = node_A[elems[:, 1]].astype(np.float64)
+    A2 = node_A[elems[:, 2]].astype(np.float64)
+
+    area2 = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)
+    b0, b1, b2 = y1 - y2, y2 - y0, y0 - y1
+    c0, c1, c2 = x2 - x1, x0 - x2, x1 - x0
+    dAdx = (A0 * b0 + A1 * b1 + A2 * b2) / area2
+    dAdy = (A0 * c0 + A1 * c1 + A2 * c2) / area2
+    return dAdy.astype(np.float32), (-dAdx).astype(np.float32)
+
+
+def _node_mean_of_elements(elems: np.ndarray, elem_field: np.ndarray, n_nodes: int) -> np.ndarray:
+    """Média simples (NÃO ponderada por área/ângulo) de um campo constante-
+    por-elemento nos nós incidentes -- caracterização empírica do B
+    suavizado nodal do FEMM (mo_getb default): testado contra 3 candidatos
+    de recuperação nodal em 6 nós internos, média simples foi
+    consistentemente a mais próxima (ver CLAUDE.md "Extração de dados direto
+    do arquivo .ans" -> "O que é exatamente o B suavizado do nó?").
+
+    `elem_field` pode ser [n_elems] ou [n_elems, C]; retorna sempre
+    [n_nodes, C] (C=1 se a entrada for 1D).
+    """
+    field = elem_field if elem_field.ndim == 2 else elem_field[:, None]
+    acc = np.zeros((n_nodes, field.shape[1]), dtype=np.float64)
+    count = np.zeros(n_nodes, dtype=np.float64)
+    for corner in range(3):
+        idx = elems[:, corner]
+        np.add.at(acc, idx, field)
+        np.add.at(count, idx, 1.0)
+    return (acc / count[:, None]).astype(np.float32)
+
+
 # ---------------------------------------------------------------------------
 # grade H×W a partir da malha (trifinder + interpolação baricêntrica)
 # ---------------------------------------------------------------------------

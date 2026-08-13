@@ -39,10 +39,21 @@ Duas mudanças de design em relação a mode='femm_mesh' (v1, femm_mesh.py):
 
 Grafo 1 -- vértices/campo (nós da malha real):
     node_x [S,2]  r_base, c_base
-    node_y [S,1]  A (potencial vetor, valor nodal exato)
+    node_y [S,1] (target_field='A', padrão) ou [S,2] (target_field='B')
     edge_index [2,E]  bidirecional -- malha real + wrap periódico θ=0/120°
     edge_attr [E,3]  delta_r, delta_c, center_dist  (SEM delta_mu -- mu_r
                      não é mais feature de vértice, não tem o que subtrair)
+
+target_field='B' (2026-08-13, ver CLAUDE.md "Grafo duplo vértices+elementos"):
+    node_y [S,2]  Bx,By -- calculado a partir de A via curl(A) fechado por
+                  elemento P1 (_element_b_from_A, coordenadas reais em
+                  metros -- sem a ambiguidade de rotação que existe em
+                  eval.py, que reconstrói o triângulo sem coordenadas
+                  absolutas), agregado por nó via média simples dos
+                  elementos incidentes (_node_mean_of_elements -- mesma
+                  caracterização empírica do B suavizado do FEMM usada no
+                  eval). y_hw amostrado com O MESMO padrão de A (barycentric,
+                  não constante-por-elemento) -- ver _grid_barycentric.
 
 Grafo 2 -- elementos/centróides (1 nó por triângulo, SEM arestas internas):
     elem_x [M,5]  mu_r, M, area, r_base_centróide, c_base_centróide
@@ -79,6 +90,7 @@ from scipy.spatial import cKDTree
 from src.data_gen.parsers.ans_parsing import (
     _parse_solution, _parse_block_materials, _block_magnet_polarity,
     _build_edges, _element_areas, _wrap_edge_pairs, _grid_polar_xy,
+    _element_b_from_A, _node_mean_of_elements,
 )
 from src.data_gen.motor_constants import N_POLES_SECTOR as _N_POLES_SECTOR
 
@@ -130,15 +142,20 @@ def _grid_barycentric(tri, node_field: np.ndarray, Xg: np.ndarray, Yg: np.ndarra
 def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
                            ang_1: float = 0.0, ang_2: float = 120.0,
                            n_r: int = 138, n_a: int = 276,
-                           tmp_dir: Path = None) -> dict:
+                           tmp_dir: Path = None, target_field: str = 'A') -> dict:
     """Deriva os dois grafos + grade H×W de UMA amostra a partir do
     `sample_XXXXXX.ans.gz` bruto. Sem FEMM aberto, sem chamada COM --
     só descompacta o arquivo e faz numpy/matplotlib.tri puro.
+
+    `target_field`: 'A' (padrão, retrocompatível) ou 'B' -- ver docstring do
+    módulo. Só afeta `node_y`/`y_hw`; o resto do dict (grafo de elementos,
+    arestas cruzadas, x_hw) é idêntico nos dois casos.
 
     Retorna dict com todos os campos descritos na docstring do módulo, mais
     L/elem_L/E_L/C_L (contagens por amostra, pra agrupamento em chunks) e
     dim_H/dim_W.
     """
+    assert target_field in ('A', 'B'), f"target_field inválido: {target_field!r}"
     ans_gz_path = Path(ans_gz_path)
     tmp_dir = Path(tmp_dir) if tmp_dir is not None else ans_gz_path.parent
     stem = ans_gz_path.name.removesuffix('.ans.gz')
@@ -190,7 +207,15 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     edge_attr = np.concatenate([edge_attr_fwd, edge_attr_bwd], axis=0).astype(np.float32)
 
     node_x = np.stack([r_base, c_base], axis=1).astype(np.float32)
-    node_y = node_A[:, None]
+
+    node_Bx = node_By = None
+    if target_field == 'A':
+        node_y = node_A[:, None]
+    else:
+        elem_Bx, elem_By = _element_b_from_A(nodes, elems, node_A)
+        node_Bx = _node_mean_of_elements(elems, elem_Bx, n_nodes)
+        node_By = _node_mean_of_elements(elems, elem_By, n_nodes)
+        node_y = np.concatenate([node_Bx, node_By], axis=1)
 
     # --- grafo 2: elementos/centróides (sem arestas internas) ---
     n_elems = elems.shape[0]
@@ -216,7 +241,16 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     tri, trifinder = _build_trifinder(nodes, elems)
     Mu_hw = _grid_const_per_element(trifinder, elem_mu, centroids, Xg, Yg).reshape(n_r, n_a)
     M_hw = _grid_const_per_element(trifinder, elem_M, centroids, Xg, Yg).reshape(n_r, n_a)
-    A_hw = _grid_barycentric(tri, node_A, Xg, Yg).reshape(n_r, n_a)
+    if target_field == 'A':
+        A_hw = _grid_barycentric(tri, node_A, Xg, Yg).reshape(n_r, n_a)
+        y_hw = A_hw[None, :, :]
+    else:
+        # mesmo padrão de amostragem de A -- interpolação baricêntrica do
+        # campo nodal (aqui Bx/By, já a média-por-nó calculada acima), não
+        # constante-por-elemento (estilo Mu_r/M).
+        Bx_hw = _grid_barycentric(tri, node_Bx[:, 0], Xg, Yg).reshape(n_r, n_a)
+        By_hw = _grid_barycentric(tri, node_By[:, 0], Xg, Yg).reshape(n_r, n_a)
+        y_hw = np.stack([Bx_hw, By_hw], axis=0)
 
     return {
         'node_x': node_x, 'node_y': node_y,
@@ -224,7 +258,7 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
         'elem_x': elem_x,
         'cross_edge_index': cross_edge_index, 'cross_edge_attr': cross_edge_attr,
         'x_hw': np.stack([Mu_hw, M_hw], axis=0),
-        'y_hw': A_hw[None, :, :],
+        'y_hw': y_hw,
         'L': np.array([n_nodes], dtype=np.int64),
         'elem_L': np.array([n_elems], dtype=np.int64),
         'E_L': np.array([edge_index.shape[1]], dtype=np.int64),

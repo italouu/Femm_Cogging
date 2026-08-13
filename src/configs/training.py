@@ -382,9 +382,8 @@ class MaskedFNO_GNNConfig:
 # │ FNO_BipartiteGNN│ mse / mae /          │ femm_mesh_v2     │ FNO_BipartiteGNNConfig   │
 # │                 │   relative_l2        │                  │   (grafo duplo vértices  │
 # │                 │                      │                  │    +elementos; parser    │
-# │                 │                      │                  │    próprio, femm_mesh_v2 │
-# │                 │                      │                  │    .py; eval_fn ainda    │
-# │                 │                      │                  │    não implementado)     │
+# │                 │                      │                  │    próprio, parsers/     │
+# │                 │                      │                  │    femm_mesh_v2.py)      │
 # └─────────────────┴──────────────────────┴──────────────────┴──────────────────────────┘
 #
 # Chaves de loss — LOSS_REGISTRY (src/neural_op/losses.py)

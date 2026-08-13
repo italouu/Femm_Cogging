@@ -1171,7 +1171,7 @@ def _plot_femm_mesh_v2(model, x_hw_i, y_hw_fno_i, node_x, node_y, fno_at_nodes, 
 
     Duas fontes de dado bem diferentes coexistem: x_hw/y_hw_fno vêm de uma
     grade regular H×W (plotados via _imshow, sem gaps/sobreposição) — o FNO
-    opera sobre essa grade. Já A (alvo e saída final da GNN) só existe nos
+    opera sobre essa grade. Já o alvo (e saída final da GNN) só existe nos
     VÉRTICES da malha real (node_x/node_y), plotados via _scatter em
     r_base/c_base — mesmo motivo de _plot_fno_gnn_mesh (mode='femm_mesh', v1):
     densidade de nós muito variável (refina perto de interfaces), rasterizar
@@ -1180,11 +1180,20 @@ def _plot_femm_mesh_v2(model, x_hw_i, y_hw_fno_i, node_x, node_y, fno_at_nodes, 
     Diferença chave em relação a _plot_fno_gnn_mesh (v1): node_x aqui é só
     [r_base, c_base] — SEM material (mu_r/M vivem no grafo de elementos,
     elem_x, plotado só como fundo em x_hw — não há scatter de elementos aqui,
-    a grade já cobre esse papel). Alvo é sempre escalar (A) neste pipeline —
-    B não é mais alvo (ver src/data_gen/parsers/femm_mesh_v2.py) — então não
-    há branch vetorial (Bx,By) como em _plot_fno_gnn_mesh.
+    a grade já cobre esse papel).
 
-    fno_at_nodes: A interpolado da grade do FNO na posição exata de cada
+    Suporta alvo escalar (A, node_y [S,1], target_field='A' padrão -- ver
+    src/data_gen/parsers/femm_mesh_v2.py) ou vetorial (Bx,By, node_y [S,2],
+    target_field='B', 2026-08-13) -- detectado via node_y.shape[1], mesmo
+    padrão de _plot_fno_gnn_mesh (v1). Diferente do pós-processamento
+    eval_cfg.show_b (que deriva B=curl(A) por ELEMENTO, sem coordenadas
+    absolutas -- só Br/Bθ são fisicamente significativos, ver
+    _plot_femm_mesh_v2_b), aqui Bx/By são o alvo DIRETO do treino, já
+    calculados em src/data_gen/parsers/femm_mesh_v2.py::parse_ans_gzip_sample
+    com coordenadas reais -- sem ambiguidade de rotação, plotáveis
+    cartesianamente como estão, nos vértices.
+
+    fno_at_nodes: alvo interpolado da grade do FNO na posição exata de cada
     vértice (_interpolate_fno_to_nodes_v2, via model(...,
     return_components=True)) — antes da correção da GNN. y_nodes = FNO@nós +
     delta da GNN (saída final do modelo).
@@ -1192,15 +1201,29 @@ def _plot_femm_mesh_v2(model, x_hw_i, y_hw_fno_i, node_x, node_y, fno_at_nodes, 
     r = node_x[:, 0].numpy()
     c = node_x[:, 1].numpy()
 
-    a_true = node_y[:, 0].numpy()
-    a_fno  = fno_at_nodes[:, 0].numpy()
-    a_gnn  = y_nodes[:, 0].numpy()
+    vec = node_y.shape[1] >= 2   # False -> escalar (A), True -> vetorial (Bx,By)
+    c0_label = 'Bx' if vec else 'A'
 
-    err_fno = np.abs(a_fno - a_true)
-    err_gnn = np.abs(a_gnn - a_true)
+    c0_true, c0_fno, c0_gnn = node_y[:, 0].numpy(), fno_at_nodes[:, 0].numpy(), y_nodes[:, 0].numpy()
 
-    mask  = np.abs(a_true) >= thr
-    B_ref = np.sqrt(np.mean(a_true[mask]**2)) if mask.any() else 1.0
+    if vec:
+        c1_true, c1_fno, c1_gnn = node_y[:, 1].numpy(), fno_at_nodes[:, 1].numpy(), y_nodes[:, 1].numpy()
+        mag_true = np.hypot(c0_true, c1_true)
+        mag_fno  = np.hypot(c0_fno,  c1_fno)
+        mag_gnn  = np.hypot(c0_gnn,  c1_gnn)
+        err_fno  = np.abs(mag_fno - mag_true)
+        err_gnn  = np.abs(mag_gnn - mag_true)
+        ref_true = mag_true
+        mask = mag_true >= thr
+    else:
+        c1_true = c1_fno = c1_gnn = None
+        mag_true = mag_fno = mag_gnn = None
+        err_fno = np.abs(c0_fno - c0_true)
+        err_gnn = np.abs(c0_gnn - c0_true)
+        ref_true = c0_true
+        mask = np.abs(c0_true) >= thr
+
+    B_ref = np.sqrt(np.mean(ref_true[mask]**2)) if mask.any() else 1.0
 
     fno_m, fno_med, fno_p95 = _masked_metrics(err_fno, mask, B_ref)
     gnn_m, gnn_med, gnn_p95 = _masked_metrics(err_gnn, mask, B_ref)
@@ -1215,44 +1238,95 @@ def _plot_femm_mesh_v2(model, x_hw_i, y_hw_fno_i, node_x, node_y, fno_at_nodes, 
     err_vmax = _err_vmax([en_fno, en_gnn], eval_cfg)
 
     def _lim(*a): return min(x.min() for x in a), max(x.max() for x in a)
-    a_lim = _lim(a_true, a_fno, a_gnn)
 
-    delta = a_gnn - a_fno
-    delta_vmax = max(float(np.abs(delta).max()), 1e-12)
+    if not vec:
+        # --- caso escalar (A) -- layout original, inalterado ---
+        a_lim = _lim(c0_true, c0_fno, c0_gnn)
+        delta = c0_gnn - c0_fno
+        delta_vmax = max(float(np.abs(delta).max()), 1e-12)
 
-    fig, axes = plt.subplots(3, 4, figsize=(18, 10))
+        fig, axes = plt.subplots(3, 4, figsize=(18, 10))
+        fig.suptitle(
+            f"{type(model).__name__} — amostra {i}  ({len(c0_true)} vértices)  |  "
+            f"B_ref={B_ref:.4f}  região relevante: {mask.mean()*100:.1f}%",
+            fontsize=12,
+        )
+
+        # Linha 0 — entradas (grade) + saída bruta do FNO (grade) + densidade de vértices
+        _imshow(axes[0, 0], x_hw_i[0].numpy(), 'Entrada: Mu_r')
+        _imshow(axes[0, 1], x_hw_i[1].numpy(), 'Entrada: M')
+        _imshow(axes[0, 2], y_hw_fno_i[0].numpy(), f'FNO (grade): {c0_label}')
+        axes[0, 3].scatter(c, r, s=4, color='steelblue', alpha=0.4, edgecolors='none')
+        axes[0, 3].set_title(f'Densidade de vértices — {len(r)} nós', fontsize=9)
+        axes[0, 3].set_xlim(0, 1); axes[0, 3].set_ylim(0, 1)
+
+        # Linha 1 — A nos vértices: GT / FNO interpolado / GNN (final) / correção da GNN
+        _scatter(axes[1, 0], r, c, c0_true, f'GT: {c0_label} (nós)',      vmin=a_lim[0], vmax=a_lim[1])
+        _scatter(axes[1, 1], r, c, c0_fno,  f'FNO@nós: {c0_label}',      vmin=a_lim[0], vmax=a_lim[1])
+        _scatter(axes[1, 2], r, c, c0_gnn,  f'GNN: {c0_label}',          vmin=a_lim[0], vmax=a_lim[1])
+        _scatter(axes[1, 3], r, c, delta,  'Δ = GNN − FNO@nós',
+                 cmap='RdBu_r', vmin=-delta_vmax, vmax=delta_vmax)
+
+        # Linha 2 — erro nó-a-nó (tamanho do marcador cresce com o erro)
+        size_fno = _err_sizes(en_fno, err_vmax)
+        _scatter(axes[2, 0], r, c, en_fno,
+                 f'FNO@nós {en_label}\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
+                 cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_fno)
+        size_gnn = _err_sizes(en_gnn, err_vmax)
+        _scatter(axes[2, 1], r, c, en_gnn,
+                 f'GNN {en_label}\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
+                 cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_gnn)
+        axes[2, 2].axis('off')
+        axes[2, 3].axis('off')
+
+        plt.tight_layout()
+        plt.show()
+        return
+
+    # --- caso vetorial (Bx,By) -- layout 4x4, mesmo padrão de
+    # _plot_fno_gnn_mesh (v1) / _plot_femm_mesh_v2_b (show_b) ---
+    c0_lim  = _lim(c0_true, c0_fno, c0_gnn)
+    c1_lim  = _lim(c1_true, c1_fno, c1_gnn)
+    mag_lim = _lim(mag_true, mag_fno, mag_gnn)
+
+    fig, axes = plt.subplots(4, 4, figsize=(18, 13))
     fig.suptitle(
-        f"{type(model).__name__} — amostra {i}  ({len(a_true)} vértices)  |  "
+        f"{type(model).__name__} — amostra {i}  ({len(c0_true)} vértices)  |  "
         f"B_ref={B_ref:.4f}  região relevante: {mask.mean()*100:.1f}%",
         fontsize=12,
     )
 
-    # Linha 0 — entradas (grade) + saída bruta do FNO (grade) + densidade de vértices
+    # Linha 0 — entradas (grade) + saída bruta do FNO (grade, canal Bx) + densidade de vértices
     _imshow(axes[0, 0], x_hw_i[0].numpy(), 'Entrada: Mu_r')
     _imshow(axes[0, 1], x_hw_i[1].numpy(), 'Entrada: M')
-    _imshow(axes[0, 2], y_hw_fno_i[0].numpy(), 'FNO (grade): A')
+    _imshow(axes[0, 2], y_hw_fno_i[0].numpy(), f'FNO (grade): {c0_label}')
     axes[0, 3].scatter(c, r, s=4, color='steelblue', alpha=0.4, edgecolors='none')
     axes[0, 3].set_title(f'Densidade de vértices — {len(r)} nós', fontsize=9)
     axes[0, 3].set_xlim(0, 1); axes[0, 3].set_ylim(0, 1)
 
-    # Linha 1 — A nos vértices: GT / FNO interpolado / GNN (final) / correção da GNN
-    _scatter(axes[1, 0], r, c, a_true, 'GT: A (nós)',      vmin=a_lim[0], vmax=a_lim[1])
-    _scatter(axes[1, 1], r, c, a_fno,  'FNO@nós: A',       vmin=a_lim[0], vmax=a_lim[1])
-    _scatter(axes[1, 2], r, c, a_gnn,  'GNN: A',           vmin=a_lim[0], vmax=a_lim[1])
-    _scatter(axes[1, 3], r, c, delta,  'Δ = GNN − FNO@nós',
-             cmap='RdBu_r', vmin=-delta_vmax, vmax=delta_vmax)
+    # Linha 1 — GT
+    _scatter(axes[1, 0], r, c, c0_true,  f'GT: {c0_label} (nós)', vmin=c0_lim[0],  vmax=c0_lim[1])
+    _scatter(axes[1, 1], r, c, c1_true,  'GT: By (nós)',          vmin=c1_lim[0],  vmax=c1_lim[1])
+    _scatter(axes[1, 2], r, c, mag_true, 'GT: |B| (nós)',         vmin=mag_lim[0], vmax=mag_lim[1])
+    axes[1, 3].axis('off')
 
-    # Linha 2 — erro nó-a-nó (tamanho do marcador cresce com o erro)
+    # Linha 2 — FNO@nós (interpolado, antes da correção da GNN)
+    _scatter(axes[2, 0], r, c, c0_fno,  f'FNO@nós: {c0_label}', vmin=c0_lim[0],  vmax=c0_lim[1])
+    _scatter(axes[2, 1], r, c, c1_fno,  'FNO@nós: By',          vmin=c1_lim[0],  vmax=c1_lim[1])
+    _scatter(axes[2, 2], r, c, mag_fno, 'FNO@nós: |B|',         vmin=mag_lim[0], vmax=mag_lim[1])
     size_fno = _err_sizes(en_fno, err_vmax)
-    _scatter(axes[2, 0], r, c, en_fno,
+    _scatter(axes[2, 3], r, c, en_fno,
              f'FNO@nós {en_label}\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
              cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_fno)
+
+    # Linha 3 — GNN (saída final)
+    _scatter(axes[3, 0], r, c, c0_gnn,  f'GNN: {c0_label}', vmin=c0_lim[0],  vmax=c0_lim[1])
+    _scatter(axes[3, 1], r, c, c1_gnn,  'GNN: By',          vmin=c1_lim[0],  vmax=c1_lim[1])
+    _scatter(axes[3, 2], r, c, mag_gnn, 'GNN: |B|',         vmin=mag_lim[0], vmax=mag_lim[1])
     size_gnn = _err_sizes(en_gnn, err_vmax)
-    _scatter(axes[2, 1], r, c, en_gnn,
+    _scatter(axes[3, 3], r, c, en_gnn,
              f'GNN {en_label}\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
              cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_gnn)
-    axes[2, 2].axis('off')
-    axes[2, 3].axis('off')
 
     plt.tight_layout()
     plt.show()
@@ -1285,7 +1359,7 @@ def femm_mesh_v2_eval_fn(model, d, eval_cfg):
 
     x_hw   = d['x_hw'][i:i + 1]           # [1, 2, H, W]
     node_x = d['node_x'][ns:ne]           # [S_i, 2]  r_base, c_base
-    node_y = d['node_y'][ns:ne]           # [S_i, 1]  A
+    node_y = d['node_y'][ns:ne]           # [S_i, 1] A ou [S_i, 2] Bx,By (target_field)
     elem_x = d['elem_x'][ms:me]           # [M_i, 5]  mu_r, M, area, r_base, c_base
     edge_index = d['edge_index'][:, es:ee] - ns
     edge_attr  = d['edge_attr'][es:ee]
@@ -1319,7 +1393,17 @@ def femm_mesh_v2_eval_fn(model, d, eval_cfg):
             fno_at_nodes = normalizer.decode(fno_at_nodes, 'node_y')
             y_nodes      = normalizer.decode(y_nodes,      'node_y')
 
-    if getattr(eval_cfg, 'show_b', False):
+    if getattr(eval_cfg, 'show_b', False) and node_y.shape[1] > 1:
+        # show_b só faz sentido quando o alvo de treino é A (escalar) e B
+        # precisa ser DERIVADO por pós-processamento -- com
+        # target_field='B' (ver src/data_gen/parsers/femm_mesh_v2.py),
+        # node_y já É Bx,By direto, então essa derivação é desnecessária (e
+        # node_y[:,0] seria tratado incorretamente como potencial A). Ignora
+        # o flag nesse caso e cai no plot vetorial normal abaixo.
+        print("eval_cfg.show_b ignorado -- node_y já é B (target_field='B'), "
+              "sem A para derivar de curl().")
+
+    if getattr(eval_cfg, 'show_b', False) and node_y.shape[1] == 1:
         # Pós-processamento: deriva B=curl(A) por elemento a partir do GT/
         # FNO@nós/GNN de A (ver _triangle_xy_from_edges/_element_curl_A) —
         # a geometria do triângulo (x,y reais em mm) não depende de qual A é

@@ -4,7 +4,7 @@ from typing import Optional
 
 @dataclass
 class DatagenConfig:
-    dataset: str = 'mesh_138x276'
+    dataset: str = 'mesh_ans_138x276'
 
     # Grade / Geometria
     n_r: int = 138
@@ -13,12 +13,24 @@ class DatagenConfig:
     ang_2: int = 120
 
     # Geração de dados
-    # 'grid'/'qtree' -> pipeline CSV (generate_data.py + gen_npz_structures.py);
-    # 'femm_mesh'    -> pipeline via malha real do FEMM (generate_data_femm_mesh.py),
-    #                   grafo extraído do .ans do solver em vez de quadtree Shapely
-    #                   (ver src/data_gen/femm_mesh.py). Não usa check_data/generate_one_batch
-    #                   (esses só aceitam 'grid'/'qtree').
-    mode: str = 'femm_mesh'
+    # 'grid'/'qtree'    -> pipeline CSV (generate_data.py + gen_npz_structures.py);
+    # 'femm_mesh'       -> pipeline via malha real do FEMM (generate_data_femm_mesh.py),
+    #                      grafo extraído do .ans do solver em vez de quadtree Shapely
+    #                      (ver src/data_gen/femm_mesh.py). Não usa check_data/generate_one_batch
+    #                      (esses só aceitam 'grid'/'qtree').
+    # 'femm_mesh_v2'    -> só a etapa de geração BRUTA (generate_data_femm_mesh_v2.py):
+    #                      desenha+malha+mi_analyze() e salva o .ans INTEIRO (texto puro do
+    #                      FEMM, sem nenhuma extração/derivação) comprimido em gzip direto em
+    #                      data/raw/<dataset>/sample_XXXXXX.ans.gz — sem mi_loadsolution()/
+    #                      COM de pós-processamento (não precisa, só copia o arquivo que
+    #                      mi_analyze() já escreveu em disco). Corrige a lacuna encontrada em
+    #                      2026-08-07 (ver CLAUDE.md, seção "Extração de dados direto do
+    #                      arquivo .ans"): o modo 'femm_mesh' descartava a malha/elementos
+    #                      originais depois de derivar node_x/edge_index/etc., inviabilizando
+    #                      recálculos futuros (ex: B exato por elemento) sem resimular. Etapas
+    #                      de parser/chunk (gen_npz_structures.py/build_data_chunks.py) que lêem
+    #                      esse .ans.gz ainda não existem — ver "Pendências conhecidas".
+    mode: str = 'femm_mesh_v2'
     distribution: str = 'uniform'
     sample_method: str = 'legacy'  # 'fixed_geometry' |'constrained' | 'legacy' | 'constrained_lhs'
     n_samples: int = 4000
@@ -56,7 +68,16 @@ class DatagenConfig:
     #
     # Só FEMM_MESH/FEMM_MESH_A são compatíveis com mode='femm_mesh'; os demais
     # são do pipeline CSV (grid/qtree).
-    npz_parser:             str           = 'FEMM_MESH'
+    #
+    # mode='femm_mesh_v2' NÃO usa PARSER_REGISTRY -- npz_parser é ignorado nesse
+    # modo. gen_npz_structures.py::_run_femm_mesh_v2 chama
+    # src/data_gen/femm_mesh_v2.py::parse_ans_gzip_sample direto sobre o
+    # sample_*.ans.gz bruto, que já produz o formato final (grafo de vértices
+    # [node_x=r,c / node_y=A] + grafo de elementos [elem_x=mu_r,M,area,r,c] +
+    # arestas cruzadas + grade H×W) -- não há seleção de colunas a fazer. Arch
+    # correspondente: FNO_BipartiteGNN (src/configs/training.py). Ver CLAUDE.md,
+    # "Grafo duplo vértices+elementos" (2026-08-10).
+    npz_parser:             str           = 'FEMM_MESH_A'
     npz_samples_per_worker: int           = 2
     npz_max_workers:        int           = 12
     npz_max_samples:        Optional[int] = None

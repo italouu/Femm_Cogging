@@ -66,6 +66,10 @@ def _detect_chunk_dims(dataset: str) -> dict:
             )
     if 'edge_attr' in sample:
         dims['edge_dim'] = sample['edge_attr'].shape[-1]
+    if 'elem_x' in sample:
+        dims['elem_in_ch'] = sample['elem_x'].shape[1]
+    if 'cross_edge_attr' in sample:
+        dims['cross_edge_dim'] = sample['cross_edge_attr'].shape[-1]
     return dims
 
 
@@ -215,6 +219,44 @@ class FNO_GNN_v2Config(FNO_GNNConfig):
 
 
 @dataclass
+class FNO_BipartiteGNNConfig:
+    """Config de FNO_BipartiteGNN (src/neural_op/archs/femm_mesh_v2_gnn.py) --
+    grafo duplo vértices (iterado) + elementos (estático, injetado via
+    arestas cruzadas), mode='femm_mesh_v2' (ver src/data_gen/femm_mesh_v2.py
+    e CLAUDE.md/conversa 2026-08-10 sobre a arquitetura)."""
+    fno_modes1: int = 270
+    fno_modes2: int = 270
+    fno_conv_width: int = 6
+    fno_conv_layers: int = 4
+    fno_lift_width: int = 64
+    fno_lift_layers: int = 3
+    fno_proj_width: int = 64
+    fno_proj_layers: int = 3
+    data_res: tuple = (138, 276)
+    gnn_node_width: int = 32
+    gnn_n_layers: int = 3
+    lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
+
+    # edge_dim/grid_in_ch/grid_out_ch/node_in_ch/elem_in_ch/cross_edge_dim --
+    # todos auto-detectados em NnCfg.__post_init__ (helper _detect_chunk_dims)
+    # a partir dos chunks reais do dataset — ver FNO_GNNConfig para o mesmo
+    # padrão. Defaults abaixo batem com o layout fixo de
+    # src/data_gen/femm_mesh_v2.py (node_x=[r,c], edge_attr=3 colunas,
+    # elem_x=5 colunas, cross_edge_attr=1 coluna) — só usados se este
+    # arch_cfg for reconstruído fora de NnCfg (ex: scripts/eval.py).
+    edge_dim:       int = field(default=3, init=False)
+    grid_in_ch:     int = field(default=2, init=False)
+    grid_out_ch:    int = field(default=1, init=False)
+    node_in_ch:     int = field(default=2, init=False)
+    elem_in_ch:     int = field(default=5, init=False)
+    cross_edge_dim: int = field(default=1, init=False)
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        return _from_dict_generic(cls, d)
+
+
+@dataclass
 class GNN_PostBaseConfig:
     # Treino em duas etapas (não end-to-end): base_run_dir aponta para um run já treinado
     # (FNO2d ou FNO_GNN), congelado; só o GNN novo é treinado.
@@ -337,6 +379,12 @@ class MaskedFNO_GNNConfig:
 # │ GNN_PostBase    │ mse / mae /          │ qtree            │ GNN_PostBaseConfig       │
 # │                 │   relative_l2        │                  │   (base FNO2d/FNO_GNN    │
 # │                 │                      │                  │    congelada)            │
+# │ FNO_BipartiteGNN│ mse / mae /          │ femm_mesh_v2     │ FNO_BipartiteGNNConfig   │
+# │                 │   relative_l2        │                  │   (grafo duplo vértices  │
+# │                 │                      │                  │    +elementos; parser    │
+# │                 │                      │                  │    próprio, femm_mesh_v2 │
+# │                 │                      │                  │    .py; eval_fn ainda    │
+# │                 │                      │                  │    não implementado)     │
 # └─────────────────┴──────────────────────┴──────────────────┴──────────────────────────┘
 #
 # Chaves de loss — LOSS_REGISTRY (src/neural_op/losses.py)
@@ -362,11 +410,11 @@ class MaskedFNO_GNNConfig:
 
 @dataclass
 class NnCfg:
-    dataset: str = 'test_motor_v5_135x270'
+    dataset: str = 'mesh_138x276_FEMM_MESH_A'
     arch: str = 'FNO_GNN'
     loss: str = 'mae'
 
-    problem: str = 'test_motor_v5_135x270'
+    problem: str = 'mesh_138x276_FEMM_MESH_A'
 
     # Treino
     lr: float = 1e-3
@@ -433,7 +481,8 @@ class NnCfg:
         #
         # if hasattr(self.arch_cfg, 'edge_dim'):
         #     self.arch_cfg.edge_dim = _detect_edge_dim_from_dataset(self.dataset)
-        _dim_fields = ('grid_in_ch', 'grid_out_ch', 'node_in_ch', 'edge_dim')
+        _dim_fields = ('grid_in_ch', 'grid_out_ch', 'node_in_ch', 'edge_dim',
+                       'elem_in_ch', 'cross_edge_dim')
         if isinstance(self.arch_cfg, FNOConfig) or any(hasattr(self.arch_cfg, f) for f in _dim_fields):
             dims = _detect_chunk_dims(self.dataset)
             if isinstance(self.arch_cfg, FNOConfig):
@@ -450,6 +499,10 @@ class NnCfg:
                 self.arch_cfg.node_in_ch = dims['node_x_ch']
             if hasattr(self.arch_cfg, 'edge_dim'):
                 self.arch_cfg.edge_dim = dims['edge_dim']
+            if hasattr(self.arch_cfg, 'elem_in_ch'):
+                self.arch_cfg.elem_in_ch = dims['elem_in_ch']
+            if hasattr(self.arch_cfg, 'cross_edge_dim'):
+                self.arch_cfg.cross_edge_dim = dims['cross_edge_dim']
         if self.normalize:
             from src.neural_op.normalization import Normalizer
             self.norm_stats = Normalizer.fit(self.dataset, self.arch).to_dict()

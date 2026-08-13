@@ -14,17 +14,27 @@ _MASKED_ARCHS = {'MaskedFNO2d', 'FNO2d_SingleMat', 'MaskedFNO_GNN'}
 # cruas por _interpolate_fno_to_nodes (grid_sample espera [0,1] literal),
 # reconstrução de geometria (eval.py/bench/metrics.py) e mapas de material nos
 # plots. Nunca normalizadas, para qualquer arch de grafo (estrutural ao
-# dataset, não ao arch).
+# dataset, não ao arch) que usa o layout node_x clássico (qtree/femm_mesh v1).
 _NODE_X_STRUCTURAL = {0, 2, 3, 4}
 
+# FNO_BipartiteGNN (mode='femm_mesh_v2', ver src/data_gen/femm_mesh_v2.py):
+# node_x = [r_base, c_base] — layout diferente do clássico acima (só posição,
+# 2 colunas, ambas usadas cruas por _interpolate_fno_to_nodes_v2). Excluído
+# por completo do z-score, não pelos índices fixos de _NODE_X_STRUCTURAL
+# (que presumem 5+ colunas e estourariam IndexError aqui).
+_NODE_X_FULLY_STRUCTURAL_ARCHS = {'FNO_BipartiteGNN'}
 
-def _exclude_channels(arch: str, has_graph: bool) -> dict:
+
+def _exclude_channels(arch: str, has_graph: bool, node_x_ch: int = None) -> dict:
     """Canais que ficam de fora do z-score (identidade: mean=0, std=1)."""
     excl = {}
     if arch in _MASKED_ARCHS:
         excl['x_hw'] = {0}
     if has_graph:
-        excl['node_x'] = set(_NODE_X_STRUCTURAL)
+        if arch in _NODE_X_FULLY_STRUCTURAL_ARCHS:
+            excl['node_x'] = set(range(node_x_ch)) if node_x_ch else set()
+        else:
+            excl['node_x'] = set(_NODE_X_STRUCTURAL)
     return excl
 
 
@@ -88,8 +98,12 @@ class Normalizer:
 
         sample    = torch.load(chunk_paths[0], map_location='cpu', weights_only=False)
         has_graph = 'node_x' in sample
+        has_elem  = 'elem_x' in sample   # grafo de elementos (mode='femm_mesh_v2')
+        node_x_ch = sample['node_x'].shape[1] if has_graph else None
         del sample
-        keys = ['x_hw', 'y_hw'] + (['node_x', 'node_y'] if has_graph else [])
+        keys = (['x_hw', 'y_hw']
+                + (['node_x', 'node_y'] if has_graph else [])
+                + (['elem_x'] if has_elem else []))
 
         cache_path = chunk_dir / 'norm_stats.json'
         if cache_path.exists() and not force_recompute:
@@ -99,7 +113,7 @@ class Normalizer:
                   f"em '{dataset}' (1x, cacheado em {cache_path.name})...", flush=True)
             stats = _fit_stats_from_chunks(chunk_paths, keys)
             cache_path.write_text(json.dumps(stats))
-        return cls(stats, exclude=_exclude_channels(arch, has_graph))
+        return cls(stats, exclude=_exclude_channels(arch, has_graph, node_x_ch))
 
     @classmethod
     def from_dict(cls, d: dict) -> 'Normalizer':
@@ -147,7 +161,7 @@ class Normalizer:
         normalizado sem nenhuma mudança nos step_fn de cada arch)."""
         if isinstance(batch, dict):
             out = dict(batch)
-            for key in ('x_hw', 'y_hw', 'node_x', 'node_y'):
+            for key in ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x'):
                 if key in out:
                     out[key] = self.encode(out[key], key)
             return out

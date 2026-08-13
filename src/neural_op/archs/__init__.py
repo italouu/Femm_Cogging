@@ -16,9 +16,14 @@ from src.neural_op.archs.gnn_post_base  import (GNN_PostBase,
 from src.neural_op.archs.eval           import (fno_eval_fn, fno_gnn_eval_fn,
                                                 masked_fno_eval_fn, masked_fno_gnn_eval_fn,
                                                 single_mat_fno_eval_fn)
+from src.neural_op.archs.femm_mesh_v2_gnn import (FNO_BipartiteGNN,
+                                                  make_fno_bipartite_gnn_step,
+                                                  fno_bipartite_gnn_metric_fn,
+                                                  femm_mesh_v2_eval_fn)
 from src.configs.training               import (FNOConfig, FNO_GNNConfig, FNO_GNN_v2Config,
                                                 MaskedFNO2dConfig, MaskedFNO_GNNConfig,
-                                                SingleMatFNOConfig, GNN_PostBaseConfig)
+                                                SingleMatFNOConfig, GNN_PostBaseConfig,
+                                                FNO_BipartiteGNNConfig)
 # [REMOVIDO] PhiDeepONet — removido do escopo ativo (2026-05-27)
 # from src.neural_op.archs.phi_deeponet import PhiDeepONet,        phi_deeponet_step_fn
 # from src.neural_op.archs.eval         import phi_deeponet_eval_fn
@@ -159,6 +164,19 @@ ARCH_REGISTRY: dict = {
         make_step_fn=lambda cfg, lcfg: make_gnn_post_base_step_fn(lcfg),
         eval_fn=fno_gnn_eval_fn,   # mesma assinatura de forward que FNO_GNN
         metric_fn=lambda cfg: gnn_post_base_metric_fn,
+    ),
+    # FNO_BipartiteGNN (2026-08-10): grafo duplo vértices+elementos,
+    # mode='femm_mesh_v2' (ver src/data_gen/femm_mesh_v2.py,
+    # src/neural_op/archs/femm_mesh_v2_gnn.py). eval_fn ainda não
+    # implementado (só plot/visualização — treino/métricas funcionam).
+    'FNO_BipartiteGNN': ArchEntry(
+        cls=FNO_BipartiteGNN,
+        cfg_cls=FNO_BipartiteGNNConfig,
+        loader_mode='femm_mesh_v2',
+        model_kwargs=_fno_gnn_kwargs,   # só descarta lambda_loss, igual FNO_GNN
+        make_step_fn=lambda cfg, lcfg: make_fno_bipartite_gnn_step(cfg.lambda_loss, lcfg),
+        eval_fn=femm_mesh_v2_eval_fn,
+        metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),
 }
 

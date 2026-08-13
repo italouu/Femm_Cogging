@@ -96,6 +96,13 @@ if __name__ == "__main__":
         # modo tem seu próprio fluxo, reaproveitado aqui em vez de duplicado.
         from scripts.generate_data_femm_mesh import run as run_femm_mesh
         run_femm_mesh()
+    elif MODE == 'femm_mesh_v2':
+        # variante do femm_mesh que só salva o .ans bruto (gzip) em data/raw/,
+        # sem derivar node_x/edge_index/etc. na hora — ver
+        # src/data_gen/femm_mesh.py::save_ans_gzip_sample e CLAUDE.md
+        # ("Extração de dados direto do arquivo .ans", achado 2026-08-07).
+        from scripts.generate_data_femm_mesh_v2 import run as run_femm_mesh_v2
+        run_femm_mesh_v2()
     else:
         _gen = _SAMPLE_METHODS[_dg.sample_method]
         motor_params_list = _gen(num_samples=N_SAMPLES, seed=_dg.datagen_seed)

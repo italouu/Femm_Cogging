@@ -52,6 +52,8 @@ consultável por ponto (`Jm`, único candidato, sempre retorna 0 mesmo dentro
 de ímãs) — limitações da própria API do FEMM, não do método de acesso.
 """
 
+import gzip
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -607,4 +609,65 @@ def generate_mesh_sample(motor_params: dict, tmp_dir: Path, out_path: Path,
         'n_edges_undirected': edges_undirected.shape[0],
         'n_edges_wrap': len(wrap_idx_1),
         'n_edges_directed': edge_index.shape[1],
+    }
+
+
+# ---------------------------------------------------------------------------
+# mode='femm_mesh_v2' -- só geração bruta, salva o .ans inteiro (gzip)
+# ---------------------------------------------------------------------------
+
+def save_ans_gzip_sample(motor_params: dict, tmp_dir: Path, out_path: Path) -> dict:
+    """Gera 1 amostra (desenha + malha + mi_analyze) e salva o `.ans`
+    BRUTO -- texto completo escrito pelo FEMM, sem nenhuma extração ou
+    derivação -- comprimido em gzip direto em `out_path`
+    (`data/raw/<dataset>/sample_XXXXXX.ans.gz`, escrita atômica).
+
+    Existe pra corrigir a lacuna encontrada em 2026-08-07 (ver CLAUDE.md,
+    "Extração de dados direto do arquivo .ans"): `generate_mesh_sample`
+    (mode='femm_mesh') deriva node_x/edge_index/etc. e descarta a malha
+    original (elems, incluindo a conectividade de elementos) -- sem ela,
+    não dá pra recalcular nada (ex: B exato por elemento, validado nesta
+    sessão) sem resimular. Guardando o `.ans` inteiro, qualquer derivação
+    futura parte só do arquivo, sem FEMM.
+
+    SEM `mi_loadsolution()`/chamada de pós-processamento nenhuma -- não
+    precisa, o arquivo que `mi_analyze()` já escreveu em disco é
+    exatamente o que se quer guardar.
+
+    Compressão: gzip padrão da stdlib, cópia em bytes crus (`'rb'`/`'wb'`,
+    sem tradução de encoding/newline) -- formato portável, decompressível
+    em qualquer SO. Quem for parsear o conteúdo depois (Linux, ao que tudo
+    indica) deve abrir com `encoding='utf-8'` explícito, nunca depender do
+    encoding padrão do SO (nesta sessão, prints no console Windows já
+    quebraram por causa disso -- cp1252 não é UTF-8).
+    """
+    tmp_dir = Path(tmp_dir)
+    out_path = Path(out_path)
+    fem_file = str(tmp_dir / "model.fem")
+    ans_file = tmp_dir / "model.ans"
+
+    model = BLDC_FEMM_Model_Sym120_Annular(motor_params=motor_params, phase=0)
+
+    femm.openfemm('bHide')
+    femm.main_resize(1000, 1000)
+    femm.newdocument(0)
+    femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, 0, 200)
+    model.draw_motor()
+    femm.mi_zoomnatural()
+    femm.mi_saveas(fem_file)
+    femm.mi_createmesh()
+    femm.mi_analyze()
+    femm.closefemm()
+
+    # escrita atômica: salva em .tmp e renomeia -- mesma técnica de
+    # generate_mesh_sample/process_and_save_sample
+    stem = out_path.stem.removesuffix('.ans')   # sample_XXXXXX (out_path = sample_XXXXXX.ans.gz)
+    tmp_gz = out_path.parent / f"{stem}.tmp.ans.gz"
+    with open(ans_file, 'rb') as f_in, gzip.open(tmp_gz, 'wb') as f_out:
+        shutil.copyfileobj(f_in, f_out)
+    tmp_gz.replace(out_path)
+
+    return {
+        'ans_size_bytes': ans_file.stat().st_size,
+        'gz_size_bytes': out_path.stat().st_size,
     }

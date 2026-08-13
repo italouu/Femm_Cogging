@@ -404,6 +404,197 @@ class ChunkQtreeDataset(IterableDataset):
                     t.join(timeout=0.05)
 
 
+# ── Grafo duplo (mode='femm_mesh_v2') ────────────────────────────────────────
+
+class ChunkFemmMeshV2Dataset(IterableDataset):
+    """
+    Versão de ChunkQtreeDataset para o grafo duplo do mode='femm_mesh_v2'
+    (vértices + elementos + arestas cruzadas, ver src/data_gen/femm_mesh_v2.py
+    e src/neural_op/archs/femm_mesh_v2_gnn.py).
+
+    edge_index (vértice-vértice) e cross_edge_index (elemento->vértice) são
+    emitidos com índices LOCAIS à amostra (0..L[i]-1 / 0..elem_L[i]-1) --
+    femm_mesh_v2_collate re-offseta os dois espaços ao montar o batch.
+    """
+
+    def __init__(self, chunk_paths, buffer_size, prefetch_chunks=2):
+        self.chunk_paths     = list(chunk_paths)
+        self.buffer_size     = buffer_size
+        self.prefetch_chunks = prefetch_chunks
+
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        paths = list(self.chunk_paths)
+
+        if worker_info is not None:
+            rng   = random.Random(worker_info.seed % (2 ** 32))
+            paths = paths[worker_info.id :: worker_info.num_workers]
+        else:
+            rng = random.Random()
+
+        rng.shuffle(paths)
+
+        stop = threading.Event()
+        q    = _queue.Queue(maxsize=self.prefetch_chunks)
+
+        def _loader():
+            for path in paths:
+                if stop.is_set():
+                    break
+                try:
+                    d = torch.load(path, map_location='cpu')
+                except Exception as e:
+                    print(f"\n  [WARNING] chunk corrompido ignorado: {path}\n  {e}", flush=True)
+                    continue
+                payload = {
+                    'x_hw':             d['x_hw'],              # [B, 2, H, W]
+                    'y_hw':             d['y_hw'],               # [B, 1, H, W]
+                    'node_x':           d['node_x'],             # [S_tot, 2]
+                    'node_y':           d['node_y'],             # [S_tot, 1]
+                    'edge_index':       d['edge_index'],         # [2, E_tot]  índices globais no chunk
+                    'edge_attr':        d['edge_attr'],          # [E_tot, 3]
+                    'elem_x':           d['elem_x'],             # [M_tot, 5]
+                    'cross_edge_index': d['cross_edge_index'],   # [2, C_tot]  índices globais no chunk
+                    'cross_edge_attr':  d['cross_edge_attr'],    # [C_tot, 1]
+                    'L':                d['L'],                  # [B]
+                    'elem_L':           d['elem_L'],             # [B]
+                    'E_L':              d['E_L'],                # [B]
+                    'C_L':              d['C_L'],                # [B]
+                }
+                del d
+                while not stop.is_set():
+                    try:
+                        q.put(payload, timeout=0.05)
+                        break
+                    except _queue.Full:
+                        pass
+            if not stop.is_set():
+                q.put(None)
+
+        t = threading.Thread(target=_loader, daemon=True)
+        t.start()
+
+        buffer = []
+
+        try:
+            while True:
+                while True:
+                    try:
+                        item = q.get(timeout=0.1)
+                        break
+                    except _queue.Empty:
+                        if not t.is_alive():
+                            item = None
+                            break
+
+                if item is None:
+                    break
+
+                L, elem_L, E_L, C_L = item['L'], item['elem_L'], item['E_L'], item['C_L']
+                B = int(L.shape[0])
+
+                # Offsets acumulados de nós/elementos/arestas dentro do chunk
+                n_off = torch.cat([torch.zeros(1, dtype=torch.long), L.cumsum(0)])
+                m_off = torch.cat([torch.zeros(1, dtype=torch.long), elem_L.cumsum(0)])
+                e_off = torch.cat([torch.zeros(1, dtype=torch.long), E_L.cumsum(0)])
+                c_off = torch.cat([torch.zeros(1, dtype=torch.long), C_L.cumsum(0)])
+
+                perm = torch.randperm(B).tolist()
+
+                for i in perm:
+                    ns, ne = int(n_off[i]), int(n_off[i + 1])
+                    ms, me = int(m_off[i]), int(m_off[i + 1])
+                    es, ee = int(e_off[i]), int(e_off[i + 1])
+                    cs, ce = int(c_off[i]), int(c_off[i + 1])
+
+                    cei = item['cross_edge_index'][:, cs:ce].clone()
+                    cei[0] -= ms   # linha 0: índice do elemento
+                    cei[1] -= ns   # linha 1: índice do vértice
+
+                    sample = {
+                        'x_hw':             item['x_hw'][i],                      # view [2, H, W]
+                        'y_hw':             item['y_hw'][i],                      # view [1, H, W]
+                        'node_x':           item['node_x'][ns:ne],                # view [S_i, 2]
+                        'node_y':           item['node_y'][ns:ne],                # view [S_i, 1]
+                        'edge_index':       item['edge_index'][:, es:ee] - ns,    # cópia [2, E_i]
+                        'edge_attr':        item['edge_attr'][es:ee],             # view [E_i, 3]
+                        'elem_x':           item['elem_x'][ms:me],                # view [M_i, 5]
+                        'cross_edge_index': cei,                                   # cópia [2, C_i]
+                        'cross_edge_attr':  item['cross_edge_attr'][cs:ce],       # view [C_i, 1]
+                        'L':                int(L[i]),
+                        'elem_L':           int(elem_L[i]),
+                        'E_L':              int(E_L[i]),
+                        'C_L':              int(C_L[i]),
+                    }
+
+                    buffer.append(sample)
+
+                    if len(buffer) >= self.buffer_size:
+                        idx = rng.randrange(len(buffer))
+                        yield buffer[idx]
+                        buffer[idx] = buffer[-1]
+                        buffer.pop()
+
+            # ── Flush do buffer restante ──────────────────────────────────────
+            rng.shuffle(buffer)
+            yield from buffer
+
+        finally:
+            stop.set()
+            while t.is_alive():
+                try:
+                    q.get_nowait()
+                except _queue.Empty:
+                    t.join(timeout=0.05)
+
+
+def femm_mesh_v2_collate(samples):
+    """
+    Collate para ChunkFemmMeshV2Dataset.
+
+    Re-offseta DOIS espaços de índice: edge_index (vértice-vértice, por nó)
+    e cross_edge_index (elemento->vértice -- linha 0 por elemento, linha 1
+    por nó, mesmo offset de nó usado em edge_index).
+
+    Saída : dict com grade [B, 2/1, H, W], grafo de vértices e grafo de
+    elementos, todos com índices globais no batch.
+    """
+    L      = torch.tensor([s['L']      for s in samples], dtype=torch.long)   # [B]
+    elem_L = torch.tensor([s['elem_L'] for s in samples], dtype=torch.long)   # [B]
+    E_L    = torch.tensor([s['E_L']    for s in samples], dtype=torch.long)   # [B]
+    C_L    = torch.tensor([s['C_L']    for s in samples], dtype=torch.long)   # [B]
+
+    n_offsets = torch.cat([torch.zeros(1, dtype=torch.long), L.cumsum(0)[:-1]])       # [B]
+    m_offsets = torch.cat([torch.zeros(1, dtype=torch.long), elem_L.cumsum(0)[:-1]])  # [B]
+
+    edge_index = torch.cat(
+        [s['edge_index'] + off for s, off in zip(samples, n_offsets)],
+        dim=1,
+    )   # [2, E_tot]
+
+    cross_edge_index = torch.cat(
+        [torch.stack([s['cross_edge_index'][0] + m_off, s['cross_edge_index'][1] + n_off])
+         for s, m_off, n_off in zip(samples, m_offsets, n_offsets)],
+        dim=1,
+    )   # [2, C_tot]
+
+    return {
+        'x_hw':             torch.stack([s['x_hw']             for s in samples]),   # [B, 2, H, W]
+        'y_hw':             torch.stack([s['y_hw']             for s in samples]),   # [B, 1, H, W]
+        'node_x':           torch.cat(  [s['node_x']           for s in samples]),   # [S_tot, 2]
+        'node_y':           torch.cat(  [s['node_y']           for s in samples]),   # [S_tot, 1]
+        'edge_index':       edge_index,                                                # [2, E_tot]
+        'edge_attr':        torch.cat(  [s['edge_attr']        for s in samples]),   # [E_tot, 3]
+        'elem_x':           torch.cat(  [s['elem_x']           for s in samples]),   # [M_tot, 5]
+        'cross_edge_index': cross_edge_index,                                          # [2, C_tot]
+        'cross_edge_attr':  torch.cat(  [s['cross_edge_attr']  for s in samples]),   # [C_tot, 1]
+        'L':                L,                                                         # [B]
+        'elem_L':           elem_L,                                                    # [B]
+        'E_L':              E_L,                                                       # [B]
+        'C_L':              C_L,                                                       # [B]
+    }
+
+
 # ── build_loaders ─────────────────────────────────────────────────────────────
 
 # [REMOVIDO] assinatura antiga de build_loaders — recebia train_portion e usava
@@ -526,6 +717,8 @@ def build_loaders(chunk_paths, batch_size, train_split,
     """
     if mode == 'grid':
         cls, collate_fn = ChunkStreamDataset, None
+    elif mode == 'femm_mesh_v2':
+        cls, collate_fn = ChunkFemmMeshV2Dataset, femm_mesh_v2_collate
     else:
         cls, collate_fn = ChunkQtreeDataset, qtree_collate
 
@@ -535,7 +728,7 @@ def build_loaders(chunk_paths, batch_size, train_split,
     # num_workers=0 não prejudica o throughput de I/O.
     if sys.platform == 'win32' and num_workers > 0:
         print(f"  [Windows] num_workers={num_workers} → forçado para 0 "
-              f"(shared memory insuficiente para chunks {'qtree' if mode == 'qtree' else 'grid'} grandes)")
+              f"(shared memory insuficiente para chunks '{mode}' grandes)")
         num_workers = 0
 
     paths = list(chunk_paths)

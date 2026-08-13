@@ -19,6 +19,7 @@ Execução (a partir da raiz do projeto, mesmo comando pros três modos):
     python -m scripts.gen_npz_structures
 """
 
+import csv
 import os
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor, as_completed, process
@@ -28,11 +29,14 @@ import numpy as np
 
 from src.data_gen.data_utils import QtreeSampleUnifier, GridSampleUnifier
 from src.data_gen.sample_processor import process_and_save_sample
+from src.data_gen.femm_mesh_v2 import parse_ans_gzip_sample
 from src.data_gen.parsers import PARSER_REGISTRY
 from src.configs.datagen import DatagenConfig
 _dg      = DatagenConfig()
 N_R      = _dg.n_r
 N_A      = _dg.n_a
+ANG_1    = _dg.ang_1
+ANG_2    = _dg.ang_2
 N_PHASES = 1  # fase do rotor fixada em 0 (n_phases removido de DatagenConfig)
 DATASET  = _dg.dataset
 
@@ -183,6 +187,133 @@ def _run_femm_mesh(max_samples):
     print(f"  Já prontos : {ja_prontos}")
 
 
+# ── mode='femm_mesh_v2': deriva os 2 grafos + grade a partir do .ans.gz bruto ──
+# Sem PARSER_REGISTRY aqui -- parse_ans_gzip_sample já produz o formato final
+# (grafo de vértices + grafo de elementos + arestas cruzadas + grade), não há
+# seleção de colunas a fazer (ao contrário de mode='femm_mesh', que tem várias
+# variantes de parser sobre o mesmo staging bruto). Por isso não usa
+# parsed_dataset_name (sufixo de parser) -- grava direto em
+# data/temp/samples_npz/<dataset>/, mesma convenção do grid/qtree.
+
+def _parse_and_save_one_v2(path: Path, r_in: float, r_ext: float, ang_1: float, ang_2: float,
+                            n_r: int, n_a: int, out_dir: Path) -> int:
+    """Worker (processo novo, spawn) de UMA amostra: parse_ans_gzip_sample +
+    escrita atômica do .npz. parse_ans_gzip_sample é numpy/matplotlib.tri puro
+    (sem FEMM/COM), então o pool pode ser persistente (sem max_tasks_per_child=1
+    -- diferente de generate_data_femm_mesh_v2.py, que precisa reciclar workers
+    por causa do vazamento de memória do ciclo openfemm()/closefemm())."""
+    idx = int(path.name.split('_')[1].split('.')[0])
+    d = parse_ans_gzip_sample(path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
+                               n_r=n_r, n_a=n_a, tmp_dir=out_dir)
+
+    stem     = path.name.removesuffix('.ans.gz')
+    out_path = out_dir / f"{stem}.npz"
+    tmp_path = out_dir / f"{stem}.tmp"        # np.savez adiciona .npz -> .tmp.npz
+    tmp_npz  = out_dir / f"{stem}.tmp.npz"
+    np.savez(tmp_path, **d)
+    tmp_npz.replace(out_path)
+    return idx
+
+
+def _run_femm_mesh_v2(max_samples):
+    raw_dir = Path("data/raw") / DATASET
+    out_dir = Path("data/temp/samples_npz") / DATASET
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    ans_paths = sorted(raw_dir.glob("sample_*.ans.gz"),
+                        key=lambda p: int(p.name.split('_')[1].split('.')[0]))
+    if max_samples is not None:
+        ans_paths = ans_paths[:max_samples]
+
+    total = len(ans_paths)
+    if total == 0:
+        print("Nenhum .ans.gz encontrado em", raw_dir)
+        return
+
+    with open(raw_dir / "valid_designs.csv", newline='') as f:
+        design_rows = list(csv.DictReader(f))
+
+    pending = [p for p in ans_paths
+               if not (out_dir / f"{p.name.removesuffix('.ans.gz')}.npz").exists()]
+    ja_prontos = total - len(pending)
+
+    print(f"\n=== Parsing femm_mesh_v2 (.ans.gz -> grafo de vértices + grafo de elementos + grade) ===")
+    print(f"  origem  : {raw_dir}")
+    print(f"  destino : {out_dir}")
+    print(f"  Já processados: {ja_prontos}  |  A processar: {len(pending)}")
+
+    if not pending:
+        print("Nada a fazer.")
+        return
+
+    # [REMOVIDO 2026-08-13] loop sequencial -- ~1,2-5,7s/amostra medido em
+    # produção (10-11/08, ~6h18min pras 4000 amostras). parse_ans_gzip_sample
+    # não abre FEMM/COM (só numpy/matplotlib.tri sobre o .ans.gz já em disco),
+    # então dá pra paralelizar com ProcessPoolExecutor persistente, sem o
+    # cuidado de max_tasks_per_child=1 que generate_data_femm_mesh_v2.py
+    # precisa (não há vazamento de memória de ciclo openfemm()/closefemm()
+    # aqui). Substituído pela versão paralela abaixo.
+    # ok, falhas = 0, []
+    # for path in pending:
+    #     idx = int(path.name.split('_')[1].split('.')[0])
+    #     try:
+    #         row = design_rows[idx]
+    #         r_in  = float(row['inner_diameter [mm]']) / 2
+    #         r_ext = float(row['outer_diameter [mm]']) / 2
+    #         d = parse_ans_gzip_sample(path, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2,
+    #                                    n_r=N_R, n_a=N_A, tmp_dir=out_dir)
+    #
+    #         # escrita atômica: salva em .tmp.npz e renomeia
+    #         stem     = path.name.removesuffix('.ans.gz')
+    #         out_path = out_dir / f"{stem}.npz"
+    #         tmp_path = out_dir / f"{stem}.tmp"        # np.savez adiciona .npz -> .tmp.npz
+    #         tmp_npz  = out_dir / f"{stem}.tmp.npz"
+    #         np.savez(tmp_path, **d)
+    #         tmp_npz.replace(out_path)
+    #         ok += 1
+    #     except Exception as e:
+    #         falhas.append((idx, repr(e)))
+    #
+    #     if ok % 100 == 0 or (ok + len(falhas)) == len(pending):
+    #         print(f"[{ok + len(falhas)}/{len(pending)}] ok={ok} falhas={len(falhas)}")
+
+    num_workers = min(os.cpu_count() or 1, MAX_WORKERS)
+    print(f"  workers : {num_workers}")
+
+    ok, falhas = 0, []
+    with ProcessPoolExecutor(max_workers=num_workers) as ex:
+        fut2idx = {}
+        for path in pending:
+            idx   = int(path.name.split('_')[1].split('.')[0])
+            row   = design_rows[idx]
+            r_in  = float(row['inner_diameter [mm]']) / 2
+            r_ext = float(row['outer_diameter [mm]']) / 2
+            fut = ex.submit(_parse_and_save_one_v2, path, r_in, r_ext, ANG_1, ANG_2,
+                             N_R, N_A, out_dir)
+            fut2idx[fut] = idx
+
+        for fut in as_completed(fut2idx):
+            idx = fut2idx[fut]
+            try:
+                fut.result()
+                ok += 1
+            except Exception as e:
+                falhas.append((idx, repr(e)))
+
+            done = ok + len(falhas)
+            if done % 100 == 0 or done == len(pending):
+                print(f"[{done}/{len(pending)}] ok={ok} falhas={len(falhas)}")
+
+    print(f"\n=== Resumo gen_npz_structures (femm_mesh_v2) ===")
+    print(f"  Salvos     : {ok}")
+    print(f"  Já prontos : {ja_prontos}")
+    print(f"  Falhas     : {len(falhas)}")
+    if falhas:
+        print("  Índices com falha:")
+        for idx, err in falhas:
+            print(f"    [{idx}] {err}")
+
+
 def run(max_samples=MAX_SAMPLES):
     """
     Executa a etapa intermediária de geração de .npz.
@@ -195,6 +326,8 @@ def run(max_samples=MAX_SAMPLES):
     """
     if MODE == 'femm_mesh':
         return _run_femm_mesh(max_samples)
+    if MODE == 'femm_mesh_v2':
+        return _run_femm_mesh_v2(max_samples)
 
     out_dir = Path("data/temp/samples_npz") / DATASET
     out_dir.mkdir(parents=True, exist_ok=True)

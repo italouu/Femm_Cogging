@@ -160,6 +160,11 @@ def main():
         from scripts.build_data_chunks_femm_mesh import main as main_femm_mesh
         main_femm_mesh()
         return
+    if MODE == 'femm_mesh_v2':
+        # pipeline via .ans.gz bruto + grafo duplo (ver src/data_gen/femm_mesh_v2.py)
+        from scripts.build_data_chunks_femm_mesh_v2 import main as main_femm_mesh_v2
+        main_femm_mesh_v2()
+        return
 
     print("=== Etapa 1: gen_npz_structures ===")
     gen_run(MAX_SAMPLES)

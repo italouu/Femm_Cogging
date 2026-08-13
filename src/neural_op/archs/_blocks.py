@@ -171,3 +171,95 @@ class GNN(nn.Module):
         for layer in self.layers:
             h = layer(h, edge_index, edge_attr)
         return self.proj(h)
+
+
+# ---------------------------------------------------------------------------
+# Grafo duplo (mode='femm_mesh_v2', ver src/data_gen/femm_mesh_v2.py e
+# CLAUDE.md/conversa 2026-08-10): vértices (iterado) + elementos (estático,
+# nunca atualizado, só injeta via arestas cruzadas). EdgeMessageBlock isola
+# só a parte de "mensagem" do EdgeConvLayer (gate × transform + soma) — sem
+# a atualização de nó — pra ser reaproveitada tanto nas arestas vértice-
+# vértice quanto nas cruzadas elemento->vértice, com pesos independentes.
+# ---------------------------------------------------------------------------
+
+class EdgeMessageBlock(nn.Module):
+    """
+    Só a parte de mensagem de um EdgeConvLayer (gate × transform, agregada
+    por soma) — sem MLP de atualização de nó. src e dst podem ter dimensões
+    e até "tipos" de nó diferentes (ex: elemento -> vértice).
+
+    gate_ij = sigmoid( gate_mlp(edge_attr_ij) )
+    m_ij    = gate_ij * W( h_src[src] )
+    out[dst] = Σ_i m_ij
+    """
+
+    def __init__(self, src_width, dst_width, edge_dim, act=nn.GELU):
+        super().__init__()
+        self.gate_mlp = NodeMLP(
+            in_ch=edge_dim, out_ch=1, hidden_ch=edge_dim * 4, n_layers=2, act=act,
+        )
+        self.W = nn.Linear(src_width, dst_width, bias=False)
+
+    def forward(self, h_src, edge_index, edge_attr, num_dst):
+        src, dst = edge_index[0], edge_index[1]
+        gate = torch.sigmoid(self.gate_mlp(edge_attr))          # [E, 1]
+        msg  = gate * self.W(h_src[src])                         # [E, dst_width]
+        out  = torch.zeros(num_dst, msg.size(-1), dtype=msg.dtype, device=msg.device)
+        out.scatter_add_(0, dst.unsqueeze(-1).expand_as(msg), msg)
+        return out
+
+
+class BipartiteEdgeConvLayer(nn.Module):
+    """
+    Uma camada do stack de vértices que recebe DUAS fontes de mensagem:
+    F1 (vizinhos vértice-vértice, grafo iterado) e F2 (vizinhos elemento,
+    grafo cruzado — elementos nunca são atualizados, mas F2 tem pesos
+    PRÓPRIOS por camada, lendo sempre o mesmo elem_x estático).
+
+    h_j' = upd_mlp( [ h_j | F1_j | F2_j ] )
+    F1_j = Σ_{i∈viz_vértice(j)} gate1(e_ij)  · W1(h_i)
+    F2_j = Σ_{e∈viz_elem(j)}    gate2(d_je)  · W2(elem_x_e)
+    """
+
+    def __init__(self, node_width, edge_dim, elem_in_ch, cross_edge_dim, act=nn.GELU):
+        super().__init__()
+        self.msg_vertex = EdgeMessageBlock(node_width, node_width, edge_dim, act)
+        self.msg_elem   = EdgeMessageBlock(elem_in_ch, node_width, cross_edge_dim, act)
+        self.upd_mlp = NodeMLP(
+            in_ch=3 * node_width, out_ch=node_width, hidden_ch=node_width, n_layers=2, act=act,
+        )
+
+    def forward(self, h, elem_x, edge_index, edge_attr, cross_edge_index, cross_edge_attr):
+        n = h.size(0)
+        f1 = self.msg_vertex(h,      edge_index,       edge_attr,       n)
+        f2 = self.msg_elem(elem_x,   cross_edge_index,  cross_edge_attr, n)
+        return self.upd_mlp(torch.cat([h, f1, f2], dim=-1))
+
+
+class BipartiteGNN(nn.Module):
+    """
+    GNN com grafo de vértices (iterado, n_layers) + grafo de elementos
+    (estático, injetado a cada camada via BipartiteEdgeConvLayer, nunca
+    atualizado — sem arestas internas entre elementos).
+
+    h = act( lift(node_features) )
+    for layer in layers: h = layer(h, elem_x, edge_index, edge_attr, cross_edge_index, cross_edge_attr)
+    out = proj(h)
+    """
+
+    def __init__(self, in_node_features, out_node_features, edge_dim,
+                 elem_in_ch, cross_edge_dim, node_width, n_layers, act=nn.GELU):
+        super().__init__()
+        self.lift   = nn.Linear(in_node_features, node_width)
+        self.layers = nn.ModuleList([
+            BipartiteEdgeConvLayer(node_width, edge_dim, elem_in_ch, cross_edge_dim, act)
+            for _ in range(n_layers)
+        ])
+        self.proj = nn.Linear(node_width, out_node_features)
+        self.act  = act()
+
+    def forward(self, node_features, elem_x, edge_index, edge_attr, cross_edge_index, cross_edge_attr):
+        h = self.act(self.lift(node_features))
+        for layer in self.layers:
+            h = layer(h, elem_x, edge_index, edge_attr, cross_edge_index, cross_edge_attr)
+        return self.proj(h)

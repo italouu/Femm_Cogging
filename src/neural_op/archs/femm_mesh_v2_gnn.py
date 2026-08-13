@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from src.neural_op.archs._blocks import BipartiteGNN
 from src.neural_op.archs.fno import FNO2d
+from src.neural_op.losses import LOSS_REGISTRY
 
 
 def _interpolate_fno_to_nodes_v2(fno_out, node_x, L):
@@ -105,8 +106,18 @@ class FNO_BipartiteGNN(torch.nn.Module):
 def make_fno_bipartite_gnn_step(lambda_loss, loss_cfg=None):
     """Retorna step_fn fechada sobre lambda_loss e loss_cfg -- mesmo padrão de
     fno_gnn.py::make_fno_gnn_step, adaptado pros campos extras do grafo duplo
-    (elem_x, cross_edge_index, cross_edge_attr)."""
-    subtract = getattr(loss_cfg, 'subtract_fno', False)
+    (elem_x, cross_edge_index, cross_edge_attr).
+
+    graph_div_b_loss (DivBLossCfg, src/configs/loss.py) é detectada via
+    `lambda_div` (só essa config tem esse campo) e tratada à parte: ela tem
+    assinatura estendida (precisa de node_x/cross_edge_index pra calcular o
+    divergente) e funciona EXCLUSIVAMENTE na parcela de nós -- a parcela de
+    grade (FNO/H×W) não tem malha real, usa `loss_cfg.base_loss` puro (sem
+    termo de div) nesse caso, em vez de `loss_fn`."""
+    subtract      = getattr(loss_cfg, 'subtract_fno', False)
+    div_base_loss = getattr(loss_cfg, 'base_loss', None)
+    div_lambda    = getattr(loss_cfg, 'lambda_div', None)
+    is_div_loss   = div_lambda is not None   # só DivBLossCfg tem lambda_div
 
     def step(batch, model, loss_fn, device):
         x_hw             = batch['x_hw'].to(device)
@@ -120,18 +131,27 @@ def make_fno_bipartite_gnn_step(lambda_loss, loss_cfg=None):
         y_hw             = batch['y_hw'].to(device)
         y_node           = batch['node_y'].to(device)
 
-        if subtract:
-            y_hw_fno, fno_at_nodes, delta = model(
-                x_hw, node_x, elem_x, edge_index, edge_attr,
-                cross_edge_index, cross_edge_attr, L, return_components=True)
-            loss_grid  = loss_fn(y_hw_fno, y_hw)
+        # return_components=True sempre -- mesmo custo de (y_hw_fno, y_nodes)
+        # direto (o forward normal só soma fno_at_nodes+delta internamente),
+        # e simplifica os 3 ramos abaixo pra um único caminho de inferência.
+        y_hw_fno, fno_at_nodes, delta = model(
+            x_hw, node_x, elem_x, edge_index, edge_attr,
+            cross_edge_index, cross_edge_attr, L, return_components=True)
+        y_nodes = fno_at_nodes + delta
+
+        grid_loss_fn = LOSS_REGISTRY[div_base_loss] if is_div_loss else loss_fn
+        loss_grid = grid_loss_fn(y_hw_fno, y_hw)
+
+        if is_div_loss:
+            loss_nodes = loss_fn(y_nodes, y_node, node_x, cross_edge_index,
+                                  base_loss=div_base_loss, lambda_div=div_lambda,
+                                  r_in_mm=loss_cfg.r_in_mm, r_ext_mm=loss_cfg.r_ext_mm,
+                                  ang_1_deg=loss_cfg.ang_1_deg, ang_2_deg=loss_cfg.ang_2_deg)
+        elif subtract:
             loss_nodes = loss_fn(delta, y_node - fno_at_nodes)
         else:
-            y_hw_fno, y_nodes = model(
-                x_hw, node_x, elem_x, edge_index, edge_attr,
-                cross_edge_index, cross_edge_attr, L)
-            loss_grid  = loss_fn(y_hw_fno, y_hw)
-            loss_nodes = loss_fn(y_nodes,  y_node)
+            loss_nodes = loss_fn(y_nodes, y_node)
+
         return lambda_loss * loss_grid + (1.0 - lambda_loss) * loss_nodes
 
     return step

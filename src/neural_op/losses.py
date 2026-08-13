@@ -113,6 +113,114 @@ def masked_fno_gnn_loss(y_hw_8, y_hw, masks, y_nodes_2, node_y, lambda_loss):
     return lambda_loss * loss_grid + (1.0 - lambda_loss) * loss_nodes
 
 
+def _p1_grad_coeffs(v_coords):
+    """
+    b,c (shape function P1) + área*2 (assinada) dos 3 vértices de cada
+    elemento -- mesma fórmula fechada de src/data_gen/parsers/ans_parsing.py::
+    _element_b_from_A, em torch/batelado. v_coords: [M,3,2] (coordenadas dos
+    3 vértices, ordem v0,v1,v2). Retorna b,c [M,3], area [M].
+    """
+    x0, y0 = v_coords[:, 0, 0], v_coords[:, 0, 1]
+    x1, y1 = v_coords[:, 1, 0], v_coords[:, 1, 1]
+    x2, y2 = v_coords[:, 2, 0], v_coords[:, 2, 1]
+    area2 = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)
+    b = torch.stack([y1 - y2, y2 - y0, y0 - y1], dim=1)
+    c = torch.stack([x2 - x1, x0 - x2, x1 - x0], dim=1)
+    return b, c, area2.abs() / 2.0
+
+
+def node_x_to_xy_mm(node_x, r_in_mm, r_ext_mm, ang_1_deg, ang_2_deg):
+    """
+    Converte node_x=[r_base,c_base] (coordenadas polares normalizadas, ver
+    src/data_gen/parsers/femm_mesh_v2.py) pra (x,y) reais em mm -- exato, não
+    aproximado, porque a janela de amostragem (r_in/r_ext/ang_1/ang_2) é
+    CONSTANTE pra todo o dataset (ver DivBLossCfg, src/configs/loss.py, pra
+    a confirmação/justificativa completa). r = r_in + r_base·(r_ext-r_in),
+    θ = ang_1 + c_base·(ang_2-ang_1), x=r·cosθ, y=r·senθ.
+    """
+    r_base, c_base = node_x[:, 0], node_x[:, 1]
+    r = r_in_mm + r_base * (r_ext_mm - r_in_mm)
+    ang_1_rad = torch.deg2rad(node_x.new_tensor(ang_1_deg))
+    ang_2_rad = torch.deg2rad(node_x.new_tensor(ang_2_deg))
+    theta = ang_1_rad + c_base * (ang_2_rad - ang_1_rad)
+    return torch.stack([r * torch.cos(theta), r * torch.sin(theta)], dim=1)
+
+
+def graph_weak_divergence(node_field, node_x, cross_edge_index,
+                           r_in_mm, r_ext_mm, ang_1_deg, ang_2_deg):
+    """
+    Divergente nodal discreto (fraco/Galerkin, massa lumped) de um campo
+    vetorial 2D definido nos vértices de um grafo de malha (mode=
+    'femm_mesh_v2') -- versão torch/batelada/diferenciável de
+    tests/proto_div_b_check.py::weak_nodal_divergence. Derivação completa
+    (forma fraca, integração por partes, phi_i linear por elemento) na
+    docstring daquele arquivo.
+
+    Roda sobre um BATCH inteiro (vários grafos desconexos concatenados,
+    mesma convenção de índices globais de src/neural_op/dataloaders/
+    grid_loader.py::femm_mesh_v2_collate) -- scatter/index_add não mistura
+    contribuições entre amostras porque os índices de nó/elemento de
+    amostras diferentes nunca se sobrepõem.
+
+    Geometria em (x,y) mm reais (node_x_to_xy_mm), não em r_base/c_base cru
+    -- ver DivBLossCfg (src/configs/loss.py) pro porquê isso é exato (janela
+    de amostragem fixa) e não uma aproximação.
+
+    node_field       : [S,2]  campo (Bx,By ou equivalente) por nó
+    node_x           : [S,2]  r_base,c_base por nó
+    cross_edge_index : [2,C]  linha0=índice do elemento, linha1=índice do
+                       vértice -- 3 entradas consecutivas por elemento
+                       (v0,v1,v2), mesma convenção de
+                       src/data_gen/parsers/femm_mesh_v2.py
+    r_in_mm/r_ext_mm/ang_1_deg/ang_2_deg : janela de amostragem (constantes
+                       do dataset, ver DivBLossCfg)
+    Retorna div [S] em T/m -- unidade real, sem distorção de métrica (nós
+    sem nenhum elemento incidente ficam 0/0 -> 0, via clamp no denominador).
+    """
+    n_nodes = node_field.shape[0]
+    # metros, não mm -- mesma pegadinha (erro de ~1000x se esquecido) já
+    # documentada em ans_parsing.py::_element_b_from_A/CLAUDE.md "Extração
+    # de dados direto do arquivo .ans".
+    xy_m = node_x_to_xy_mm(node_x, r_in_mm, r_ext_mm, ang_1_deg, ang_2_deg) * 1e-3
+    vtx = cross_edge_index[1].view(-1, 3)                      # [M,3]
+    coords = xy_m[vtx]                                         # [M,3,2]
+    b, c, area = _p1_grad_coeffs(coords)                       # [M,3],[M,3],[M]
+
+    field = node_field[vtx]                                    # [M,3,2]
+    Bx_e = field[..., 0].mean(dim=1)                            # [M] média simples dos 3 vértices
+    By_e = field[..., 1].mean(dim=1)
+
+    contrib = (Bx_e[:, None] * b + By_e[:, None] * c) / 2.0    # [M,3]
+
+    num       = node_field.new_zeros(n_nodes)
+    dual_area = node_field.new_zeros(n_nodes)
+    for corner in range(3):
+        num.index_add_(0, vtx[:, corner], contrib[:, corner])
+        dual_area.index_add_(0, vtx[:, corner], area / 3.0)
+
+    return -num / dual_area.clamp(min=1e-12)
+
+
+def graph_div_b_loss(y_nodes, node_y, node_x, cross_edge_index, base_loss='mae', lambda_div=0.1,
+                      r_in_mm=28.5, r_ext_mm=46.5, ang_1_deg=0.0, ang_2_deg=120.0):
+    """
+    Loss de ajuste (`base_loss`, chave simples em LOSS_REGISTRY) + penalidade
+    pelo divergente nodal (graph_weak_divergence, em (x,y) mm reais) da
+    PREDIÇÃO -- ver DivBLossCfg (src/configs/loss.py) pro racional completo e
+    a única aproximação restante (normalização z-score de y_nodes/node_y
+    durante o treino, não T/m calibrado).
+
+    Assinatura estendida -- requer step_fn compatível
+    (src/neural_op/archs/femm_mesh_v2_gnn.py::make_fno_bipartite_gnn_step),
+    que só aplica esta loss na parcela de NÓS; a parcela de grade usa
+    `base_loss` puro (ver docstring de DivBLossCfg).
+    """
+    fit = LOSS_REGISTRY[base_loss](y_nodes, node_y)
+    div = graph_weak_divergence(y_nodes, node_x, cross_edge_index,
+                                 r_in_mm, r_ext_mm, ang_1_deg, ang_2_deg)
+    return fit + lambda_div * (div ** 2).mean()
+
+
 LOSS_REGISTRY: dict = {
     'mse':                     mse_loss,
     'mae':                     mae_loss,
@@ -123,4 +231,8 @@ LOSS_REGISTRY: dict = {
     'single_material_fno_loss': single_material_fno_loss,
     # assinatura estendida (y_hw_8, y_hw, masks, y_nodes_2, node_y, lambda_loss)
     'masked_fno_gnn_loss':     masked_fno_gnn_loss,
+    # assinatura estendida (y_nodes, node_y, node_x, cross_edge_index, base_loss, lambda_div)
+    # — exclusiva de grafos (FNO_BipartiteGNN); ver graph_div_b_loss acima e
+    # DivBLossCfg (src/configs/loss.py)
+    'graph_div_b_loss':        graph_div_b_loss,
 }

@@ -1,11 +1,23 @@
 """
-femm_mesh_v2.py
-----------------
+parsers/femm_mesh_v2.py
+------------------------
 Deriva o grafo de vértices + grafo de elementos (dual, não iterado) + grade
 H×W a partir do `.ans.gz` bruto salvo por mode='femm_mesh_v2'
 (scripts/generate_data_femm_mesh_v2.py / src/data_gen/femm_mesh.py::
 save_ans_gzip_sample) -- sem FEMM aberto, sem nenhuma chamada COM, só o
 arquivo já salvo em disco.
+
+Relocado de src/data_gen/femm_mesh_v2.py em 2026-08-13 -- essa etapa é,
+junto com ans_parsing.py, todo o "serviço de parsing" do pipeline
+femm_mesh_v2 (raw .ans.gz -> arrays de treino), então mora com os demais
+parsers do projeto em src/data_gen/parsers/ (ver PARSER_REGISTRY em
+src/data_gen/parsers/__init__.py -- esse módulo não entra nesse registry,
+já que não é um MotorQtreeParserConfig de seleção de colunas, mas é o mesmo
+tipo de responsabilidade: transformar dado bruto em formato de treino).
+Motivo original da separação: src/data_gen/femm_mesh.py (v1) tem
+`import femm` no topo (necessário só pras funções que abrem o FEMM de
+verdade) -- importar qualquer coisa de lá arrastava esse import junto,
+mesmo pro caminho 100% numpy daqui. Ver docstring de ans_parsing.py.
 
 Duas mudanças de design em relação a mode='femm_mesh' (v1, femm_mesh.py):
 
@@ -64,7 +76,7 @@ import numpy as np
 import matplotlib.tri as mtri
 from scipy.spatial import cKDTree
 
-from src.data_gen.femm_mesh import (
+from src.data_gen.parsers.ans_parsing import (
     _parse_solution, _parse_block_materials, _block_magnet_polarity,
     _build_edges, _element_areas, _wrap_edge_pairs, _grid_polar_xy,
 )

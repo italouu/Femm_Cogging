@@ -29,7 +29,7 @@ import numpy as np
 
 from src.data_gen.data_utils import QtreeSampleUnifier, GridSampleUnifier
 from src.data_gen.sample_processor import process_and_save_sample
-from src.data_gen.femm_mesh_v2 import parse_ans_gzip_sample
+from src.data_gen.parsers.femm_mesh_v2 import parse_ans_gzip_sample
 from src.data_gen.parsers import PARSER_REGISTRY
 from src.configs.datagen import DatagenConfig
 _dg      = DatagenConfig()

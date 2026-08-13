@@ -65,7 +65,8 @@
       "Bash(rmdir data/torch/data_chunks/mesh_138x276_FEMM_MESH)",
       "Bash(PYTHONPATH=. python \"C:/Users/TALO~1/AppData/Local/Temp/claude/D--UDESC-MESTRADO-FEMM-cogging/5e7c5776-f297-447e-83b6-4df4b1c103da/scratchpad/test_normalization.py\")",
       "Bash(PYTHONPATH=. python \"C:/Users/TALO~1/AppData/Local/Temp/claude/D--UDESC-MESTRADO-FEMM-cogging/5e7c5776-f297-447e-83b6-4df4b1c103da/scratchpad/test_normalization2.py\")",
-      "Bash(PYTHONPATH=. python -c ' *)"
+      "Bash(PYTHONPATH=. python -c ' *)",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }

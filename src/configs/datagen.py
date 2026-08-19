@@ -42,15 +42,19 @@ class DatagenConfig:
     # Prepare / chunks
     chunk_size: int = 32
 
-    # npz_parser: chave em PARSER_REGISTRY. Em ambos os modos, consumido por
+    # npz_parser: chave em PARSER_REGISTRY. Nos quatro modos, consumido por
     # gen_npz_structures.py (mesmo comando `python -m scripts.gen_npz_structures`
-    # pros três modos):
+    # pros quatro modos):
     #   mode='grid'/'qtree'  -> filtra colunas na criação do .npz a partir das
     #                           CSVs de data/raw/<dataset>/
     #   mode='femm_mesh'     -> branch próprio em gen_npz_structures.py, filtra
     #                           colunas do staging bruto já gerado em
     #                           data/raw/<dataset>/ (sample_*.npz) — usar
     #                           'FEMM_MESH' ou variante futura
+    #   mode='femm_mesh_v2'  -> branch próprio (_run_femm_mesh_v2), só usa
+    #                           cfg.target_field do parser (as demais colunas
+    #                           não se aplicam — ver 'FEMM_MESH_V2'/
+    #                           'FEMM_MESH_V2_A' na tabela abaixo)
     #
     # Parsers disponíveis (PARSER_REGISTRY, src/data_gen/parsers/__init__.py):
     #   Chave           | Parser                | Uso
@@ -65,35 +69,44 @@ class DatagenConfig:
     #                   |                       | alvo B (Bx,By)
     #   FEMM_MESH_A     | FEMM_MESH_A_PARSER    | mode='femm_mesh' — mesma entrada,
     #                   |                       | alvo escalar A
+    #   FEMM_MESH_V2    | FEMM_MESH_V2_PARSER   | mode='femm_mesh_v2' — grafo duplo
+    #                   |                       | vértices+elementos, alvo B (Bx,By
+    #                   |                       | via curl(A)) — arch FNO_BipartiteGNN
+    #   FEMM_MESH_V2_A  | FEMM_MESH_V2_A_PARSER | mode='femm_mesh_v2' — mesma entrada,
+    #                   |                       | alvo escalar A
     #
-    # Só FEMM_MESH/FEMM_MESH_A são compatíveis com mode='femm_mesh'; os demais
-    # são do pipeline CSV (grid/qtree).
+    # FEMM_MESH/FEMM_MESH_A só são compatíveis com mode='femm_mesh';
+    # FEMM_MESH_V2/FEMM_MESH_V2_A só com mode='femm_mesh_v2'; os demais são
+    # do pipeline CSV (grid/qtree).
     #
-    # mode='femm_mesh_v2' NÃO usa PARSER_REGISTRY -- npz_parser é ignorado nesse
-    # modo. gen_npz_structures.py::_run_femm_mesh_v2 chama
-    # src/data_gen/femm_mesh_v2.py::parse_ans_gzip_sample direto sobre o
-    # sample_*.ans.gz bruto, que já produz o formato final (grafo de vértices
-    # [node_x=r,c / node_y=A] + grafo de elementos [elem_x=mu_r,M,area,r,c] +
-    # arestas cruzadas + grade H×W) -- não há seleção de colunas a fazer. Arch
-    # correspondente: FNO_BipartiteGNN (src/configs/training.py). Ver CLAUDE.md,
-    # "Grafo duplo vértices+elementos" (2026-08-10).
-    npz_parser:             str           = 'FEMM_MESH_A'
+    # [ATUALIZADO 2026-08-19] mode='femm_mesh_v2' passou a usar PARSER_REGISTRY
+    # (antes era ignorado; a escolha do alvo vinha de um campo dedicado,
+    # femm_mesh_v2_target_field, descontinuado — ver [REMOVIDO] abaixo).
+    # gen_npz_structures.py::_run_femm_mesh_v2 lê só
+    # PARSER_REGISTRY[npz_parser].target_field e repassa pra
+    # src/data_gen/parsers/femm_mesh_v2.py::parse_ans_gzip_sample, que já
+    # produz o formato final (grafo de vértices [node_x=r,c / node_y=A ou
+    # Bx,By] + grafo de elementos [elem_x=mu_r,M,area,r,c] + arestas cruzadas
+    # + grade H×W) -- não há seleção de colunas a fazer, por isso
+    # FEMM_MESH_V2_PARSER/FEMM_MESH_V2_A_PARSER só carregam target_field (ver
+    # docstring desses módulos). Arch correspondente: FNO_BipartiteGNN
+    # (src/configs/training.py). Ver CLAUDE.md, "Grafo duplo vértices+elementos"
+    # (2026-08-10).
+    npz_parser:             str           = 'FEMM_MESH_V2'
     npz_samples_per_worker: int           = 2
-    npz_max_workers:        int           = 12
+    npz_max_workers:        int           = 6
     npz_max_samples:        Optional[int] = None
 
     # generate_data_femm_mesh (só mode='femm_mesh')
     femm_mesh_max_workers: int = 8
 
-    # target_field p/ mode='femm_mesh_v2' (2026-08-13, src/data_gen/parsers/femm_mesh_v2.py::
-    # parse_ans_gzip_sample) -- 'A' (padrão, potencial vetor escalar nos vértices, já em
-    # produção pras 4000 amostras de mesh_ans_138x276) ou 'B' (Bx,By -- curl(A) fechado por
-    # elemento, coordenadas reais em metros, + média nodal dos elementos incidentes; mesmo
-    # padrão de amostragem de A na grade H×W, ver docstring do módulo). Ignorado nos demais
-    # mode. Não afeta a etapa raw (.ans.gz é o mesmo .ans bruto independente do alvo
-    # escolhido no parse) -- só data/temp/samples_npz/ e data/torch/data_chunks/, via
-    # femm_mesh_v2_dataset_name abaixo.
-    femm_mesh_v2_target_field: str = 'B'
+    # [REMOVIDO 2026-08-19] target_field de mode='femm_mesh_v2' descontinuado
+    # como campo dedicado — agora vem de PARSER_REGISTRY[npz_parser].target_field
+    # (ver npz_parser acima e femm_mesh_v2_dataset_name abaixo), mesmo
+    # mecanismo usado pelos demais modos. Motivo: reduzir a assimetria de
+    # mode='femm_mesh_v2' não seguir o contrato de parser já estabelecido
+    # pelo resto do projeto (PARSER_REGISTRY/DatagenConfig.npz_parser).
+    # femm_mesh_v2_target_field: str = 'B'
 
     @property
     def femm_mesh_v2_dataset_name(self) -> str:
@@ -103,10 +116,19 @@ class DatagenConfig:
         (mantém compatibilidade com os 4000 .npz já processados em produção,
         ver CLAUDE.md "Pendências conhecidas"); sufixado com '_B' só quando
         target_field='B', pra não misturar/colidir com o staging de A já
-        existente (o raw .ans.gz continua o mesmo -- só o parse difere)."""
-        if self.femm_mesh_v2_target_field == 'A':
+        existente (o raw .ans.gz continua o mesmo -- só o parse difere).
+
+        target_field agora vem de PARSER_REGISTRY[self.npz_parser] (2026-08-19)
+        -- import local (não no topo do módulo) pelo mesmo motivo de
+        NnCfg.__post_init__ (src/configs/training.py) importar ARCH_REGISTRY
+        dentro do método: evita puxar a cadeia de imports de
+        src/data_gen/parsers/ (matplotlib.tri, scipy) pra todo consumidor de
+        DatagenConfig, mesmo quem só precisa dos campos simples."""
+        from src.data_gen.parsers import PARSER_REGISTRY
+        target_field = PARSER_REGISTRY[self.npz_parser].target_field
+        if target_field == 'A':
             return self.dataset
-        return f"{self.dataset}_{self.femm_mesh_v2_target_field}"
+        return f"{self.dataset}_{target_field}"
 
     @property
     def parsed_dataset_name(self) -> str:

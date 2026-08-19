@@ -46,8 +46,12 @@ SAMPLES_PER_WORKER = _dg.npz_samples_per_worker
 MAX_WORKERS        = _dg.npz_max_workers
 MAX_SAMPLES        = _dg.npz_max_samples
 
-# mode='femm_mesh_v2' apenas
-V2_TARGET_FIELD  = _dg.femm_mesh_v2_target_field
+# mode='femm_mesh_v2' apenas -- target_field agora vem do mesmo mecanismo
+# dos demais modos (DatagenConfig.npz_parser -> PARSER_REGISTRY, ver
+# src/data_gen/parsers/femm_mesh_v2_b.py/femm_mesh_v2_a.py), não mais de um
+# campo dedicado.
+# [REMOVIDO 2026-08-19] V2_TARGET_FIELD = _dg.femm_mesh_v2_target_field
+V2_TARGET_FIELD  = PARSER.target_field
 V2_DATASET_NAME  = _dg.femm_mesh_v2_dataset_name
 
 def multi_process(indices: list, unifier: QtreeSampleUnifier, out_dir: Path):
@@ -192,33 +196,144 @@ def _run_femm_mesh(max_samples):
 
 
 # ── mode='femm_mesh_v2': deriva os 2 grafos + grade a partir do .ans.gz bruto ──
-# Sem PARSER_REGISTRY aqui -- parse_ans_gzip_sample já produz o formato final
-# (grafo de vértices + grafo de elementos + arestas cruzadas + grade), não há
-# seleção de colunas a fazer (ao contrário de mode='femm_mesh', que tem várias
-# variantes de parser sobre o mesmo staging bruto). Não usa parsed_dataset_name
-# (sufixo de npz_parser, ignorado neste mode) -- grava em
-# data/temp/samples_npz/<femm_mesh_v2_dataset_name>/ (sem sufixo quando
-# target_field='A', sufixado com '_B' quando target_field='B' -- ver
-# DatagenConfig.femm_mesh_v2_dataset_name).
+# PARSER_REGISTRY[npz_parser] usado só pelo campo target_field (2026-08-19,
+# ver src/data_gen/parsers/femm_mesh_v2_b.py/femm_mesh_v2_a.py) -- as demais
+# colunas do parser não se aplicam aqui, porque parse_ans_gzip_sample já
+# produz o formato final (grafo de vértices + grafo de elementos + arestas
+# cruzadas + grade), não há seleção de colunas a fazer (ao contrário de
+# mode='femm_mesh', que filtra colunas de um dict já totalmente calculado).
+# Não usa parsed_dataset_name (sufixo <dataset>_<npz_parser>, usado pelo modo
+# 'femm_mesh') -- grava em data/temp/samples_npz/<femm_mesh_v2_dataset_name>/
+# (sem sufixo quando target_field='A', sufixado com '_B' quando
+# target_field='B' -- ver DatagenConfig.femm_mesh_v2_dataset_name).
 
-def _parse_and_save_one_v2(path: Path, r_in: float, r_ext: float, ang_1: float, ang_2: float,
-                            n_r: int, n_a: int, out_dir: Path, target_field: str) -> int:
-    """Worker (processo novo, spawn) de UMA amostra: parse_ans_gzip_sample +
-    escrita atômica do .npz. parse_ans_gzip_sample é numpy/matplotlib.tri puro
-    (sem FEMM/COM), então o pool pode ser persistente (sem max_tasks_per_child=1
-    -- diferente de generate_data_femm_mesh_v2.py, que precisa reciclar workers
-    por causa do vazamento de memória do ciclo openfemm()/closefemm())."""
-    idx = int(path.name.split('_')[1].split('.')[0])
-    d = parse_ans_gzip_sample(path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
-                               n_r=n_r, n_a=n_a, tmp_dir=out_dir, target_field=target_field)
+# [REMOVIDO 2026-08-19] worker de 1 amostra por task + submissão sem limite
+# (todos os pendentes viravam future de uma vez) -- diagnosticado nesta sessão
+# (mem_probe.py/mem_probe2.py, medição com psutil sobre amostras reais de
+# data/raw/mesh_ans_138x276/): parse_ans_gzip_sample NÃO vaza por chamada (RSS
+# volta ao baseline após gc.collect()), mas o processo-worker de vida longa do
+# ProcessPoolExecutor nunca roda gc.collect() sozinho entre tasks -- RSS cresce
+# ~80-88 MB/amostra SEM LIMITE (testado: 60 amostras seguidas no mesmo processo
+# -> ~4,8 GB, sem estabilizar). Causa: matplotlib.tri.Triangulation/TriFinder/
+# LinearTriInterpolator + scipy.cKDTree formam referências cíclicas que só a GC
+# cíclica libera, não o refcounting normal. max_tasks_per_child=25 (também
+# removido abaixo) só adiava o OOM: 25 amostras x ~85 MB ~= 2,1 GB/worker antes
+# de reciclar, x npz_max_workers=12 concorrentes ~= 25 GB de pico. Substituído
+# por multi_process_v2 (mirror de multi_process, pipeline grid/qtree) logo
+# abaixo -- lotes de npz_samples_per_worker processados sequencialmente por
+# task + no máx. npz_max_workers tasks em voo + max_tasks_per_child=1 (processo
+# morre e é recriado a cada lote, igual ao comentário histórico
+# "remover max_tasks_per_child=1" em multi_process -- aqui é o inverso: precisa
+# ficar, porque este parser vaza e aquele não).
+# def _parse_and_save_one_v2(path: Path, r_in: float, r_ext: float, ang_1: float, ang_2: float,
+#                             n_r: int, n_a: int, out_dir: Path, target_field: str) -> int:
+#     """Worker (processo novo, spawn) de UMA amostra: parse_ans_gzip_sample +
+#     escrita atômica do .npz. parse_ans_gzip_sample é numpy/matplotlib.tri puro
+#     (sem FEMM/COM), então o pool pode ser persistente (sem max_tasks_per_child=1
+#     -- diferente de generate_data_femm_mesh_v2.py, que precisa reciclar workers
+#     por causa do vazamento de memória do ciclo openfemm()/closefemm())."""
+#     idx = int(path.name.split('_')[1].split('.')[0])
+#     d = parse_ans_gzip_sample(path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
+#                                n_r=n_r, n_a=n_a, tmp_dir=out_dir, target_field=target_field)
+#
+#     stem     = path.name.removesuffix('.ans.gz')
+#     out_path = out_dir / f"{stem}.npz"
+#     tmp_path = out_dir / f"{stem}.tmp"        # np.savez adiciona .npz -> .tmp.npz
+#     tmp_npz  = out_dir / f"{stem}.tmp.npz"
+#     np.savez(tmp_path, **d)
+#     tmp_npz.replace(out_path)
+#     return idx
 
-    stem     = path.name.removesuffix('.ans.gz')
-    out_path = out_dir / f"{stem}.npz"
-    tmp_path = out_dir / f"{stem}.tmp"        # np.savez adiciona .npz -> .tmp.npz
-    tmp_npz  = out_dir / f"{stem}.tmp.npz"
-    np.savez(tmp_path, **d)
-    tmp_npz.replace(out_path)
-    return idx
+
+def _parse_and_save_batch_v2(items: list, r_in_map: dict, r_ext_map: dict,
+                              ang_1: float, ang_2: float, n_r: int, n_a: int,
+                              out_dir: Path, target_field: str) -> tuple:
+    """Worker (processo novo) de um LOTE de amostras -- mirror de
+    process_and_save_sample (pipeline grid/qtree, sample_processor.py):
+    processa `items` (lista de índices) sequencialmente dentro do MESMO
+    processo, escrita atômica por amostra. O processo inteiro é descartado ao
+    fim do lote (max_tasks_per_child=1 em multi_process_v2) -- é isso que
+    limita o RSS acumulado a ~len(items) amostras, não o laço em si."""
+    out_dir = Path(out_dir)
+    ok_idxs = []
+    falhas  = []
+    for idx, path in items:
+        try:
+            d = parse_ans_gzip_sample(path, r_in_map[idx], r_ext_map[idx], ang_1=ang_1, ang_2=ang_2,
+                                       n_r=n_r, n_a=n_a, tmp_dir=out_dir, target_field=target_field)
+            stem     = path.name.removesuffix('.ans.gz')
+            out_path = out_dir / f"{stem}.npz"
+            tmp_path = out_dir / f"{stem}.tmp"        # np.savez adiciona .npz -> .tmp.npz
+            tmp_npz  = out_dir / f"{stem}.tmp.npz"
+            np.savez(tmp_path, **d)
+            tmp_npz.replace(out_path)
+            ok_idxs.append(idx)
+        except Exception as e:
+            falhas.append((idx, repr(e)))
+    return ok_idxs, falhas
+
+
+def multi_process_v2(items: list, r_in_map: dict, r_ext_map: dict,
+                      ang_1: float, ang_2: float, n_r: int, n_a: int,
+                      out_dir: Path, target_field: str):
+    """Mirror exato de multi_process (linha ~57) para mode='femm_mesh_v2':
+    lotes de SAMPLES_PER_WORKER itens por task, no máx. MAX_WORKERS tasks em
+    voo por vez (reabastece conforme completam, não submete tudo de uma vez),
+    max_tasks_per_child=1 -- processo-worker reciclado a cada lote (necessário
+    aqui pelo vazamento de matplotlib.tri/scipy documentado acima; multi_process
+    não precisa disso porque o pipeline grid/qtree/Shapely não vaza)."""
+    num_workers = min(os.cpu_count() or 1, MAX_WORKERS)
+
+    chunks       = [items[i:i + SAMPLES_PER_WORKER] for i in range(0, len(items), SAMPLES_PER_WORKER)]
+    n_chunks     = len(chunks)
+    pending      = deque((c, 0) for c in chunks)   # (chunk, tentativas)
+    total_ok     = 0
+    total_falhas = []
+    chunks_done  = 0
+
+    def submit_one(ex, chunk):
+        return ex.submit(_parse_and_save_batch_v2, chunk, r_in_map, r_ext_map,
+                          ang_1, ang_2, n_r, n_a, out_dir, target_field)
+
+    while pending:
+        ex = ProcessPoolExecutor(max_workers=num_workers, max_tasks_per_child=1)
+        fut2meta = {}
+        try:
+            for _ in range(min(len(pending), num_workers)):
+                chunk, tries = pending.popleft()
+                fut2meta[submit_one(ex, chunk)] = (chunk, tries)
+
+            while fut2meta:
+                for fut in as_completed(list(fut2meta.keys())):
+                    chunk, tries = fut2meta.pop(fut)
+                    falhas = []
+                    try:
+                        ok_idxs, falhas = fut.result()
+                        total_ok += len(ok_idxs)
+                        total_falhas.extend(falhas)
+                    except process.BrokenProcessPool:
+                        pending.appendleft((chunk, tries))
+                        for f2, (b2, t2) in list(fut2meta.items()):
+                            pending.appendleft((b2, t2))
+                        raise
+                    except Exception as e:
+                        falhas = [(idx, repr(e)) for idx, _path in chunk]
+                        total_falhas.extend(falhas)
+
+                    chunks_done += 1
+                    ex_msg = f"  ex: {falhas[0][1][:120]}" if falhas else ""
+                    print(f"[{chunks_done}/{n_chunks}] ok={total_ok} falhas={len(total_falhas)}{ex_msg}")
+
+                    while pending and len(fut2meta) < num_workers:
+                        b3, t3 = pending.popleft()
+                        fut2meta[submit_one(ex, b3)] = (b3, t3)
+
+        except process.BrokenProcessPool:
+            pass
+        finally:
+            ex.shutdown(wait=True)
+
+    return total_ok, total_falhas
 
 
 def _run_femm_mesh_v2(max_samples):
@@ -288,31 +403,57 @@ def _run_femm_mesh_v2(max_samples):
     #         print(f"[{ok + len(falhas)}/{len(pending)}] ok={ok} falhas={len(falhas)}")
 
     num_workers = min(os.cpu_count() or 1, MAX_WORKERS)
-    print(f"  workers : {num_workers}")
+    print(f"  workers            : {num_workers}")
+    print(f"  amostras/worker    : {SAMPLES_PER_WORKER}")
 
-    ok, falhas = 0, []
-    with ProcessPoolExecutor(max_workers=num_workers) as ex:
-        fut2idx = {}
-        for path in pending:
-            idx   = int(path.name.split('_')[1].split('.')[0])
-            row   = design_rows[idx]
-            r_in  = float(row['inner_diameter [mm]']) / 2
-            r_ext = float(row['outer_diameter [mm]']) / 2
-            fut = ex.submit(_parse_and_save_one_v2, path, r_in, r_ext, ANG_1, ANG_2,
-                             N_R, N_A, out_dir, V2_TARGET_FIELD)
-            fut2idx[fut] = idx
+    # [REMOVIDO 2026-08-19] max_tasks_per_child=25 não bastava -- diagnosticado
+    # nesta sessão (psutil sobre amostras reais) que o vazamento é bem maior e
+    # mais previsível do que "fragmentação de heap": ~80-88 MB/amostra, sem
+    # limite, por causa de referências cíclicas em matplotlib.tri/scipy que só
+    # a GC cíclica (nunca chamada entre tasks de um worker de vida longa)
+    # libera. 25 amostras x ~85 MB ~= 2,1 GB/worker antes de reciclar, x 12
+    # workers concorrentes ~= 25 GB de pico -- daí o OOM. Substituído por
+    # multi_process_v2 (mirror de multi_process, linha ~57, pipeline
+    # grid/qtree): lotes de SAMPLES_PER_WORKER amostras processados
+    # sequencialmente por task, no máx. MAX_WORKERS tasks em voo por vez (não
+    # submete tudo de uma vez, ao contrário do bloco abaixo) e
+    # max_tasks_per_child=1 (processo reciclado a cada lote, não a cada 25).
+    # ok, falhas = 0, []
+    # with ProcessPoolExecutor(max_workers=num_workers, max_tasks_per_child=25) as ex:
+    #     fut2idx = {}
+    #     for path in pending:
+    #         idx   = int(path.name.split('_')[1].split('.')[0])
+    #         row   = design_rows[idx]
+    #         r_in  = float(row['inner_diameter [mm]']) / 2
+    #         r_ext = float(row['outer_diameter [mm]']) / 2
+    #         fut = ex.submit(_parse_and_save_one_v2, path, r_in, r_ext, ANG_1, ANG_2,
+    #                          N_R, N_A, out_dir, V2_TARGET_FIELD)
+    #         fut2idx[fut] = idx
+    #
+    #     for fut in as_completed(fut2idx):
+    #         idx = fut2idx[fut]
+    #         try:
+    #             fut.result()
+    #             ok += 1
+    #         except Exception as e:
+    #             falhas.append((idx, repr(e)))
+    #
+    #         done = ok + len(falhas)
+    #         if done % 100 == 0 or done == len(pending):
+    #             print(f"[{done}/{len(pending)}] ok={ok} falhas={len(falhas)}")
 
-        for fut in as_completed(fut2idx):
-            idx = fut2idx[fut]
-            try:
-                fut.result()
-                ok += 1
-            except Exception as e:
-                falhas.append((idx, repr(e)))
+    items     = []
+    r_in_map  = {}
+    r_ext_map = {}
+    for path in pending:
+        idx = int(path.name.split('_')[1].split('.')[0])
+        row = design_rows[idx]
+        r_in_map[idx]  = float(row['inner_diameter [mm]']) / 2
+        r_ext_map[idx] = float(row['outer_diameter [mm]']) / 2
+        items.append((idx, path))
 
-            done = ok + len(falhas)
-            if done % 100 == 0 or done == len(pending):
-                print(f"[{done}/{len(pending)}] ok={ok} falhas={len(falhas)}")
+    ok, falhas = multi_process_v2(items, r_in_map, r_ext_map, ANG_1, ANG_2, N_R, N_A,
+                                   out_dir, V2_TARGET_FIELD)
 
     print(f"\n=== Resumo gen_npz_structures (femm_mesh_v2) ===")
     print(f"  Salvos     : {ok}")

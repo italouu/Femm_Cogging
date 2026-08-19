@@ -399,6 +399,11 @@ class MaskedFNO_GNNConfig:
 # │ 'single_material_    │ SingleMaterialFNOLossCfg│ —                                  │
 # │   fno_loss'          │                         │                                    │
 # │ 'masked_fno_gnn_loss'│ MaskedFNOGNNLossCfg     │ — (lambda_loss vem de arch_cfg)    │
+# │ 'graph_div_b_loss'   │ DivBLossCfg             │ base_loss, lambda_div, r_in_mm,    │
+# │                      │                         │ r_ext_mm, ang_1_deg, ang_2_deg     │
+# │                      │                         │ (só FNO_BipartiteGNN — penaliza    │
+# │                      │                         │ div(B) nos nós, ver src/configs/   │
+# │                      │                         │ loss.py::DivBLossCfg)              │
 # └──────────────────────┴─────────────────────────┴────────────────────────────────────┘
 #
 # subtract_fno (MseLossCfg / MaeLossCfg / RelativeL2LossCfg):
@@ -409,11 +414,11 @@ class MaskedFNO_GNNConfig:
 
 @dataclass
 class NnCfg:
-    dataset: str = 'mesh_138x276_FEMM_MESH_A'
-    arch: str = 'FNO_GNN'
-    loss: str = 'mae'
+    dataset: str = 'mesh_ans_138x276_B'
+    arch: str = 'FNO_BipartiteGNN'
+    loss: str = 'graph_div_b_loss'
 
-    problem: str = 'mesh_138x276_FEMM_MESH_A'
+    problem: str = 'mesh_ans_138x276_B'
 
     # Treino
     lr: float = 1e-3

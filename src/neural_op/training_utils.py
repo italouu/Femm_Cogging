@@ -115,6 +115,14 @@ def compute_mae_metrics(model, loader, device, metric_fn):
     return total_hw / n_batches, mae_graph_avg
 
 
+def _default_log_epoch(ep, train_loss, test_loss, train_time_s, eval_time_s, samples_per_s):
+    """log_epoch padrão -- usado se fit() for chamado sem log_fn (ex: scripts
+    antigos/testes) ou por qualquer BaseLoss que não sobrescreva log_epoch
+    (src/neural_op/losses.py). Mesmo texto que já era hardcoded aqui."""
+    print(f"epoch {ep:>4d}  train {train_loss:.4e}  test {test_loss:.4e}"
+          f"  [{train_time_s:.1f}s + {eval_time_s:.1f}s eval]  {samples_per_s:.0f} samp/s")
+
+
 def save_checkpoint(path, epoch, model, optimizer, scheduler
                     # [REMOVIDO] train_losses, test_losses → metrics.jsonl via ModelManager
                     # [REMOVIDO] extra → config.json via ModelManager
@@ -137,7 +145,7 @@ def save_checkpoint(path, epoch, model, optimizer, scheduler
 
 def fit(model, train_loader, test_loader,
         optimizer, scheduler, loss_fn, device, n_epochs, step_fn,
-        *, start_epoch=0, prev_losses=None, monitor=None, metric_fn=None):
+        *, start_epoch=0, prev_losses=None, monitor=None, metric_fn=None, log_fn=None):
     """
     Loop completo de treino.
 
@@ -152,6 +160,11 @@ def fit(model, train_loader, test_loader,
                   via monitor. mae_hw compara sempre a saída em grade H×W do FNO;
                   mae_graph compara a saída final em grafo/nós (None se o arch não
                   produzir saída em grafo).
+    log_fn      : (ep, train_loss, test_loss, train_time_s, eval_time_s, samples_per_s) -> None | None
+                  Print de época — propriedade da loss (BaseLoss.log_epoch,
+                  src/neural_op/losses.py), passado por scripts/train.py como
+                  `loss_obj.log_epoch`. None usa _default_log_epoch (mesmo texto
+                  de sempre) — mantém fit() utilizável sem essa peça.
 
     Returns
     -------
@@ -160,6 +173,7 @@ def fit(model, train_loader, test_loader,
     """
     # [REMOVIDO] checkpoint_every, checkpoint_path, ckpt_extra migrados para TrainingMonitor
     # checkpoint_every=0, checkpoint_path=None, ckpt_extra=None
+    log_fn = log_fn or _default_log_epoch
     model = model.to(device)
     # Após load_state_dict com map_location='cpu', os buffers de momentum do Adam
     # ficam na CPU enquanto os parâmetros já estão no device — move o estado junto.
@@ -188,8 +202,12 @@ def fit(model, train_loader, test_loader,
         samples_per_s = n_train_samples / train_time_s if train_time_s > 0 else 0.0
         train_losses.append(train_loss)
         test_losses.append(test_loss)
-        print(f"epoch {ep:>4d}  train {train_loss:.4e}  test {test_loss:.4e}"
-              f"  [{train_time_s:.1f}s + {eval_time_s:.1f}s eval]  {samples_per_s:.0f} samp/s")
+        # [REMOVIDO 2026-08-18] print hardcoded — virou log_fn (propriedade da
+        # loss, ver BaseLoss.log_epoch em src/neural_op/losses.py), chamado
+        # logo abaixo. _default_log_epoch imprime o mesmo texto de antes.
+        # print(f"epoch {ep:>4d}  train {train_loss:.4e}  test {test_loss:.4e}"
+        #       f"  [{train_time_s:.1f}s + {eval_time_s:.1f}s eval]  {samples_per_s:.0f} samp/s")
+        log_fn(ep, train_loss, test_loss, train_time_s, eval_time_s, samples_per_s)
 
         # [REMOVIDO] bloco de checkpoint inline — substituído por TrainingMonitor
         # if checkpoint_every > 0 and checkpoint_path and (i + 1) % checkpoint_every == 0:

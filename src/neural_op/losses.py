@@ -221,18 +221,61 @@ def graph_div_b_loss(y_nodes, node_y, node_x, cross_edge_index, base_loss='mae',
     return fit + lambda_div * (div ** 2).mean()
 
 
+class BaseLoss:
+    """
+    Wrapper extensível em volta de uma função de loss pura (fn) -- __call__
+    só repassa pra fn (mesma assinatura de sempre, nenhuma mudança em nenhum
+    step_fn de arch) e acrescenta log_epoch como PROPRIEDADE da loss: quem
+    decide o que aparece no console a cada época é a própria loss, não o
+    loop de treino (fit(), src/neural_op/training_utils.py).
+
+    Por ora toda entrada de LOSS_REGISTRY usa o log_epoch padrão abaixo
+    (mesmo texto que já era hardcoded em fit()). Uma loss que precise
+    destacar termos próprios (ex: erro de ajuste/"data" vs penalidade
+    física -- caso de graph_div_b_loss, que já calcula `fit` e `div`
+    separadamente) sobrescreve log_epoch numa subclasse; nada mais no
+    projeto precisa mudar pra isso (scripts/train.py já extrai
+    `loss_obj.log_epoch` do objeto, antes de qualquer functools.partial).
+    """
+
+    def __init__(self, fn):
+        self.fn = fn
+
+    def __call__(self, *args, **kwargs):
+        return self.fn(*args, **kwargs)
+
+    def log_epoch(self, ep, train_loss, test_loss, train_time_s, eval_time_s, samples_per_s):
+        print(f"epoch {ep:>4d}  train {train_loss:.4e}  test {test_loss:.4e}"
+              f"  [{train_time_s:.1f}s + {eval_time_s:.1f}s eval]  {samples_per_s:.0f} samp/s")
+
+
+# [REMOVIDO 2026-08-18] LOSS_REGISTRY com funções soltas — cada entrada
+# agora é um BaseLoss(fn) (ver classe acima), pra dar à loss uma propriedade
+# de print de época (log_epoch) sem mudar nenhuma chamada existente
+# (LOSS_REGISTRY[nome](out, y, ...) continua idêntico — instância é
+# chamável igual função).
+# LOSS_REGISTRY: dict = {
+#     'mse':                     mse_loss,
+#     'mae':                     mae_loss,
+#     'relative_l2':             relative_l2_loss,
+#     'masked_fno_loss':         masked_fno_loss,
+#     'single_material_fno_loss': single_material_fno_loss,
+#     'masked_fno_gnn_loss':     masked_fno_gnn_loss,
+#     'graph_div_b_loss':        graph_div_b_loss,
+# }
+
 LOSS_REGISTRY: dict = {
-    'mse':                     mse_loss,
-    'mae':                     mae_loss,
-    'relative_l2':             relative_l2_loss,
+    'mse':                      BaseLoss(mse_loss),
+    'mae':                      BaseLoss(mae_loss),
+    'relative_l2':              BaseLoss(relative_l2_loss),
     # assinatura estendida (pred, y, masks) — requer step_fn compatível (MaskedFNO2d)
-    'masked_fno_loss':         masked_fno_loss,
+    'masked_fno_loss':          BaseLoss(masked_fno_loss),
     # assinatura estendida (pred, y, mask_m) — requer step_fn compatível (FNO2d_SingleMat)
-    'single_material_fno_loss': single_material_fno_loss,
+    'single_material_fno_loss': BaseLoss(single_material_fno_loss),
     # assinatura estendida (y_hw_8, y_hw, masks, y_nodes_2, node_y, lambda_loss)
-    'masked_fno_gnn_loss':     masked_fno_gnn_loss,
+    'masked_fno_gnn_loss':      BaseLoss(masked_fno_gnn_loss),
     # assinatura estendida (y_nodes, node_y, node_x, cross_edge_index, base_loss, lambda_div)
     # — exclusiva de grafos (FNO_BipartiteGNN); ver graph_div_b_loss acima e
     # DivBLossCfg (src/configs/loss.py)
-    'graph_div_b_loss':        graph_div_b_loss,
+    'graph_div_b_loss':         BaseLoss(graph_div_b_loss),
 }

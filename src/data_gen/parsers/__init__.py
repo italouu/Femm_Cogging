@@ -22,6 +22,8 @@ from .masked_fno2d     import MASKED_FNO2D_PARSER
 from .masked_fno_gnn   import MASKED_FNO_GNN_PARSER
 from .femm_mesh        import FEMM_MESH_PARSER
 from .femm_mesh_a       import FEMM_MESH_A_PARSER
+from .femm_mesh_v2_b    import FEMM_MESH_V2_PARSER
+from .femm_mesh_v2_a    import FEMM_MESH_V2_A_PARSER
 
 PARSER_REGISTRY = {
     'FNO_GNN':        FNO_GNN_PARSER,
@@ -31,6 +33,12 @@ PARSER_REGISTRY = {
     'MaskedFNO_GNN':  MASKED_FNO_GNN_PARSER,
     'FEMM_MESH':      FEMM_MESH_PARSER,    # mode='femm_mesh' — layout de 9/4 colunas, sem shared_length
     'FEMM_MESH_A':    FEMM_MESH_A_PARSER,  # mode='femm_mesh' — alvo A (1 canal) em vez de B
+    # mode='femm_mesh_v2' — só carregam target_field (ver docstring de
+    # femm_mesh_v2_b.py/femm_mesh_v2_a.py); demais campos de
+    # MotorQtreeParserConfig não se aplicam (parse_ans_gzip_sample já produz
+    # o formato final, sem seleção de coluna). Arch: FNO_BipartiteGNN.
+    'FEMM_MESH_V2':   FEMM_MESH_V2_PARSER,    # alvo B (Bx,By via curl(A))
+    'FEMM_MESH_V2_A': FEMM_MESH_V2_A_PARSER,  # alvo A (potencial vetor)
 }
 
 __all__ = [
@@ -43,5 +51,7 @@ __all__ = [
     'MASKED_FNO_GNN_PARSER',
     'FEMM_MESH_PARSER',
     'FEMM_MESH_A_PARSER',
+    'FEMM_MESH_V2_PARSER',
+    'FEMM_MESH_V2_A_PARSER',
     'PARSER_REGISTRY',
 ]

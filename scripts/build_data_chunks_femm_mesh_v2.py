@@ -19,11 +19,13 @@ L/elem_L/E_L/C_L (contagens por amostra) já vêm prontas do .npz (calculadas
 em parse_ans_gzip_sample) -- só concatenadas, não recalculadas aqui.
 
 Saída: data/torch/data_chunks/<dataset>/data_chunk_XXXX.pt -- sem sufixo de
-parser (não existe variante de parser pra este formato, ver
-gen_npz_structures.py::_run_femm_mesh_v2). <dataset> aqui é
-DatagenConfig.femm_mesh_v2_dataset_name, não .dataset direto -- sufixado com
-'_B' quando femm_mesh_v2_target_field='B' (2026-08-13), pra ler do staging
-certo (ver mesma property).
+npz_parser (diferente do modo 'femm_mesh', que sufixa <dataset>_<npz_parser>
+pra não misturar variantes de coluna — aqui não há seleção de coluna, só
+target_field, ver gen_npz_structures.py::_run_femm_mesh_v2).  <dataset> aqui
+é DatagenConfig.femm_mesh_v2_dataset_name, não .dataset direto -- sufixado
+com '_B' quando PARSER_REGISTRY[npz_parser].target_field=='B' (2026-08-13,
+mecanismo de seleção atualizado em 2026-08-19 — ver
+src/configs/datagen.py::femm_mesh_v2_dataset_name), pra ler do staging certo.
 
 Execução (a partir da raiz do projeto):
     python -m scripts.build_data_chunks_femm_mesh_v2

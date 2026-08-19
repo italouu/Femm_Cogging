@@ -48,7 +48,12 @@ if __name__ == '__main__':
 
     step_fn   = entry.make_step_fn(_nn.arch_cfg, _nn.loss_cfg)
     metric_fn = entry.metric_fn(_nn.arch_cfg)
-    loss_fn = LOSS_REGISTRY[_nn.loss]
+    # loss_obj (BaseLoss, src/neural_op/losses.py) preservado à parte de
+    # loss_fn: functools.partial não repassa atributos do callable original,
+    # então log_fn precisa ser extraído de loss_obj.log_epoch ANTES do wrap
+    # abaixo — não de loss_fn (que pode virar um partial).
+    loss_obj = LOSS_REGISTRY[_nn.loss]
+    loss_fn  = loss_obj
     if getattr(_nn.loss_cfg, 'tail_alpha', 0.0) > 0:
         # Só MseLossCfg tem tail_alpha/tail_k_frac — getattr evita AttributeError
         # em outras configs de loss.
@@ -107,6 +112,7 @@ if __name__ == '__main__':
             device=DEVICE, n_epochs=_nn.n_epochs,
             step_fn=step_fn,
             metric_fn=metric_fn,
+            log_fn=loss_obj.log_epoch,
             monitor=monitor,
             start_epoch=start_epoch,
             prev_losses=prev_losses,

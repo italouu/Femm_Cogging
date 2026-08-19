@@ -249,6 +249,67 @@ class BaseLoss:
               f"  [{train_time_s:.1f}s + {eval_time_s:.1f}s eval]  {samples_per_s:.0f} samp/s")
 
 
+class DivBLoss(BaseLoss):
+    """
+    BaseLoss especializado para graph_div_b_loss -- calcula fit (erro de
+    ajuste) e div (penalidade de divergente) separadamente a cada __call__
+    (mesma fórmula de graph_div_b_loss, que fica intacta pra quem mais usar)
+    e acumula as somas em tensores no device, separadas por fase
+    treino/teste -- fase detectada via torch.is_grad_enabled() (True dentro
+    de train_epoch, False dentro do torch.no_grad() de eval_epoch), sem
+    precisar tocar train_epoch/eval_epoch/fit() (src/neural_op/
+    training_utils.py) nem a assinatura de nenhum step_fn.
+
+    log_epoch imprime a média de fit/div de cada fase, além do loss
+    combinado de sempre, e zera os acumuladores a cada chamada (uma por
+    época). Acumula via .detach() na GPU -- só sincroniza (.item()) uma vez
+    por época, no print, mesmo padrão que o loss combinado já usa em
+    train_epoch/eval_epoch.
+    """
+
+    def __init__(self, fn):
+        super().__init__(fn)
+        self._sums = None   # inicializado no primeiro __call__ (não sabe o device antes)
+
+    def _zero_sums(self, device):
+        self._sums = {
+            'train': [torch.zeros((), device=device), torch.zeros((), device=device), 0],
+            'test':  [torch.zeros((), device=device), torch.zeros((), device=device), 0],
+        }
+
+    def __call__(self, y_nodes, node_y, node_x, cross_edge_index, base_loss='mae', lambda_div=0.1,
+                 r_in_mm=28.5, r_ext_mm=46.5, ang_1_deg=0.0, ang_2_deg=120.0):
+        fit = LOSS_REGISTRY[base_loss](y_nodes, node_y)
+        div = graph_weak_divergence(y_nodes, node_x, cross_edge_index,
+                                     r_in_mm, r_ext_mm, ang_1_deg, ang_2_deg)
+        div_term = (div ** 2).mean()
+
+        if self._sums is None:
+            self._zero_sums(fit.device)
+        phase = 'train' if torch.is_grad_enabled() else 'test'
+        s = self._sums[phase]
+        with torch.no_grad():
+            s[0] += fit.detach()
+            s[1] += div_term.detach()
+        s[2] += 1
+
+        return fit + lambda_div * div_term
+
+    def log_epoch(self, ep, train_loss, test_loss, train_time_s, eval_time_s, samples_per_s):
+        if self._sums is None:
+            self._zero_sums('cpu')
+        tr_fit, tr_div, tr_n = self._sums['train']
+        te_fit, te_div, te_n = self._sums['test']
+        tr_fit = (tr_fit / tr_n).item() if tr_n else 0.0
+        tr_div = (tr_div / tr_n).item() if tr_n else 0.0
+        te_fit = (te_fit / te_n).item() if te_n else 0.0
+        te_div = (te_div / te_n).item() if te_n else 0.0
+        print(f"epoch {ep:>4d}  train {train_loss:.4e} (data {tr_fit:.4e}  div {tr_div:.4e})"
+              f"  test {test_loss:.4e} (data {te_fit:.4e}  div {te_div:.4e})"
+              f"  [{train_time_s:.1f}s + {eval_time_s:.1f}s eval]  {samples_per_s:.0f} samp/s")
+        self._zero_sums(self._sums['train'][0].device)
+
+
 # [REMOVIDO 2026-08-18] LOSS_REGISTRY com funções soltas — cada entrada
 # agora é um BaseLoss(fn) (ver classe acima), pra dar à loss uma propriedade
 # de print de época (log_epoch) sem mudar nenhuma chamada existente
@@ -276,6 +337,7 @@ LOSS_REGISTRY: dict = {
     'masked_fno_gnn_loss':      BaseLoss(masked_fno_gnn_loss),
     # assinatura estendida (y_nodes, node_y, node_x, cross_edge_index, base_loss, lambda_div)
     # — exclusiva de grafos (FNO_BipartiteGNN); ver graph_div_b_loss acima e
-    # DivBLossCfg (src/configs/loss.py)
-    'graph_div_b_loss':         BaseLoss(graph_div_b_loss),
+    # DivBLossCfg (src/configs/loss.py). DivBLoss (não BaseLoss simples) —
+    # log_epoch próprio, imprime fit/div separados (ver classe acima).
+    'graph_div_b_loss':         DivBLoss(graph_div_b_loss),
 }

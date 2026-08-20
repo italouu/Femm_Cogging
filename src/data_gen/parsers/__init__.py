@@ -24,6 +24,8 @@ from .femm_mesh        import FEMM_MESH_PARSER
 from .femm_mesh_a       import FEMM_MESH_A_PARSER
 from .femm_mesh_v2_b    import FEMM_MESH_V2_PARSER
 from .femm_mesh_v2_a    import FEMM_MESH_V2_A_PARSER
+from .femm_mesh_v3_b    import FEMM_MESH_V3_PARSER
+from .femm_mesh_v3_a    import FEMM_MESH_V3_A_PARSER
 
 PARSER_REGISTRY = {
     'FNO_GNN':        FNO_GNN_PARSER,
@@ -39,6 +41,11 @@ PARSER_REGISTRY = {
     # o formato final, sem seleção de coluna). Arch: FNO_BipartiteGNN.
     'FEMM_MESH_V2':   FEMM_MESH_V2_PARSER,    # alvo B (Bx,By via curl(A))
     'FEMM_MESH_V2_A': FEMM_MESH_V2_A_PARSER,  # alvo A (potencial vetor)
+    # mode='femm_mesh_v2' + node_x com node_cell_count (3ª coluna) — arch
+    # FNO_BipartiteGNN_v2 (src/neural_op/archs/femm_mesh_v3_gnn.py). Ver
+    # src/data_gen/parsers/femm_mesh_v3.py.
+    'FEMM_MESH_V3':   FEMM_MESH_V3_PARSER,    # alvo B (Bx,By via curl(A))
+    'FEMM_MESH_V3_A': FEMM_MESH_V3_A_PARSER,  # alvo A (potencial vetor)
 }
 
 __all__ = [
@@ -53,5 +60,7 @@ __all__ = [
     'FEMM_MESH_A_PARSER',
     'FEMM_MESH_V2_PARSER',
     'FEMM_MESH_V2_A_PARSER',
+    'FEMM_MESH_V3_PARSER',
+    'FEMM_MESH_V3_A_PARSER',
     'PARSER_REGISTRY',
 ]

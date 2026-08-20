@@ -30,6 +30,7 @@ import numpy as np
 from src.data_gen.data_utils import QtreeSampleUnifier, GridSampleUnifier
 from src.data_gen.sample_processor import process_and_save_sample
 from src.data_gen.parsers.femm_mesh_v2 import parse_ans_gzip_sample
+from src.data_gen.parsers.femm_mesh_v3 import parse_ans_gzip_sample_v3
 from src.data_gen.parsers import PARSER_REGISTRY
 from src.configs.datagen import DatagenConfig
 _dg      = DatagenConfig()
@@ -53,6 +54,18 @@ MAX_SAMPLES        = _dg.npz_max_samples
 # [REMOVIDO 2026-08-19] V2_TARGET_FIELD = _dg.femm_mesh_v2_target_field
 V2_TARGET_FIELD  = PARSER.target_field
 V2_DATASET_NAME  = _dg.femm_mesh_v2_dataset_name
+
+# FEMM_MESH_V3/FEMM_MESH_V3_A (2026-08-20): mesmo .ans.gz bruto, mas node_x
+# ganha uma 3ª coluna (node_cell_count -- ver src/data_gen/parsers/femm_mesh_v3.py).
+# MotorQtreeParserConfig só carrega target_field (ver docstring de
+# femm_mesh_v2_b.py), não a função de parse em si -- por isso a seleção da
+# função é feita aqui, por chave de npz_parser, em vez de um campo novo na
+# dataclass do parser.
+_V2_PARSE_FN_BY_PARSER = {
+    'FEMM_MESH_V3':   parse_ans_gzip_sample_v3,
+    'FEMM_MESH_V3_A': parse_ans_gzip_sample_v3,
+}
+V2_PARSE_FN = _V2_PARSE_FN_BY_PARSER.get(_dg.npz_parser, parse_ans_gzip_sample)
 
 def multi_process(indices: list, unifier: QtreeSampleUnifier, out_dir: Path):
     num_workers = min(os.cpu_count() or 1, MAX_WORKERS)
@@ -247,20 +260,25 @@ def _run_femm_mesh(max_samples):
 
 def _parse_and_save_batch_v2(items: list, r_in_map: dict, r_ext_map: dict,
                               ang_1: float, ang_2: float, n_r: int, n_a: int,
-                              out_dir: Path, target_field: str) -> tuple:
+                              out_dir: Path, target_field: str,
+                              parse_fn=parse_ans_gzip_sample) -> tuple:
     """Worker (processo novo) de um LOTE de amostras -- mirror de
     process_and_save_sample (pipeline grid/qtree, sample_processor.py):
     processa `items` (lista de índices) sequencialmente dentro do MESMO
     processo, escrita atômica por amostra. O processo inteiro é descartado ao
     fim do lote (max_tasks_per_child=1 em multi_process_v2) -- é isso que
-    limita o RSS acumulado a ~len(items) amostras, não o laço em si."""
+    limita o RSS acumulado a ~len(items) amostras, não o laço em si.
+
+    parse_fn : parse_ans_gzip_sample (padrão) ou parse_ans_gzip_sample_v3
+    (node_x com node_cell_count -- ver V2_PARSE_FN acima), selecionado por
+    npz_parser antes de chegar aqui."""
     out_dir = Path(out_dir)
     ok_idxs = []
     falhas  = []
     for idx, path in items:
         try:
-            d = parse_ans_gzip_sample(path, r_in_map[idx], r_ext_map[idx], ang_1=ang_1, ang_2=ang_2,
-                                       n_r=n_r, n_a=n_a, tmp_dir=out_dir, target_field=target_field)
+            d = parse_fn(path, r_in_map[idx], r_ext_map[idx], ang_1=ang_1, ang_2=ang_2,
+                          n_r=n_r, n_a=n_a, tmp_dir=out_dir, target_field=target_field)
             stem     = path.name.removesuffix('.ans.gz')
             out_path = out_dir / f"{stem}.npz"
             tmp_path = out_dir / f"{stem}.tmp"        # np.savez adiciona .npz -> .tmp.npz
@@ -275,13 +293,16 @@ def _parse_and_save_batch_v2(items: list, r_in_map: dict, r_ext_map: dict,
 
 def multi_process_v2(items: list, r_in_map: dict, r_ext_map: dict,
                       ang_1: float, ang_2: float, n_r: int, n_a: int,
-                      out_dir: Path, target_field: str):
+                      out_dir: Path, target_field: str,
+                      parse_fn=parse_ans_gzip_sample):
     """Mirror exato de multi_process (linha ~57) para mode='femm_mesh_v2':
     lotes de SAMPLES_PER_WORKER itens por task, no máx. MAX_WORKERS tasks em
     voo por vez (reabastece conforme completam, não submete tudo de uma vez),
     max_tasks_per_child=1 -- processo-worker reciclado a cada lote (necessário
     aqui pelo vazamento de matplotlib.tri/scipy documentado acima; multi_process
-    não precisa disso porque o pipeline grid/qtree/Shapely não vaza)."""
+    não precisa disso porque o pipeline grid/qtree/Shapely não vaza).
+
+    parse_fn : repassado a _parse_and_save_batch_v2 -- ver V2_PARSE_FN acima."""
     num_workers = min(os.cpu_count() or 1, MAX_WORKERS)
 
     chunks       = [items[i:i + SAMPLES_PER_WORKER] for i in range(0, len(items), SAMPLES_PER_WORKER)]
@@ -293,7 +314,7 @@ def multi_process_v2(items: list, r_in_map: dict, r_ext_map: dict,
 
     def submit_one(ex, chunk):
         return ex.submit(_parse_and_save_batch_v2, chunk, r_in_map, r_ext_map,
-                          ang_1, ang_2, n_r, n_a, out_dir, target_field)
+                          ang_1, ang_2, n_r, n_a, out_dir, target_field, parse_fn)
 
     while pending:
         ex = ProcessPoolExecutor(max_workers=num_workers, max_tasks_per_child=1)
@@ -453,7 +474,7 @@ def _run_femm_mesh_v2(max_samples):
         items.append((idx, path))
 
     ok, falhas = multi_process_v2(items, r_in_map, r_ext_map, ANG_1, ANG_2, N_R, N_A,
-                                   out_dir, V2_TARGET_FIELD)
+                                   out_dir, V2_TARGET_FIELD, parse_fn=V2_PARSE_FN)
 
     print(f"\n=== Resumo gen_npz_structures (femm_mesh_v2) ===")
     print(f"  Salvos     : {ok}")

@@ -74,10 +74,16 @@ class DatagenConfig:
     #                   |                       | via curl(A)) — arch FNO_BipartiteGNN
     #   FEMM_MESH_V2_A  | FEMM_MESH_V2_A_PARSER | mode='femm_mesh_v2' — mesma entrada,
     #                   |                       | alvo escalar A
+    #   FEMM_MESH_V3    | FEMM_MESH_V3_PARSER   | mode='femm_mesh_v2' — idem FEMM_MESH_V2,
+    #                   |                       | node_x com 3ª coluna (node_cell_count,
+    #                   |                       | ver src/data_gen/parsers/femm_mesh_v3.py)
+    #                   |                       | — arch FNO_BipartiteGNN_v2
+    #   FEMM_MESH_V3_A  | FEMM_MESH_V3_A_PARSER | mode='femm_mesh_v2' — mesma entrada,
+    #                   |                       | alvo escalar A
     #
     # FEMM_MESH/FEMM_MESH_A só são compatíveis com mode='femm_mesh';
-    # FEMM_MESH_V2/FEMM_MESH_V2_A só com mode='femm_mesh_v2'; os demais são
-    # do pipeline CSV (grid/qtree).
+    # FEMM_MESH_V2/FEMM_MESH_V2_A/FEMM_MESH_V3/FEMM_MESH_V3_A só com
+    # mode='femm_mesh_v2'; os demais são do pipeline CSV (grid/qtree).
     #
     # [ATUALIZADO 2026-08-19] mode='femm_mesh_v2' passou a usar PARSER_REGISTRY
     # (antes era ignorado; a escolha do alvo vinha de um campo dedicado,
@@ -123,12 +129,19 @@ class DatagenConfig:
         NnCfg.__post_init__ (src/configs/training.py) importar ARCH_REGISTRY
         dentro do método: evita puxar a cadeia de imports de
         src/data_gen/parsers/ (matplotlib.tri, scipy) pra todo consumidor de
-        DatagenConfig, mesmo quem só precisa dos campos simples."""
+        DatagenConfig, mesmo quem só precisa dos campos simples.
+
+        FEMM_MESH_V3/FEMM_MESH_V3_A (2026-08-20): node_x ganha uma 3ª coluna
+        (node_cell_count, ver src/data_gen/parsers/femm_mesh_v3.py) — layout
+        diferente de FEMM_MESH_V2/FEMM_MESH_V2_A (2 colunas), por isso usa
+        pasta própria (sufixo '_v3'), pra não misturar com os chunks v2 já
+        existentes."""
         from src.data_gen.parsers import PARSER_REGISTRY
         target_field = PARSER_REGISTRY[self.npz_parser].target_field
-        if target_field == 'A':
-            return self.dataset
-        return f"{self.dataset}_{target_field}"
+        base = self.dataset if target_field == 'A' else f"{self.dataset}_{target_field}"
+        if self.npz_parser in ('FEMM_MESH_V3', 'FEMM_MESH_V3_A'):
+            base += '_v3'
+        return base
 
     @property
     def parsed_dataset_name(self) -> str:

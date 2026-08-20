@@ -257,6 +257,50 @@ class FNO_BipartiteGNNConfig:
 
 
 @dataclass
+class FNO_BipartiteGNN_v2Config:
+    """Config de FNO_BipartiteGNN_v2 (src/neural_op/archs/femm_mesh_v3_gnn.py)
+    -- mesma arquitetura de FNO_BipartiteGNN (grafo duplo vértices+elementos),
+    sobre o parser src/data_gen/parsers/femm_mesh_v3.py: node_x ganha uma 3ª
+    coluna (node_cell_count) e a GNN recebe também a projeção das 8 células
+    vizinhas do FNO (indexação direta, wrap angular / zero radial fora da
+    grade -- ver _interpolate_fno_to_nodes_v3). loader_mode continua
+    'femm_mesh_v2' (mesmo layout de chunk do FNO_BipartiteGNN, só node_x
+    muda de largura); dataset gerado com npz_parser='FEMM_MESH_V3' ou
+    'FEMM_MESH_V3_A' (ver PARSER_REGISTRY). Decisão de arquitetura: conversa
+    2026-08-20 (ver CLAUDE.md)."""
+    fno_modes1: int = 270
+    fno_modes2: int = 270
+    fno_conv_width: int = 6
+    fno_conv_layers: int = 4
+    fno_lift_width: int = 64
+    fno_lift_layers: int = 3
+    fno_proj_width: int = 64
+    fno_proj_layers: int = 3
+    data_res: tuple = (138, 276)
+    gnn_node_width: int = 32
+    gnn_n_layers: int = 3
+    lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
+
+    # edge_dim/grid_in_ch/grid_out_ch/node_in_ch/elem_in_ch/cross_edge_dim --
+    # todos auto-detectados em NnCfg.__post_init__ (helper _detect_chunk_dims),
+    # ver FNO_BipartiteGNNConfig para o mesmo padrão. Defaults abaixo batem
+    # com o layout fixo de src/data_gen/parsers/femm_mesh_v3.py (node_x=
+    # [r,c,node_cell_count], 3 colunas -- diferente do default=2 de
+    # FNO_BipartiteGNNConfig); só usados se este arch_cfg for reconstruído
+    # fora de NnCfg (ex: scripts/eval.py).
+    edge_dim:       int = field(default=3, init=False)
+    grid_in_ch:     int = field(default=2, init=False)
+    grid_out_ch:    int = field(default=1, init=False)
+    node_in_ch:     int = field(default=3, init=False)
+    elem_in_ch:     int = field(default=5, init=False)
+    cross_edge_dim: int = field(default=1, init=False)
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        return _from_dict_generic(cls, d)
+
+
+@dataclass
 class GNN_PostBaseConfig:
     # Treino em duas etapas (não end-to-end): base_run_dir aponta para um run já treinado
     # (FNO2d ou FNO_GNN), congelado; só o GNN novo é treinado.
@@ -384,6 +428,12 @@ class MaskedFNO_GNNConfig:
 # │                 │                      │                  │    +elementos; parser    │
 # │                 │                      │                  │    próprio, parsers/     │
 # │                 │                      │                  │    femm_mesh_v2.py)      │
+# │ FNO_Bipartite   │ mse / mae /          │ femm_mesh_v2     │ FNO_BipartiteGNN_v2Config│
+# │  GNN_v2         │   relative_l2        │                  │   (idem + node_cell_count│
+# │                 │                      │                  │    em node_x + projeção  │
+# │                 │                      │                  │    das 8 células vizinhas│
+# │                 │                      │                  │    do FNO; parser        │
+# │                 │                      │                  │    femm_mesh_v3.py)      │
 # └─────────────────┴──────────────────────┴──────────────────┴──────────────────────────┘
 #
 # Chaves de loss — LOSS_REGISTRY (src/neural_op/losses.py)
@@ -415,8 +465,8 @@ class MaskedFNO_GNNConfig:
 @dataclass
 class NnCfg:
     dataset: str = 'mesh_ans_138x276_B'
-    arch: str = 'FNO_BipartiteGNN'
-    loss: str = 'graph_div_b_loss'
+    arch: str = 'FNO_BipartiteGNN_v2'
+    loss: str = 'mae'
 
     problem: str = 'mesh_ans_138x276_B'
 

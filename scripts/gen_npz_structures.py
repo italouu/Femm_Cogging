@@ -295,12 +295,26 @@ def multi_process_v2(items: list, r_in_map: dict, r_ext_map: dict,
                       ang_1: float, ang_2: float, n_r: int, n_a: int,
                       out_dir: Path, target_field: str,
                       parse_fn=parse_ans_gzip_sample):
-    """Mirror exato de multi_process (linha ~57) para mode='femm_mesh_v2':
-    lotes de SAMPLES_PER_WORKER itens por task, no máx. MAX_WORKERS tasks em
-    voo por vez (reabastece conforme completam, não submete tudo de uma vez),
-    max_tasks_per_child=1 -- processo-worker reciclado a cada lote (necessário
-    aqui pelo vazamento de matplotlib.tri/scipy documentado acima; multi_process
-    não precisa disso porque o pipeline grid/qtree/Shapely não vaza).
+    """Mirror de multi_process (linha ~57) para mode='femm_mesh_v2': lotes de
+    SAMPLES_PER_WORKER itens por task, no máx. MAX_WORKERS tasks por RODADA.
+
+    # [REMOVIDO 2026-08-20] versão anterior usava max_tasks_per_child=1 do
+    # ProcessPoolExecutor pra reciclar o worker a cada task, com refill
+    # contínuo (novo task submetido assim que um termina, mesmo pool o run
+    # inteiro). max_tasks_per_child só existe a partir do Python 3.11 --
+    # encontrado quebrando (TypeError) numa VDI Linux com Python 3.10
+    # (2026-08-20). Trocado por reciclagem RODADA A RODADA: um
+    # ProcessPoolExecutor NOVO por rodada de até num_workers tasks, todas
+    # submetidas de uma vez, pool encerrado ao fim da rodada antes da
+    # próxima ser criada -- cada worker processa exatamente 1 task antes do
+    # pool inteiro ser destruído, MESMA granularidade de reciclagem que
+    # max_tasks_per_child=1 dava (não é aproximação), necessária pelo
+    # vazamento de matplotlib.tri/scipy documentado acima (multi_process,
+    # pipeline grid/qtree/Shapely, não precisa disso porque não vaza). Custo:
+    # uma pequena bolha de pipeline por rodada (workers ociosos esperando a
+    # task mais lenta da rodada terminar) -- aceitável, tasks têm tamanho
+    # fixo (SAMPLES_PER_WORKER itens cada). Roda igual em qualquer versão do
+    # Python (3.11+ inclusive), sem feature-detection de versão.
 
     parse_fn : repassado a _parse_and_save_batch_v2 -- ver V2_PARSE_FN acima."""
     num_workers = min(os.cpu_count() or 1, MAX_WORKERS)
@@ -317,37 +331,29 @@ def multi_process_v2(items: list, r_in_map: dict, r_ext_map: dict,
                           ang_1, ang_2, n_r, n_a, out_dir, target_field, parse_fn)
 
     while pending:
-        ex = ProcessPoolExecutor(max_workers=num_workers, max_tasks_per_child=1)
-        fut2meta = {}
+        round_items = [pending.popleft() for _ in range(min(len(pending), num_workers))]
+        ex = ProcessPoolExecutor(max_workers=num_workers)
+        fut2meta = {submit_one(ex, chunk): (chunk, tries) for chunk, tries in round_items}
         try:
-            for _ in range(min(len(pending), num_workers)):
-                chunk, tries = pending.popleft()
-                fut2meta[submit_one(ex, chunk)] = (chunk, tries)
+            for fut in as_completed(list(fut2meta.keys())):
+                chunk, tries = fut2meta.pop(fut)
+                falhas = []
+                try:
+                    ok_idxs, falhas = fut.result()
+                    total_ok += len(ok_idxs)
+                    total_falhas.extend(falhas)
+                except process.BrokenProcessPool:
+                    pending.appendleft((chunk, tries))
+                    for b2, t2 in fut2meta.values():
+                        pending.appendleft((b2, t2))
+                    raise
+                except Exception as e:
+                    falhas = [(idx, repr(e)) for idx, _path in chunk]
+                    total_falhas.extend(falhas)
 
-            while fut2meta:
-                for fut in as_completed(list(fut2meta.keys())):
-                    chunk, tries = fut2meta.pop(fut)
-                    falhas = []
-                    try:
-                        ok_idxs, falhas = fut.result()
-                        total_ok += len(ok_idxs)
-                        total_falhas.extend(falhas)
-                    except process.BrokenProcessPool:
-                        pending.appendleft((chunk, tries))
-                        for f2, (b2, t2) in list(fut2meta.items()):
-                            pending.appendleft((b2, t2))
-                        raise
-                    except Exception as e:
-                        falhas = [(idx, repr(e)) for idx, _path in chunk]
-                        total_falhas.extend(falhas)
-
-                    chunks_done += 1
-                    ex_msg = f"  ex: {falhas[0][1][:120]}" if falhas else ""
-                    print(f"[{chunks_done}/{n_chunks}] ok={total_ok} falhas={len(total_falhas)}{ex_msg}")
-
-                    while pending and len(fut2meta) < num_workers:
-                        b3, t3 = pending.popleft()
-                        fut2meta[submit_one(ex, b3)] = (b3, t3)
+                chunks_done += 1
+                ex_msg = f"  ex: {falhas[0][1][:120]}" if falhas else ""
+                print(f"[{chunks_done}/{n_chunks}] ok={total_ok} falhas={len(total_falhas)}{ex_msg}")
 
         except process.BrokenProcessPool:
             pass

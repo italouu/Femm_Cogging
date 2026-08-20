@@ -20,11 +20,11 @@ from src.neural_op.archs.femm_mesh_v2_gnn import (FNO_BipartiteGNN,
                                                   make_fno_bipartite_gnn_step,
                                                   fno_bipartite_gnn_metric_fn,
                                                   femm_mesh_v2_eval_fn)
-from src.neural_op.archs.femm_mesh_v3_gnn import FNO_BipartiteGNN_v2
+from src.neural_op.archs.femm_mesh_v3_gnn import FNO_BipartiteGNN_v3
 from src.configs.training               import (FNOConfig, FNO_GNNConfig, FNO_GNN_v2Config,
                                                 MaskedFNO2dConfig, MaskedFNO_GNNConfig,
                                                 SingleMatFNOConfig, GNN_PostBaseConfig,
-                                                FNO_BipartiteGNNConfig, FNO_BipartiteGNN_v2Config)
+                                                FNO_BipartiteGNNConfig, FNO_BipartiteGNN_v3Config)
 # [REMOVIDO] PhiDeepONet — removido do escopo ativo (2026-05-27)
 # from src.neural_op.archs.phi_deeponet import PhiDeepONet,        phi_deeponet_step_fn
 # from src.neural_op.archs.eval         import phi_deeponet_eval_fn
@@ -179,15 +179,16 @@ ARCH_REGISTRY: dict = {
         eval_fn=femm_mesh_v2_eval_fn,
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),
-    # FNO_BipartiteGNN_v2 (2026-08-20): igual FNO_BipartiteGNN, com node_x
-    # ganhando node_cell_count (3ª coluna) e a GNN recebendo também a
-    # projeção das 8 células vizinhas do FNO -- ver
+    # FNO_BipartiteGNN_v3 (2026-08-20, renomeado de FNO_BipartiteGNN_v2 no
+    # mesmo dia pra alinhar com o nome do parser FEMM_MESH_V3): igual
+    # FNO_BipartiteGNN, com node_x ganhando node_cell_count (3ª coluna) e a
+    # GNN recebendo também a projeção das 8 células vizinhas do FNO -- ver
     # src/neural_op/archs/femm_mesh_v3_gnn.py e src/data_gen/parsers/
     # femm_mesh_v3.py. step_fn/metric_fn/eval_fn reaproveitados de
     # FNO_BipartiteGNN (genéricos, não assumem largura fixa de node_x).
-    'FNO_BipartiteGNN_v2': ArchEntry(
-        cls=FNO_BipartiteGNN_v2,
-        cfg_cls=FNO_BipartiteGNN_v2Config,
+    'FNO_BipartiteGNN_v3': ArchEntry(
+        cls=FNO_BipartiteGNN_v3,
+        cfg_cls=FNO_BipartiteGNN_v3Config,
         loader_mode='femm_mesh_v2',
         model_kwargs=_fno_gnn_kwargs,
         make_step_fn=lambda cfg, lcfg: make_fno_bipartite_gnn_step(cfg.lambda_loss, lcfg),

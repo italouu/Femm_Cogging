@@ -77,7 +77,7 @@ class DatagenConfig:
     #   FEMM_MESH_V3    | FEMM_MESH_V3_PARSER   | mode='femm_mesh_v2' — idem FEMM_MESH_V2,
     #                   |                       | node_x com 3ª coluna (node_cell_count,
     #                   |                       | ver src/data_gen/parsers/femm_mesh_v3.py)
-    #                   |                       | — arch FNO_BipartiteGNN_v2
+    #                   |                       | — arch FNO_BipartiteGNN_v3
     #   FEMM_MESH_V3_A  | FEMM_MESH_V3_A_PARSER | mode='femm_mesh_v2' — mesma entrada,
     #                   |                       | alvo escalar A
     #

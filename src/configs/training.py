@@ -257,17 +257,18 @@ class FNO_BipartiteGNNConfig:
 
 
 @dataclass
-class FNO_BipartiteGNN_v2Config:
-    """Config de FNO_BipartiteGNN_v2 (src/neural_op/archs/femm_mesh_v3_gnn.py)
-    -- mesma arquitetura de FNO_BipartiteGNN (grafo duplo vértices+elementos),
-    sobre o parser src/data_gen/parsers/femm_mesh_v3.py: node_x ganha uma 3ª
-    coluna (node_cell_count) e a GNN recebe também a projeção das 8 células
-    vizinhas do FNO (indexação direta, wrap angular / zero radial fora da
-    grade -- ver _interpolate_fno_to_nodes_v3). loader_mode continua
-    'femm_mesh_v2' (mesmo layout de chunk do FNO_BipartiteGNN, só node_x
-    muda de largura); dataset gerado com npz_parser='FEMM_MESH_V3' ou
-    'FEMM_MESH_V3_A' (ver PARSER_REGISTRY). Decisão de arquitetura: conversa
-    2026-08-20 (ver CLAUDE.md)."""
+class FNO_BipartiteGNN_v3Config:
+    """Config de FNO_BipartiteGNN_v3 (src/neural_op/archs/femm_mesh_v3_gnn.py,
+    renomeado de FNO_BipartiteGNN_v2 em 2026-08-20 pra alinhar com o nome do
+    parser FEMM_MESH_V3) -- mesma arquitetura de FNO_BipartiteGNN (grafo duplo
+    vértices+elementos), sobre o parser src/data_gen/parsers/femm_mesh_v3.py:
+    node_x ganha uma 3ª coluna (node_cell_count) e a GNN recebe também a
+    projeção das 8 células vizinhas do FNO (indexação direta, wrap angular /
+    zero radial fora da grade -- ver _interpolate_fno_to_nodes_v3).
+    loader_mode continua 'femm_mesh_v2' (mesmo layout de chunk do
+    FNO_BipartiteGNN, só node_x muda de largura); dataset gerado com
+    npz_parser='FEMM_MESH_V3' ou 'FEMM_MESH_V3_A' (ver PARSER_REGISTRY).
+    Decisão de arquitetura: conversa 2026-08-20 (ver CLAUDE.md)."""
     fno_modes1: int = 270
     fno_modes2: int = 270
     fno_conv_width: int = 6
@@ -428,8 +429,8 @@ class MaskedFNO_GNNConfig:
 # │                 │                      │                  │    +elementos; parser    │
 # │                 │                      │                  │    próprio, parsers/     │
 # │                 │                      │                  │    femm_mesh_v2.py)      │
-# │ FNO_Bipartite   │ mse / mae /          │ femm_mesh_v2     │ FNO_BipartiteGNN_v2Config│
-# │  GNN_v2         │   relative_l2        │                  │   (idem + node_cell_count│
+# │ FNO_Bipartite   │ mse / mae /          │ femm_mesh_v2     │ FNO_BipartiteGNN_v3Config│
+# │  GNN_v3         │   relative_l2        │                  │   (idem + node_cell_count│
 # │                 │                      │                  │    em node_x + projeção  │
 # │                 │                      │                  │    das 8 células vizinhas│
 # │                 │                      │                  │    do FNO; parser        │
@@ -465,7 +466,7 @@ class MaskedFNO_GNNConfig:
 @dataclass
 class NnCfg:
     dataset: str = 'mesh_ans_138x276_B'
-    arch: str = 'FNO_BipartiteGNN_v2'
+    arch: str = 'FNO_BipartiteGNN_v3'
     loss: str = 'mae'
 
     problem: str = 'mesh_ans_138x276_B'

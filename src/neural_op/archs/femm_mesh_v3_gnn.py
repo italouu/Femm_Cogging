@@ -19,8 +19,10 @@ Extensão de femm_mesh_v2_gnn.py (FNO_BipartiteGNN) pedida pelo usuário
      (ans_parsing.py::_wrap_edge_pairs); ZERO na direção radial (linha,
      r_base) fora de [0,H) -- não é periódico.
 
-Registrado como arch própria (FNO_BipartiteGNN_v2, ARCH_REGISTRY) em vez de
-alterar FNO_BipartiteGNN in-place -- runs já treinadas com o v2 continuam
+Registrado como arch própria (FNO_BipartiteGNN_v3, ARCH_REGISTRY -- nome
+alinhado ao parser FEMM_MESH_V3, renomeado de FNO_BipartiteGNN_v2 em
+2026-08-20 a pedido do usuário) em vez de alterar FNO_BipartiteGNN in-place
+-- runs já treinadas com o v2 continuam
 intactas. loader_mode continua 'femm_mesh_v2' (mesmo layout de chunk, só
 node_x muda de largura -- ChunkFemmMeshV2Dataset/femm_mesh_v2_collate já são
 agnósticos a isso). step_fn/metric_fn/eval_fn reaproveitados sem duplicação
@@ -102,7 +104,7 @@ def _interpolate_fno_to_nodes_v3(fno_out, node_x, L):
     return fno_at_nodes, neighbor_proj
 
 
-class FNO_BipartiteGNN_v2(torch.nn.Module):
+class FNO_BipartiteGNN_v3(torch.nn.Module):
     """
     Igual a FNO_BipartiteGNN (femm_mesh_v2_gnn.py), com as duas extensões
     descritas na docstring do módulo -- node_x com node_cell_count e GNN
@@ -162,5 +164,5 @@ class FNO_BipartiteGNN_v2(torch.nn.Module):
 # aqui só pra ARCH_REGISTRY importar tudo deste módulo, mesmo padrão de
 # femm_mesh_v2_gnn.py reimportar femm_mesh_v2_eval_fn de eval.py) -- nenhum
 # deles assume largura fixa de node_x, só repassam pro forward do model.
-__all__ = ['FNO_BipartiteGNN_v2', 'make_fno_bipartite_gnn_step',
+__all__ = ['FNO_BipartiteGNN_v3', 'make_fno_bipartite_gnn_step',
            'fno_bipartite_gnn_metric_fn', 'femm_mesh_v2_eval_fn']

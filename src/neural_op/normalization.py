@@ -24,13 +24,15 @@ _NODE_X_STRUCTURAL = {0, 2, 3, 4}
 # (que presumem 5+ colunas e estourariam IndexError aqui).
 _NODE_X_FULLY_STRUCTURAL_ARCHS = {'FNO_BipartiteGNN'}
 
-# FNO_BipartiteGNN_v2 (2026-08-20, ver src/neural_op/archs/femm_mesh_v3_gnn.py
-# e src/data_gen/parsers/femm_mesh_v3.py): node_x = [r_base, c_base,
-# node_cell_count] — só as colunas 0,1 (posição) são estruturais/cruas
-# (usadas por _interpolate_fno_to_nodes_v3 pra grid_sample/gather de célula);
-# a coluna 2 (contagem de nós por célula) é uma feature real, normalizada
-# normalmente — diferente de FNO_BipartiteGNN, onde node_x é 100% estrutural.
-_NODE_X_PARTIAL_STRUCTURAL_ARCHS = {'FNO_BipartiteGNN_v2': {0, 1}}
+# FNO_BipartiteGNN_v3 (2026-08-20, ver src/neural_op/archs/femm_mesh_v3_gnn.py
+# e src/data_gen/parsers/femm_mesh_v3.py; renomeado de FNO_BipartiteGNN_v2
+# no mesmo dia, pra alinhar com o nome do parser FEMM_MESH_V3): node_x =
+# [r_base, c_base, node_cell_count] — só as colunas 0,1 (posição) são
+# estruturais/cruas (usadas por _interpolate_fno_to_nodes_v3 pra
+# grid_sample/gather de célula); a coluna 2 (contagem de nós por célula) é
+# uma feature real, normalizada normalmente — diferente de FNO_BipartiteGNN,
+# onde node_x é 100% estrutural.
+_NODE_X_PARTIAL_STRUCTURAL_ARCHS = {'FNO_BipartiteGNN_v3': {0, 1}}
 
 
 def _exclude_channels(arch: str, has_graph: bool, node_x_ch: int = None) -> dict:

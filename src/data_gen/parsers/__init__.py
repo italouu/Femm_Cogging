@@ -42,7 +42,7 @@ PARSER_REGISTRY = {
     'FEMM_MESH_V2':   FEMM_MESH_V2_PARSER,    # alvo B (Bx,By via curl(A))
     'FEMM_MESH_V2_A': FEMM_MESH_V2_A_PARSER,  # alvo A (potencial vetor)
     # mode='femm_mesh_v2' + node_x com node_cell_count (3ª coluna) — arch
-    # FNO_BipartiteGNN_v2 (src/neural_op/archs/femm_mesh_v3_gnn.py). Ver
+    # FNO_BipartiteGNN_v3 (src/neural_op/archs/femm_mesh_v3_gnn.py). Ver
     # src/data_gen/parsers/femm_mesh_v3.py.
     'FEMM_MESH_V3':   FEMM_MESH_V3_PARSER,    # alvo B (Bx,By via curl(A))
     'FEMM_MESH_V3_A': FEMM_MESH_V3_A_PARSER,  # alvo A (potencial vetor)

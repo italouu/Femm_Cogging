@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.tri as mtri
 from matplotlib.colors import ListedColormap, BoundaryNorm
 
 
@@ -37,6 +38,52 @@ def _scatter(ax, r, c, values, title, cmap='viridis', vmin=None, vmax=None, s=6)
     plt.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
 
 
+def _trisurf(ax, triang, values, title, cmap='viridis', vmin=None, vmax=None, shading='gouraud'):
+    """
+    Superfície contínua sobre a malha real (matplotlib.tri.Triangulation,
+    construída a partir da conectividade elemento->3-vértices de
+    cross_edge_index, em coordenadas de plot r_base/c_base — mesmas usadas
+    por _scatter) — mesma técnica de visualização de softwares de
+    pós-processamento FEM (ex: o próprio FEMM), em vez de pontos dispersos.
+
+    shading='gouraud' interpola LINEARMENTE dentro de cada elemento a
+    partir dos valores nos 3 vértices (`values` = 1 valor por vértice,
+    mesmo comprimento de node_x) — não é só estética: A é literalmente
+    linear dentro de cada elemento P1, então essa é a mesma superfície que
+    o solver usa internamente. shading='flat' pinta cada elemento com cor
+    sólida (`values` = 1 valor por elemento/face, mesmo comprimento de
+    elem_x) — usado pros campos derivados por elemento (B=curl(A), que só
+    faz sentido como constante por triângulo, ver _element_curl_A).
+
+    NaN em `values` vira buraco cinza (#444444, 2026-08-20) — mesma
+    convenção visual de _scatter/cmap_nan.set_bad, usada nos painéis de
+    erro (região abaixo do threshold de relevância). `triang` é
+    compartilhado entre vários painéis com padrões de NaN diferentes (cada
+    painel de erro tem sua própria região irrelevante), e
+    Triangulation.set_mask muta o objeto in-place — por isso, quando há
+    NaN, uma Triangulation NOVA é criada aqui (reaproveitando os mesmos
+    x/y/triangles do `triang` recebido, baratos, sem cópia) só com a
+    máscara deste painel. Máscara por triângulo: em 'gouraud' (valor por
+    vértice), marca o triângulo se QUALQUER um dos 3 vértices for NaN; em
+    'flat' (valor por elemento), o próprio elemento.
+    """
+    values = np.asarray(values, dtype=float)
+    nan = np.isnan(values)
+    if nan.any():
+        tri_mask = nan if shading == 'flat' else nan[triang.triangles].any(axis=1)
+        triang = mtri.Triangulation(triang.x, triang.y, triang.triangles, mask=tri_mask)
+        values = np.nan_to_num(values, nan=0.0)
+        ax.set_facecolor('#444444')
+
+    if shading == 'flat':
+        tc = ax.tripcolor(triang, facecolors=values, cmap=cmap, vmin=vmin, vmax=vmax)
+    else:
+        tc = ax.tripcolor(triang, values, cmap=cmap, vmin=vmin, vmax=vmax, shading='gouraud')
+    ax.set_title(title, fontsize=9)
+    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
+    plt.colorbar(tc, ax=ax, fraction=0.046, pad=0.04)
+
+
 def _err_sizes(en, vmax, s_min=3, s_max=50):
     """Tamanho do marcador crescente com o erro (área ~ erro/vmax), para os
     painéis de erro em _plot_fno_gnn_mesh. `en` pode ter NaN (nós irrelevantes,
@@ -49,6 +96,43 @@ def _err_sizes(en, vmax, s_min=3, s_max=50):
 def _masked_metrics(err, mask, B_ref):
     e = err[mask] / B_ref * 100
     return np.mean(e), np.median(e), np.percentile(e, 95)
+
+
+def _surface_integral_mean(values, mask, tri, elem_area):
+    """
+    Média de `values` ponderada pela ÁREA FÍSICA real da malha (elem_area,
+    mm² -- não a área na parametrização r_base/c_base, que é distorcida),
+    em vez de contar cada vértice igualmente como _masked_metrics faz
+    (2026-08-20, ver tests/proto_run0015_error_integral_check.py -- a malha
+    do FEMM refina muito perto de interfaces, então a média ponto a ponto é
+    enviesada pra essas regiões de alta densidade de nós). `values`/`mask`
+    são por VÉRTICE (mesmo comprimento de node_x); `tri` = [M,3] índices de
+    vértice por elemento (mesma ordem de elem_area, ex: triang.triangles).
+
+    Erro é P1 linear dentro de cada triângulo (mesma malha de _trisurf),
+    então a integral exata de um campo linear sobre um triângulo é
+    area*média(v0,v1,v2) -- soma sobre os elementos e divide pela área
+    total. `mask` (peso 0/1 por vértice) entra da mesma forma no numerador
+    e denominador -- aproximação nodal padrão ("mass lumping") quando o
+    threshold de relevância corta o triângulo ao meio.
+    """
+    w = mask.astype(np.float64)[tri]
+    v = values[tri]
+    num = (elem_area * (v * w).mean(axis=1)).sum()
+    den = (elem_area * w.mean(axis=1)).sum()
+    return num / den if den > 0 else 0.0
+
+
+def _surface_integral_mean_flat(values, mask, elem_area):
+    """
+    Variante de _surface_integral_mean pra campos POR ELEMENTO (constantes
+    por triângulo, ex: B=curl(A) em _plot_femm_mesh_v2_b) -- sem a média
+    nodal dos 3 vértices, já que aqui não há variação dentro do elemento.
+    """
+    w = mask.astype(np.float64)
+    num = (elem_area * values * w).sum()
+    den = (elem_area * w).sum()
+    return num / den if den > 0 else 0.0
 
 
 def _err_norm(err, mask, B_ref):
@@ -1068,7 +1152,7 @@ def _element_radial_tangential(x0, y0, x1, y1, x2, y2, r_base0, r_base1, r_base2
     return Br, Bt
 
 
-def _plot_femm_mesh_v2_b(model, x_hw_i, y_hw_fno_i, elem_x,
+def _plot_femm_mesh_v2_b(model, x_hw_i, y_hw_fno_i, elem_x, triang,
                           Br_true, Bt_true, Br_fno, Bt_fno, Br_gnn, Bt_gnn,
                           thr, eval_cfg, i):
     """
@@ -1076,9 +1160,21 @@ def _plot_femm_mesh_v2_b(model, x_hw_i, y_hw_fno_i, elem_x,
     cru, mostra B=curl(A) por elemento -- derivado por PÓS-PROCESSAMENTO do
     GT/FNO@nós/GNN de A já usados no plot normal -- B NÃO é o alvo de treino
     deste arch (que é sempre A, ver src/data_gen/parsers/femm_mesh_v2.py).
-    B vive nos ELEMENTOS (scatter em r_base_elem/c_base_elem,
-    elem_x[:,3]/[:,4]), não nos vértices -- reflete o layout do grafo real
-    (mu_r/M também são feature de elemento neste design, não de vértice).
+    B vive nos ELEMENTOS -- reflete o layout do grafo real (mu_r/M também são
+    feature de elemento neste design, não de vértice).
+
+    Painéis de campo (GT/FNO@nós/GNN de Br/Bθ/|B| + máscara) via _trisurf
+    shading='flat' (2026-08-20) — B é constante por triângulo (P1 linear em
+    A => curl(A) constante no elemento), então uma superfície com cor sólida
+    por elemento é o valor EXATO, não uma aproximação visual; `triang`
+    (matplotlib.tri.Triangulation, construída em femm_mesh_v2_eval_fn a
+    partir da conectividade elemento->3-vértices de cross_edge_index, em
+    coordenadas r_base/c_base) é compartilhada com _plot_femm_mesh_v2 (mesma
+    malha, granularidades diferentes: valores por vértice lá, por elemento
+    aqui). Painéis de erro continuam via _scatter em elem_x[:,3]/[:,4]
+    (r_base/c_base do centróide) -- o truque de tamanho de marcador crescente
+    com o erro (_err_sizes) não tem equivalente direto numa superfície
+    contínua, então mantido como estava.
 
     Componentes radial (Br)/tangencial (Bt), não Bx/By cartesiano: a malha
     real é reconstruída por elemento sem coordenadas absolutas (só
@@ -1106,10 +1202,17 @@ def _plot_femm_mesh_v2_b(model, x_hw_i, y_hw_fno_i, elem_x,
 
     fno_m, fno_med, fno_p95 = _masked_metrics(err_fno, mask, B_ref)
     gnn_m, gnn_med, gnn_p95 = _masked_metrics(err_gnn, mask, B_ref)
+    # Média ponderada pela área física (elem_x[:,2], mm²) além da média
+    # ponto a ponto (2026-08-20, ver _surface_integral_mean_flat e
+    # tests/proto_run0015_error_integral_check.py) -- campo já é por
+    # elemento aqui, sem precisar da média nodal dos 3 vértices.
+    elem_area = elem_x[:, 2].numpy()
+    fno_int = _surface_integral_mean_flat(err_fno, mask, elem_area) / B_ref * 100
+    gnn_int = _surface_integral_mean_flat(err_gnn, mask, elem_area) / B_ref * 100
     print(f"[B=curl(A), pós-processado] B_ref = {B_ref:.4f}  |  região relevante: "
           f"{mask.mean()*100:.1f}%  ({int(mask.sum())} elementos relevantes / {len(mask)})")
-    print(f"FNO@nós — média={fno_m:.1f}%  mediana={fno_med:.1f}%  p95={fno_p95:.1f}%")
-    print(f"GNN     — média={gnn_m:.1f}%  mediana={gnn_med:.1f}%  p95={gnn_p95:.1f}%")
+    print(f"FNO@nós — média={fno_m:.1f}%  mediana={fno_med:.1f}%  p95={fno_p95:.1f}%  |  integral(área)={fno_int:.1f}%")
+    print(f"GNN     — média={gnn_m:.1f}%  mediana={gnn_med:.1f}%  p95={gnn_p95:.1f}%  |  integral(área)={gnn_int:.1f}%")
 
     en_fno, en_label = _err_display(err_fno, mask, B_ref, eval_cfg.error_plot_mode)
     en_gnn, _        = _err_display(err_gnn, mask, B_ref, eval_cfg.error_plot_mode)
@@ -1133,49 +1236,94 @@ def _plot_femm_mesh_v2_b(model, x_hw_i, y_hw_fno_i, elem_x,
     _imshow(axes[0, 0], x_hw_i[0].numpy(), 'Entrada: Mu_r')
     _imshow(axes[0, 1], x_hw_i[1].numpy(), 'Entrada: M')
     _imshow(axes[0, 2], y_hw_fno_i[0].numpy(), 'FNO (grade): A')
-    _scatter(axes[0, 3], r, c, mask.astype(float), f'Máscara |B|>={thr}',
-             cmap='gray', vmin=0, vmax=1)
+    # [REMOVIDO 2026-08-20] scatter em elem_x[:,3]/[:,4] -- trocado por
+    # superfície (_trisurf shading='flat') a pedido do usuário, pra julgar os
+    # campos como softwares de pós-processamento FEM fazem. Ver _trisurf.
+    # _scatter(axes[0, 3], r, c, mask.astype(float), f'Máscara |B|>={thr}',
+    #          cmap='gray', vmin=0, vmax=1)
+    _trisurf(axes[0, 3], triang, mask.astype(float), f'Máscara |B|>={thr}',
+             cmap='gray', vmin=0, vmax=1, shading='flat')
 
     # Linha 1 — GT
-    _scatter(axes[1, 0], r, c, Br_true,  'GT: Br (radial, elem.)',      vmin=br_lim[0],  vmax=br_lim[1])
-    _scatter(axes[1, 1], r, c, Bt_true,  'GT: Bθ (tangencial, elem.)',  vmin=bt_lim[0],  vmax=bt_lim[1])
-    _scatter(axes[1, 2], r, c, mag_true, 'GT: |B| (elem.)',             vmin=mag_lim[0], vmax=mag_lim[1])
+    # [REMOVIDO 2026-08-20] idem acima -- ver _trisurf.
+    # _scatter(axes[1, 0], r, c, Br_true,  'GT: Br (radial, elem.)',      vmin=br_lim[0],  vmax=br_lim[1])
+    # _scatter(axes[1, 1], r, c, Bt_true,  'GT: Bθ (tangencial, elem.)',  vmin=bt_lim[0],  vmax=bt_lim[1])
+    # _scatter(axes[1, 2], r, c, mag_true, 'GT: |B| (elem.)',             vmin=mag_lim[0], vmax=mag_lim[1])
+    _trisurf(axes[1, 0], triang, Br_true,  'GT: Br (radial, elem.)',      vmin=br_lim[0],  vmax=br_lim[1], shading='flat')
+    _trisurf(axes[1, 1], triang, Bt_true,  'GT: Bθ (tangencial, elem.)',  vmin=bt_lim[0],  vmax=bt_lim[1], shading='flat')
+    _trisurf(axes[1, 2], triang, mag_true, 'GT: |B| (elem.)',             vmin=mag_lim[0], vmax=mag_lim[1], shading='flat')
     axes[1, 3].axis('off')
 
     # Linha 2 — FNO@nós (A interpolado, antes da correção da GNN)
-    _scatter(axes[2, 0], r, c, Br_fno,  'FNO@nós: Br',  vmin=br_lim[0],  vmax=br_lim[1])
-    _scatter(axes[2, 1], r, c, Bt_fno,  'FNO@nós: Bθ',  vmin=bt_lim[0],  vmax=bt_lim[1])
-    _scatter(axes[2, 2], r, c, mag_fno, 'FNO@nós: |B|', vmin=mag_lim[0], vmax=mag_lim[1])
-    size_fno = _err_sizes(en_fno, err_vmax)
-    _scatter(axes[2, 3], r, c, en_fno,
+    # [REMOVIDO 2026-08-20] idem acima -- painel de erro (axes[2,3]) mantido
+    # como scatter, ver _plot_femm_mesh_v2_b docstring.
+    # _scatter(axes[2, 0], r, c, Br_fno,  'FNO@nós: Br',  vmin=br_lim[0],  vmax=br_lim[1])
+    # _scatter(axes[2, 1], r, c, Bt_fno,  'FNO@nós: Bθ',  vmin=bt_lim[0],  vmax=bt_lim[1])
+    # _scatter(axes[2, 2], r, c, mag_fno, 'FNO@nós: |B|', vmin=mag_lim[0], vmax=mag_lim[1])
+    _trisurf(axes[2, 0], triang, Br_fno,  'FNO@nós: Br',  vmin=br_lim[0],  vmax=br_lim[1], shading='flat')
+    _trisurf(axes[2, 1], triang, Bt_fno,  'FNO@nós: Bθ',  vmin=bt_lim[0],  vmax=bt_lim[1], shading='flat')
+    _trisurf(axes[2, 2], triang, mag_fno, 'FNO@nós: |B|', vmin=mag_lim[0], vmax=mag_lim[1], shading='flat')
+    # [REMOVIDO 2026-08-20] scatter com tamanho de marcador crescente pelo
+    # erro (_err_sizes) -- trocado por superfície (_trisurf shading='flat')
+    # a pedido do usuário, pra ver o erro também como campo.
+    # size_fno = _err_sizes(en_fno, err_vmax)
+    # _scatter(axes[2, 3], r, c, en_fno,
+    #          f'FNO@nós {en_label}\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
+    #          cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_fno)
+    _trisurf(axes[2, 3], triang, en_fno,
              f'FNO@nós {en_label}\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
-             cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_fno)
+             cmap=cmap_nan, vmin=0, vmax=err_vmax, shading='flat')
 
     # Linha 3 — GNN (saída final)
-    _scatter(axes[3, 0], r, c, Br_gnn,  'GNN: Br',  vmin=br_lim[0],  vmax=br_lim[1])
-    _scatter(axes[3, 1], r, c, Bt_gnn,  'GNN: Bθ',  vmin=bt_lim[0],  vmax=bt_lim[1])
-    _scatter(axes[3, 2], r, c, mag_gnn, 'GNN: |B|', vmin=mag_lim[0], vmax=mag_lim[1])
-    size_gnn = _err_sizes(en_gnn, err_vmax)
-    _scatter(axes[3, 3], r, c, en_gnn,
+    # [REMOVIDO 2026-08-20] idem acima -- ver _trisurf.
+    # _scatter(axes[3, 0], r, c, Br_gnn,  'GNN: Br',  vmin=br_lim[0],  vmax=br_lim[1])
+    # _scatter(axes[3, 1], r, c, Bt_gnn,  'GNN: Bθ',  vmin=bt_lim[0],  vmax=bt_lim[1])
+    # _scatter(axes[3, 2], r, c, mag_gnn, 'GNN: |B|', vmin=mag_lim[0], vmax=mag_lim[1])
+    _trisurf(axes[3, 0], triang, Br_gnn,  'GNN: Br',  vmin=br_lim[0],  vmax=br_lim[1], shading='flat')
+    _trisurf(axes[3, 1], triang, Bt_gnn,  'GNN: Bθ',  vmin=bt_lim[0],  vmax=bt_lim[1], shading='flat')
+    _trisurf(axes[3, 2], triang, mag_gnn, 'GNN: |B|', vmin=mag_lim[0], vmax=mag_lim[1], shading='flat')
+    # [REMOVIDO 2026-08-20] idem acima -- ver _trisurf.
+    # size_gnn = _err_sizes(en_gnn, err_vmax)
+    # _scatter(axes[3, 3], r, c, en_gnn,
+    #          f'GNN {en_label}\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
+    #          cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_gnn)
+    _trisurf(axes[3, 3], triang, en_gnn,
              f'GNN {en_label}\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
-             cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_gnn)
+             cmap=cmap_nan, vmin=0, vmax=err_vmax, shading='flat')
 
     plt.tight_layout()
     plt.show()
 
 
 def _plot_femm_mesh_v2(model, x_hw_i, y_hw_fno_i, node_x, node_y, fno_at_nodes, y_nodes,
-                        thr, eval_cfg, i):
+                        triang, elem_area, thr, eval_cfg, i):
     """
     Eval FNO_BipartiteGNN (grafo duplo vértices+elementos, mode='femm_mesh_v2').
 
     Duas fontes de dado bem diferentes coexistem: x_hw/y_hw_fno vêm de uma
     grade regular H×W (plotados via _imshow, sem gaps/sobreposição) — o FNO
     opera sobre essa grade. Já o alvo (e saída final da GNN) só existe nos
-    VÉRTICES da malha real (node_x/node_y), plotados via _scatter em
-    r_base/c_base — mesmo motivo de _plot_fno_gnn_mesh (mode='femm_mesh', v1):
-    densidade de nós muito variável (refina perto de interfaces), rasterizar
-    perderia estrutura e criaria buracos.
+    VÉRTICES da malha real (node_x/node_y).
+
+    Painéis de campo e de erro (GT/FNO@nós/GNN/Δ/erro) via _trisurf
+    shading='gouraud' (2026-08-20) — superfície interpolada LINEARMENTE
+    dentro de cada elemento a partir dos 3 vértices, igual softwares de
+    pós-processamento FEM (é literalmente a mesma função de forma P1 que o
+    solver usa internamente pra A, não uma aproximação visual); `triang`
+    (matplotlib.tri.Triangulation, construída em femm_mesh_v2_eval_fn a
+    partir da conectividade elemento->3-vértices de cross_edge_index, em
+    coordenadas r_base/c_base) é compartilhada com _plot_femm_mesh_v2_b.
+    Só o painel de densidade de vértices continua _scatter puro — é
+    literalmente sobre pontos, não um campo.
+
+    Print antes do plot traz, além da média/mediana/p95 ponto a ponto
+    (_masked_metrics — pesa cada vértice igual), a média ponderada pela
+    ÁREA FÍSICA real da malha (`integral(área)`, _surface_integral_mean,
+    2026-08-20) — a malha do FEMM refina muito perto de interfaces, então a
+    média ponto a ponto é enviesada pra essas regiões de alta densidade de
+    nós; a integral de superfície é o "erro médio físico real do motor".
+    `elem_area` = elem_x[:,2] (mm², mesma ordem de triang.triangles), ver
+    tests/proto_run0015_error_integral_check.py.
 
     Diferença chave em relação a _plot_fno_gnn_mesh (v1): node_x aqui é só
     [r_base, c_base] — SEM material (mu_r/M vivem no grafo de elementos,
@@ -1227,10 +1375,16 @@ def _plot_femm_mesh_v2(model, x_hw_i, y_hw_fno_i, node_x, node_y, fno_at_nodes, 
 
     fno_m, fno_med, fno_p95 = _masked_metrics(err_fno, mask, B_ref)
     gnn_m, gnn_med, gnn_p95 = _masked_metrics(err_gnn, mask, B_ref)
+    # Média ponderada pela área física (elem_area, mm²) além da média ponto
+    # a ponto (2026-08-20, ver _surface_integral_mean e
+    # tests/proto_run0015_error_integral_check.py).
+    tri = triang.triangles
+    fno_int = _surface_integral_mean(err_fno, mask, tri, elem_area) / B_ref * 100
+    gnn_int = _surface_integral_mean(err_gnn, mask, tri, elem_area) / B_ref * 100
     print(f"B_ref = {B_ref:.6f}  |  região relevante: {mask.mean()*100:.1f}%  "
           f"({int(mask.sum())} nós relevantes / {len(mask)})")
-    print(f"FNO@nós — média={fno_m:.1f}%  mediana={fno_med:.1f}%  p95={fno_p95:.1f}%")
-    print(f"GNN     — média={gnn_m:.1f}%  mediana={gnn_med:.1f}%  p95={gnn_p95:.1f}%")
+    print(f"FNO@nós — média={fno_m:.1f}%  mediana={fno_med:.1f}%  p95={fno_p95:.1f}%  |  integral(área)={fno_int:.1f}%")
+    print(f"GNN     — média={gnn_m:.1f}%  mediana={gnn_med:.1f}%  p95={gnn_p95:.1f}%  |  integral(área)={gnn_int:.1f}%")
 
     en_fno, en_label = _err_display(err_fno, mask, B_ref, eval_cfg.error_plot_mode)
     en_gnn, _        = _err_display(err_gnn, mask, B_ref, eval_cfg.error_plot_mode)
@@ -1261,21 +1415,40 @@ def _plot_femm_mesh_v2(model, x_hw_i, y_hw_fno_i, node_x, node_y, fno_at_nodes, 
         axes[0, 3].set_xlim(0, 1); axes[0, 3].set_ylim(0, 1)
 
         # Linha 1 — A nos vértices: GT / FNO interpolado / GNN (final) / correção da GNN
-        _scatter(axes[1, 0], r, c, c0_true, f'GT: {c0_label} (nós)',      vmin=a_lim[0], vmax=a_lim[1])
-        _scatter(axes[1, 1], r, c, c0_fno,  f'FNO@nós: {c0_label}',      vmin=a_lim[0], vmax=a_lim[1])
-        _scatter(axes[1, 2], r, c, c0_gnn,  f'GNN: {c0_label}',          vmin=a_lim[0], vmax=a_lim[1])
-        _scatter(axes[1, 3], r, c, delta,  'Δ = GNN − FNO@nós',
+        # [REMOVIDO 2026-08-20] scatter em r_base/c_base -- trocado por
+        # superfície (_trisurf shading='gouraud', interpolação P1 linear
+        # dentro de cada elemento) a pedido do usuário, pra julgar os campos
+        # como softwares de pós-processamento FEM fazem. Ver _trisurf.
+        # _scatter(axes[1, 0], r, c, c0_true, f'GT: {c0_label} (nós)',      vmin=a_lim[0], vmax=a_lim[1])
+        # _scatter(axes[1, 1], r, c, c0_fno,  f'FNO@nós: {c0_label}',      vmin=a_lim[0], vmax=a_lim[1])
+        # _scatter(axes[1, 2], r, c, c0_gnn,  f'GNN: {c0_label}',          vmin=a_lim[0], vmax=a_lim[1])
+        # _scatter(axes[1, 3], r, c, delta,  'Δ = GNN − FNO@nós',
+        #          cmap='RdBu_r', vmin=-delta_vmax, vmax=delta_vmax)
+        _trisurf(axes[1, 0], triang, c0_true, f'GT: {c0_label} (nós)', vmin=a_lim[0], vmax=a_lim[1])
+        _trisurf(axes[1, 1], triang, c0_fno,  f'FNO@nós: {c0_label}', vmin=a_lim[0], vmax=a_lim[1])
+        _trisurf(axes[1, 2], triang, c0_gnn,  f'GNN: {c0_label}',     vmin=a_lim[0], vmax=a_lim[1])
+        _trisurf(axes[1, 3], triang, delta,   'Δ = GNN − FNO@nós',
                  cmap='RdBu_r', vmin=-delta_vmax, vmax=delta_vmax)
 
-        # Linha 2 — erro nó-a-nó (tamanho do marcador cresce com o erro)
-        size_fno = _err_sizes(en_fno, err_vmax)
-        _scatter(axes[2, 0], r, c, en_fno,
+        # Linha 2 — erro nó-a-nó
+        # [REMOVIDO 2026-08-20] scatter com tamanho de marcador crescente
+        # pelo erro (_err_sizes) -- trocado por superfície (_trisurf
+        # shading='gouraud') a pedido do usuário, pra ver o erro também
+        # como campo.
+        # size_fno = _err_sizes(en_fno, err_vmax)
+        # _scatter(axes[2, 0], r, c, en_fno,
+        #          f'FNO@nós {en_label}\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
+        #          cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_fno)
+        # size_gnn = _err_sizes(en_gnn, err_vmax)
+        # _scatter(axes[2, 1], r, c, en_gnn,
+        #          f'GNN {en_label}\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
+        #          cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_gnn)
+        _trisurf(axes[2, 0], triang, en_fno,
                  f'FNO@nós {en_label}\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
-                 cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_fno)
-        size_gnn = _err_sizes(en_gnn, err_vmax)
-        _scatter(axes[2, 1], r, c, en_gnn,
+                 cmap=cmap_nan, vmin=0, vmax=err_vmax)
+        _trisurf(axes[2, 1], triang, en_gnn,
                  f'GNN {en_label}\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
-                 cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_gnn)
+                 cmap=cmap_nan, vmin=0, vmax=err_vmax)
         axes[2, 2].axis('off')
         axes[2, 3].axis('off')
 
@@ -1305,28 +1478,51 @@ def _plot_femm_mesh_v2(model, x_hw_i, y_hw_fno_i, node_x, node_y, fno_at_nodes, 
     axes[0, 3].set_xlim(0, 1); axes[0, 3].set_ylim(0, 1)
 
     # Linha 1 — GT
-    _scatter(axes[1, 0], r, c, c0_true,  f'GT: {c0_label} (nós)', vmin=c0_lim[0],  vmax=c0_lim[1])
-    _scatter(axes[1, 1], r, c, c1_true,  'GT: By (nós)',          vmin=c1_lim[0],  vmax=c1_lim[1])
-    _scatter(axes[1, 2], r, c, mag_true, 'GT: |B| (nós)',         vmin=mag_lim[0], vmax=mag_lim[1])
+    # [REMOVIDO 2026-08-20] idem caso escalar acima -- ver _trisurf.
+    # _scatter(axes[1, 0], r, c, c0_true,  f'GT: {c0_label} (nós)', vmin=c0_lim[0],  vmax=c0_lim[1])
+    # _scatter(axes[1, 1], r, c, c1_true,  'GT: By (nós)',          vmin=c1_lim[0],  vmax=c1_lim[1])
+    # _scatter(axes[1, 2], r, c, mag_true, 'GT: |B| (nós)',         vmin=mag_lim[0], vmax=mag_lim[1])
+    _trisurf(axes[1, 0], triang, c0_true,  f'GT: {c0_label} (nós)', vmin=c0_lim[0],  vmax=c0_lim[1])
+    _trisurf(axes[1, 1], triang, c1_true,  'GT: By (nós)',          vmin=c1_lim[0],  vmax=c1_lim[1])
+    _trisurf(axes[1, 2], triang, mag_true, 'GT: |B| (nós)',         vmin=mag_lim[0], vmax=mag_lim[1])
     axes[1, 3].axis('off')
 
     # Linha 2 — FNO@nós (interpolado, antes da correção da GNN)
-    _scatter(axes[2, 0], r, c, c0_fno,  f'FNO@nós: {c0_label}', vmin=c0_lim[0],  vmax=c0_lim[1])
-    _scatter(axes[2, 1], r, c, c1_fno,  'FNO@nós: By',          vmin=c1_lim[0],  vmax=c1_lim[1])
-    _scatter(axes[2, 2], r, c, mag_fno, 'FNO@nós: |B|',         vmin=mag_lim[0], vmax=mag_lim[1])
-    size_fno = _err_sizes(en_fno, err_vmax)
-    _scatter(axes[2, 3], r, c, en_fno,
+    # [REMOVIDO 2026-08-20] idem acima -- painel de erro (axes[2,3]) mantido
+    # como scatter, ver _plot_femm_mesh_v2 docstring.
+    # _scatter(axes[2, 0], r, c, c0_fno,  f'FNO@nós: {c0_label}', vmin=c0_lim[0],  vmax=c0_lim[1])
+    # _scatter(axes[2, 1], r, c, c1_fno,  'FNO@nós: By',          vmin=c1_lim[0],  vmax=c1_lim[1])
+    # _scatter(axes[2, 2], r, c, mag_fno, 'FNO@nós: |B|',         vmin=mag_lim[0], vmax=mag_lim[1])
+    _trisurf(axes[2, 0], triang, c0_fno,  f'FNO@nós: {c0_label}', vmin=c0_lim[0],  vmax=c0_lim[1])
+    _trisurf(axes[2, 1], triang, c1_fno,  'FNO@nós: By',          vmin=c1_lim[0],  vmax=c1_lim[1])
+    _trisurf(axes[2, 2], triang, mag_fno, 'FNO@nós: |B|',         vmin=mag_lim[0], vmax=mag_lim[1])
+    # [REMOVIDO 2026-08-20] scatter com tamanho de marcador crescente pelo
+    # erro (_err_sizes) -- trocado por superfície (_trisurf shading='gouraud')
+    # a pedido do usuário, pra ver o erro também como campo.
+    # size_fno = _err_sizes(en_fno, err_vmax)
+    # _scatter(axes[2, 3], r, c, en_fno,
+    #          f'FNO@nós {en_label}\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
+    #          cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_fno)
+    _trisurf(axes[2, 3], triang, en_fno,
              f'FNO@nós {en_label}\nmédia={fno_m:.1f}%  p95={fno_p95:.1f}%',
-             cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_fno)
+             cmap=cmap_nan, vmin=0, vmax=err_vmax)
 
     # Linha 3 — GNN (saída final)
-    _scatter(axes[3, 0], r, c, c0_gnn,  f'GNN: {c0_label}', vmin=c0_lim[0],  vmax=c0_lim[1])
-    _scatter(axes[3, 1], r, c, c1_gnn,  'GNN: By',          vmin=c1_lim[0],  vmax=c1_lim[1])
-    _scatter(axes[3, 2], r, c, mag_gnn, 'GNN: |B|',         vmin=mag_lim[0], vmax=mag_lim[1])
-    size_gnn = _err_sizes(en_gnn, err_vmax)
-    _scatter(axes[3, 3], r, c, en_gnn,
+    # [REMOVIDO 2026-08-20] idem acima -- ver _trisurf.
+    # _scatter(axes[3, 0], r, c, c0_gnn,  f'GNN: {c0_label}', vmin=c0_lim[0],  vmax=c0_lim[1])
+    # _scatter(axes[3, 1], r, c, c1_gnn,  'GNN: By',          vmin=c1_lim[0],  vmax=c1_lim[1])
+    # _scatter(axes[3, 2], r, c, mag_gnn, 'GNN: |B|',         vmin=mag_lim[0], vmax=mag_lim[1])
+    _trisurf(axes[3, 0], triang, c0_gnn,  f'GNN: {c0_label}', vmin=c0_lim[0],  vmax=c0_lim[1])
+    _trisurf(axes[3, 1], triang, c1_gnn,  'GNN: By',          vmin=c1_lim[0],  vmax=c1_lim[1])
+    _trisurf(axes[3, 2], triang, mag_gnn, 'GNN: |B|',         vmin=mag_lim[0], vmax=mag_lim[1])
+    # [REMOVIDO 2026-08-20] idem acima -- ver _trisurf.
+    # size_gnn = _err_sizes(en_gnn, err_vmax)
+    # _scatter(axes[3, 3], r, c, en_gnn,
+    #          f'GNN {en_label}\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
+    #          cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_gnn)
+    _trisurf(axes[3, 3], triang, en_gnn,
              f'GNN {en_label}\nmédia={gnn_m:.1f}%  p95={gnn_p95:.1f}%',
-             cmap=cmap_nan, vmin=0, vmax=err_vmax, s=size_gnn)
+             cmap=cmap_nan, vmin=0, vmax=err_vmax)
 
     plt.tight_layout()
     plt.show()
@@ -1373,6 +1569,21 @@ def femm_mesh_v2_eval_fn(model, d, eval_cfg):
     cross_edge_attr = d['cross_edge_attr'][cs:ce]
 
     Li = L[i:i + 1]
+
+    # Triangulação da malha real pra plot em superfície (_trisurf) — posições
+    # em r_base/c_base (node_x, mesma convenção de _scatter, não (x,y) reais
+    # em mm: cada triângulo de _triangle_xy_from_edges vive num referencial
+    # LOCAL arbitrário, sem posição global coerente entre elementos). Conectividade
+    # via cross_edge_index[1] (índice de vértice), agrupada de 3 em 3 por
+    # elemento — mesma suposição de ordem já usada por _triangle_xy_from_edges
+    # (confirmada em src/data_gen/parsers/femm_mesh_v2.py: tri_idx =
+    # np.repeat(np.arange(n_elems), 3)). Compartilhada entre _plot_femm_mesh_v2
+    # (shading='gouraud', valor por vértice) e _plot_femm_mesh_v2_b
+    # (shading='flat', valor por elemento).
+    triang = mtri.Triangulation(
+        node_x[:, 1].numpy(), node_x[:, 0].numpy(),
+        triangles=cross_edge_index[1].numpy().reshape(-1, 3),
+    )
 
     # eval.py carrega o chunk bruto direto (sem CUDAPrefetcher) — encode manual
     # da entrada / decode da saída, mesmo padrão de fno_gnn_eval_fn.
@@ -1429,13 +1640,14 @@ def femm_mesh_v2_eval_fn(model, d, eval_cfg):
         Br_true, Bt_true = _b_radial_tangential(a_true_v)
         Br_fno,  Bt_fno  = _b_radial_tangential(a_fno_v)
         Br_gnn,  Bt_gnn  = _b_radial_tangential(a_gnn_v)
-        _plot_femm_mesh_v2_b(model, x_hw[0], y_hw_fno[0], elem_x,
+        _plot_femm_mesh_v2_b(model, x_hw[0], y_hw_fno[0], elem_x, triang,
                               Br_true, Bt_true, Br_fno, Bt_fno, Br_gnn, Bt_gnn,
                               thr, eval_cfg, i)
         return
 
     _plot_femm_mesh_v2(model, x_hw[0], y_hw_fno[0], node_x, node_y,
-                        fno_at_nodes, y_nodes, thr, eval_cfg, i)
+                        fno_at_nodes, y_nodes, triang, elem_x[:, 2].numpy(),
+                        thr, eval_cfg, i)
 
 
 # [REMOVIDO] phi_deeponet_eval_fn — removida junto com PhiDeepONet (2026-05-27).

@@ -1,0 +1,459 @@
+<title>Do FEMM ao FNO</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#eef0f4;
+    --surface:#ffffff;
+    --surface-2:#e2e5ec;
+    --ink:#12151c;
+    --ink-dim:#4b5566;
+    --ink-faint:#7c8598;
+    --border:#ccd2de;
+    --accent:#b5622a;
+    --accent-ink:#ffffff;
+    --accent-bg:#f3e1d2;
+    --discovery:#6d4fc2;
+    --discovery-bg:#ece7fa;
+    --status-done:#157a5f;
+    --status-done-bg:#dcf0e8;
+    --status-partial:#a3730f;
+    --status-partial-bg:#f6ecd4;
+    --status-pending:#7c8598;
+    --status-pending-bg:#eceff3;
+    --fail:#b3392c;
+    --fail-bg:#f6dcd7;
+    --font-display:'Big Shoulders Display','Arial Narrow',sans-serif;
+    --font-body:'Source Sans 3','Segoe UI',sans-serif;
+    --font-mono:'IBM Plex Mono','Consolas',monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0e131b; --surface:#161d29; --surface-2:#1e2733;
+      --ink:#eef1f6; --ink-dim:#aab3c2; --ink-faint:#7c8598; --border:#2c3644;
+      --accent:#e0824a; --accent-ink:#1a0f06; --accent-bg:rgba(224,130,74,0.16);
+      --discovery:#a68af0; --discovery-bg:rgba(166,138,240,0.16);
+      --status-done:#3ecf9a; --status-done-bg:rgba(62,207,154,0.14);
+      --status-partial:#e0b043; --status-partial-bg:rgba(224,176,67,0.14);
+      --status-pending:#8a93a3; --status-pending-bg:rgba(138,147,163,0.10);
+      --fail:#e2685a; --fail-bg:rgba(226,104,90,0.16);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e131b; --surface:#161d29; --surface-2:#1e2733;
+    --ink:#eef1f6; --ink-dim:#aab3c2; --ink-faint:#7c8598; --border:#2c3644;
+    --accent:#e0824a; --accent-ink:#1a0f06; --accent-bg:rgba(224,130,74,0.16);
+    --discovery:#a68af0; --discovery-bg:rgba(166,138,240,0.16);
+    --status-done:#3ecf9a; --status-done-bg:rgba(62,207,154,0.14);
+    --status-partial:#e0b043; --status-partial-bg:rgba(224,176,67,0.14);
+    --status-pending:#8a93a3; --status-pending-bg:rgba(138,147,163,0.10);
+    --fail:#e2685a; --fail-bg:rgba(226,104,90,0.16);
+  }
+
+  *{box-sizing:border-box;}
+  html{background:var(--bg);}
+  body{
+    background:var(--bg); color:var(--ink); margin:0;
+    font-family:var(--font-body); font-size:16px; line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px; margin:0 auto; padding:48px 24px 96px;}
+
+  header.page{display:flex; flex-direction:column; gap:10px; margin-bottom:36px;}
+  .eyebrow{
+    font-family:var(--font-mono); font-size:12px; letter-spacing:0.14em;
+    text-transform:uppercase; color:var(--ink-faint);
+  }
+  h1{
+    font-family:var(--font-display); font-weight:800; text-transform:uppercase;
+    font-size:clamp(40px,7vw,64px); line-height:0.98; letter-spacing:0.01em;
+    margin:0; color:var(--ink); text-wrap:balance;
+  }
+  .dek{
+    max-width:62ch; color:var(--ink-dim); font-size:17px; margin:6px 0 0;
+  }
+
+  .kpis{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+    gap:1px; background:var(--border); border:1px solid var(--border);
+    border-radius:10px; overflow:hidden; margin:32px 0 44px;
+  }
+  .kpi{background:var(--surface); padding:18px 20px; display:flex; flex-direction:column; gap:4px;}
+  .kpi .val{
+    font-family:var(--font-display); font-weight:800; font-size:30px;
+    color:var(--ink); font-variant-numeric:tabular-nums; line-height:1;
+  }
+  .kpi .lbl{font-size:12.5px; color:var(--ink-dim);}
+
+  section.block{margin:56px 0;}
+  .block h2{
+    font-family:var(--font-display); font-weight:800; text-transform:uppercase;
+    font-size:26px; letter-spacing:0.01em; margin:0 0 6px; color:var(--ink);
+  }
+  .block .intro{max-width:70ch; color:var(--ink-dim); margin:0 0 22px;}
+
+  figure{margin:0;}
+  .figure-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:20px 20px 16px;
+  }
+  .figure-scroll{overflow-x:auto;}
+  svg{display:block; max-width:100%; height:auto;}
+  figcaption{
+    margin-top:14px; padding-top:14px; border-top:1px solid var(--border);
+    color:var(--ink-dim); font-size:13.5px; line-height:1.6;
+  }
+  figcaption b{color:var(--ink); font-weight:600;}
+
+  .legend{display:flex; flex-wrap:wrap; gap:18px; margin:14px 2px 0; font-size:13px; color:var(--ink-dim);}
+  .legend .item{display:flex; align-items:center; gap:7px;}
+  .swatch{width:12px; height:12px; border-radius:3px; flex:none;}
+  .sw-done{background:var(--status-done-bg); border:2px solid var(--status-done);}
+  .sw-partial{background:var(--status-partial-bg); border:2px solid var(--status-partial);}
+  .sw-pending{background:var(--status-pending-bg); border:2px dashed var(--status-pending);}
+  .sw-discovery{background:var(--discovery-bg); border:2px solid var(--discovery);}
+  .sw-accent{background:var(--accent-bg); border:2px solid var(--accent);}
+
+  .checklist{display:flex; flex-direction:column; gap:1px; background:var(--border); border:1px solid var(--border); border-radius:10px; overflow:hidden;}
+  .check-row{background:var(--surface); display:grid; grid-template-columns:auto 1fr; gap:14px; align-items:start; padding:14px 18px;}
+  .chip{
+    font-family:var(--font-mono); font-size:10.5px; font-weight:700; letter-spacing:0.06em;
+    text-transform:uppercase; padding:3px 9px; border-radius:999px; white-space:nowrap;
+  }
+  .chip-pending{background:var(--status-pending-bg); color:var(--status-pending); border:1px solid var(--status-pending);}
+  .chip-partial{background:var(--status-partial-bg); color:var(--status-partial); border:1px solid var(--status-partial);}
+  .check-row .desc{font-size:14.5px; color:var(--ink-dim);}
+  .check-row .desc code{font-family:var(--font-mono); font-size:12.5px; color:var(--ink); background:var(--surface-2); padding:1px 5px; border-radius:4px;}
+
+  footer.page{margin-top:64px; padding-top:20px; border-top:1px solid var(--border); font-size:12.5px; color:var(--ink-faint); font-family:var(--font-mono);}
+</style>
+
+<div class="wrap">
+
+  <header class="page">
+    <span class="eyebrow">Panorama técnico · levantamento de 2026-08-27</span>
+    <h1>Do FEMM ao FNO</h1>
+    <p class="dek">De um FNO2d treinado numa geometria fixa até o modelo que hoje entende malha real do FEMM e física de campo — a jornada completa da ideia até o run_0015, o melhor resultado conhecido, e o que veio depois dele.</p>
+  </header>
+
+  <div class="kpis">
+    <div class="kpi"><span class="val">64</span><span class="lbl">dias da ideia inicial (11/06) ao run_0015 (14/08)</span></div>
+    <div class="kpi"><span class="val">58</span><span class="lbl">runs de treino documentadas em data/logs/</span></div>
+    <div class="kpi"><span class="val">436&nbsp;GB</span><span class="lbl">de dados neste checkout Windows</span></div>
+    <div class="kpi"><span class="val">0,053&nbsp;T</span><span class="lbl">menor erro conhecido (run_0015, mae_graph)</span></div>
+  </div>
+
+  <section class="block">
+    <h2>Figura 1 — A jornada: da ideia ao run_0015</h2>
+    <p class="intro">Linha do tempo real (não um roteiro planejado), reconstruída a partir de <code>git log</code> e dos timestamps em <code>data/logs/</code>. Cor marca o tipo de marco: cinza é trabalho de engenharia comum, verde é algo validado e promovido a produção, cobre é uma aposta que virou produção, roxo é uma auditoria feita depois do fato, vermelho é uma tentativa que não vingou.</p>
+
+    <figure class="figure-card">
+      <div class="figure-scroll">
+        <svg viewBox="0 0 960 1100" role="img" aria-label="Linha do tempo vertical com nove marcos entre 11 de junho e 20 de agosto de 2026: ideia inicial e primeiro FNO2d; amadurecimento do pipeline qtree com 48 runs; malha real do FEMM promovida a produção; validação numérica de B igual ao rotacional de A; desenho do grafo duplo vértices e elementos; nascimento da função de perda graph_div_b_loss como aposta; run_0015 treinado com essa perda, o melhor resultado conhecido; auditoria retroativa de nove dias depois que confirma fisicamente por que a perda ajudou; e duas tentativas de ir além que falharam em minutos. Termina com um marcador de hoje, 27 de agosto, indicando que o run_0015 segue sendo o melhor resultado.">
+          <defs>
+            <marker id="arrow-tl" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L8,4 L0,8 Z" fill="var(--ink-faint)"/>
+            </marker>
+          </defs>
+
+          <line x1="110" y1="40" x2="110" y2="958" stroke="var(--border)" stroke-width="2"/>
+          <line x1="110" y1="958" x2="110" y2="1000" stroke="var(--ink-faint)" stroke-width="2" stroke-dasharray="3 4" marker-end="url(#arrow-tl)"/>
+
+          <!-- Marco 1 — ideia inicial -->
+          <text x="95" y="74" text-anchor="end" font-family="var(--font-mono)" font-size="11" fill="var(--ink-faint)">11/06</text>
+          <circle cx="110" cy="70" r="7" fill="var(--surface)" stroke="var(--border)" stroke-width="2.5"/>
+          <text x="140" y="63" font-family="var(--font-body)" font-weight="700" font-size="15" fill="var(--ink)">Ideia inicial: prever B via FNO</text>
+          <text x="140" y="82" font-family="var(--font-body)" font-size="12.5" fill="var(--ink-dim)">Primeiro FNO2d treinado — motor_phase_0, fase do rotor fixa</text>
+          <rect x="140" y="90" width="108" height="16" rx="8" fill="var(--surface-2)"/>
+          <text x="194" y="101" text-anchor="middle" font-family="var(--font-mono)" font-size="9" font-weight="700" letter-spacing="0.3" fill="var(--ink-dim)">MSE 0,0042</text>
+
+          <!-- Marco 2 — qtree amadurece -->
+          <text x="95" y="182" text-anchor="end" font-family="var(--font-mono)" font-size="11" fill="var(--ink-faint)">12/06–07/07</text>
+          <circle cx="110" cy="178" r="7" fill="var(--surface)" stroke="var(--border)" stroke-width="2.5"/>
+          <text x="140" y="171" font-family="var(--font-body)" font-weight="700" font-size="15" fill="var(--ink)">Pipeline qtree amadurece</text>
+          <text x="140" y="190" font-family="var(--font-body)" font-size="12.5" fill="var(--ink-dim)">FNO2d → FNO_GNN → GNN_PostBase, exploração de hiperparâmetros</text>
+          <rect x="140" y="198" width="160" height="16" rx="8" fill="var(--surface-2)"/>
+          <text x="220" y="209" text-anchor="middle" font-family="var(--font-mono)" font-size="9" font-weight="700" letter-spacing="0.3" fill="var(--ink-dim)">48 RUNS · MELHOR MSE 0,027</text>
+
+          <!-- Marco 3 — malha real vira grafo (produção) -->
+          <text x="95" y="290" text-anchor="end" font-family="var(--font-mono)" font-size="11" fill="var(--ink-faint)">22–23/07</text>
+          <circle cx="110" cy="286" r="7" fill="var(--status-done-bg)" stroke="var(--status-done)" stroke-width="2.5"/>
+          <text x="140" y="279" font-family="var(--font-body)" font-weight="700" font-size="15" fill="var(--ink)">Malha real do FEMM vira grafo</text>
+          <text x="140" y="298" font-family="var(--font-body)" font-size="12.5" fill="var(--ink-dim)">Simetria 120° + truncamento radial — promovido a produção</text>
+          <rect x="140" y="306" width="110" height="16" rx="8" fill="var(--status-done-bg)"/>
+          <text x="195" y="317" text-anchor="middle" font-family="var(--font-mono)" font-size="9" font-weight="700" letter-spacing="0.3" fill="var(--status-done)">FEMM_MESH V1</text>
+
+          <!-- Marco 4 — B = curl(A) validado -->
+          <text x="95" y="398" text-anchor="end" font-family="var(--font-mono)" font-size="11" fill="var(--ink-faint)">07/08</text>
+          <circle cx="110" cy="394" r="7" fill="var(--status-done-bg)" stroke="var(--status-done)" stroke-width="2.5"/>
+          <text x="140" y="387" font-family="var(--font-body)" font-weight="700" font-size="15" fill="var(--ink)">B = curl(A) fechado bate com o FEMM</text>
+          <text x="140" y="406" font-family="var(--font-body)" font-size="12.5" fill="var(--ink-dim)">Erro ~10⁻¹⁶ T por elemento — dá pra derivar física sem abrir o FEMM</text>
+          <rect x="140" y="414" width="88" height="16" rx="8" fill="var(--status-done-bg)"/>
+          <text x="184" y="425" text-anchor="middle" font-family="var(--font-mono)" font-size="9" font-weight="700" letter-spacing="0.3" fill="var(--status-done)">VALIDADO</text>
+
+          <!-- Marco 5 — grafo duplo desenhado -->
+          <text x="95" y="506" text-anchor="end" font-family="var(--font-mono)" font-size="11" fill="var(--ink-faint)">10/08</text>
+          <circle cx="110" cy="502" r="7" fill="var(--status-done-bg)" stroke="var(--status-done)" stroke-width="2.5"/>
+          <text x="140" y="495" font-family="var(--font-body)" font-weight="700" font-size="15" fill="var(--ink)">Grafo duplo: vértices + elementos</text>
+          <text x="140" y="514" font-family="var(--font-body)" font-size="12.5" fill="var(--ink-dim)">FNO_BipartiteGNN desenhado em sessão de projeto — nasce femm_mesh_v2</text>
+          <rect x="140" y="522" width="140" height="16" rx="8" fill="var(--status-done-bg)"/>
+          <text x="210" y="533" text-anchor="middle" font-family="var(--font-mono)" font-size="9" font-weight="700" letter-spacing="0.3" fill="var(--status-done)">ARQUITETURA NOVA</text>
+
+          <!-- Marco 6 — graph_div_b_loss nasce (aposta) -->
+          <text x="95" y="614" text-anchor="end" font-family="var(--font-mono)" font-size="11" fill="var(--ink-faint)">13/08</text>
+          <circle cx="110" cy="610" r="7" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="2.5"/>
+          <text x="140" y="603" font-family="var(--font-body)" font-weight="700" font-size="15" fill="var(--ink)">graph_div_b_loss nasce</text>
+          <text x="140" y="622" font-family="var(--font-body)" font-size="12.5" fill="var(--ink-dim)">Pipeline fica portátil (sem import femm) no mesmo dia; aposta: penalizar</text>
+          <text x="140" y="638" font-family="var(--font-body)" font-size="12.5" fill="var(--ink-dim)">divergência de B deveria ajudar o treino</text>
+          <rect x="140" y="646" width="88" height="16" rx="8" fill="var(--accent-bg)"/>
+          <text x="184" y="657" text-anchor="middle" font-family="var(--font-mono)" font-size="9" font-weight="700" letter-spacing="0.3" fill="var(--accent)">HIPÓTESE</text>
+
+          <!-- Marco 7 — run_0015 (emphasized) -->
+          <rect x="126" y="692" width="380" height="68" rx="12" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="2.5"/>
+          <text x="95" y="722" text-anchor="end" font-family="var(--font-mono)" font-size="11" fill="var(--ink-faint)">14/08</text>
+          <circle cx="110" cy="718" r="10" fill="var(--accent)" stroke="var(--surface)" stroke-width="2.5"/>
+          <text x="146" y="713" font-family="var(--font-body)" font-weight="700" font-size="15" fill="var(--ink)">run_0015 — melhor resultado conhecido</text>
+          <text x="146" y="732" font-family="var(--font-body)" font-size="12.5" fill="var(--ink-dim)">500 épocas, treinado com graph_div_b_loss</text>
+          <rect x="146" y="740" width="170" height="16" rx="8" fill="var(--accent)"/>
+          <text x="231" y="751" text-anchor="middle" font-family="var(--font-mono)" font-size="9.5" font-weight="700" letter-spacing="0.3" fill="var(--accent-ink)">MAE_GRAPH = 0,053 T</text>
+
+          <!-- Marco 8 — auditoria retroativa -->
+          <text x="95" y="822" text-anchor="end" font-family="var(--font-mono)" font-size="11" fill="var(--ink-faint)">17–20/08</text>
+          <circle cx="110" cy="826" r="7" fill="var(--discovery-bg)" stroke="var(--discovery)" stroke-width="2.5"/>
+          <text x="140" y="819" font-family="var(--font-body)" font-weight="700" font-size="15" fill="var(--ink)">Por que funcionou? (auditoria retroativa)</text>
+          <text x="140" y="838" font-family="var(--font-body)" font-size="12.5" fill="var(--ink-dim)">15 scripts confirmam: o alvo suavizado não é fisicamente livre de divergente</text>
+          <rect x="140" y="846" width="220" height="16" rx="8" fill="var(--discovery-bg)"/>
+          <text x="250" y="857" text-anchor="middle" font-family="var(--font-mono)" font-size="9" font-weight="700" letter-spacing="0.3" fill="var(--discovery)">RETROATIVO · NÃO VERSIONADO</text>
+
+          <!-- Marco 9 — tentativas falham -->
+          <text x="95" y="930" text-anchor="end" font-family="var(--font-mono)" font-size="11" fill="var(--ink-faint)">19/08</text>
+          <circle cx="110" cy="934" r="7" fill="var(--fail-bg)" stroke="var(--fail)" stroke-width="2.5"/>
+          <text x="140" y="927" font-family="var(--font-body)" font-weight="700" font-size="15" fill="var(--ink)">run_0016 / run_0017 tentam ir além</text>
+          <text x="140" y="946" font-family="var(--font-body)" font-size="12.5" fill="var(--ink-dim)">Mesma loss, configuração nova — as duas travam em poucos minutos</text>
+          <rect x="140" y="954" width="130" height="16" rx="8" fill="var(--fail-bg)"/>
+          <text x="205" y="965" text-anchor="middle" font-family="var(--font-mono)" font-size="9" font-weight="700" letter-spacing="0.3" fill="var(--fail)">FALHARAM</text>
+
+          <!-- Hoje -->
+          <rect x="103" y="1010" width="14" height="14" rx="3" fill="var(--surface)" stroke="var(--ink-faint)" stroke-width="2" transform="rotate(45 110 1017)"/>
+          <text x="140" y="1013" font-family="var(--font-mono)" font-weight="700" font-size="11" letter-spacing="0.1em" fill="var(--ink-faint)">HOJE · 27/08</text>
+          <text x="140" y="1030" font-family="var(--font-body)" font-size="12.5" fill="var(--ink-dim)">run_0015 segue sendo o melhor resultado conhecido; v3 pronta, não testada em escala</text>
+
+        </svg>
+      </div>
+      <figcaption>
+        A ordem importa: <b>graph_div_b_loss foi uma aposta</b> (commit de 13/08, véspera do run_0015) — a auditoria física que a explica veio <b>9 dias depois</b>, já com o resultado em mãos. Não foi "a física apontou o caminho"; foi "uma escolha de design deu certo, e só depois entendemos bem o porquê".
+      </figcaption>
+    </figure>
+  </section>
+
+  <section class="block">
+    <h2>Figura 2 — As quatro gerações do pipeline</h2>
+    <p class="intro">Cada linha é uma geração independente do pipeline de dados, do jeito que foi implementada de fato — não um plano. As colunas são os estágios reais do projeto (raw → npz → chunks → treino → resultado). A cor da borda mostra o estágio em que cada geração parou.</p>
+
+    <figure class="figure-card">
+      <div class="figure-scroll">
+        <svg viewBox="0 0 1200 600" role="img" aria-label="Fluxograma de quatro linhas, uma por geração do pipeline (Qtree v1, FEMM Mesh v1, FEMM Mesh v2 bipartite, FEMM Mesh v3), cada uma percorrendo cinco estágios: simulação raw, staging npz, chunks, treino e resultado. As três primeiras gerações completaram todos os estágios; a quarta parou em staging parcial, sem chunks nem treino em escala.">
+          <defs>
+            <marker id="arrow-d1" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L8,4 L0,8 Z" fill="var(--ink-faint)"/>
+            </marker>
+          </defs>
+
+          <!-- column headers -->
+          <text x="24" y="54" font-family="var(--font-mono)" font-size="11" letter-spacing="0.08em" fill="var(--ink-faint)">PIPELINE</text>
+          <text x="328" y="54" text-anchor="middle" font-family="var(--font-mono)" font-size="11" letter-spacing="0.08em" fill="var(--ink-faint)">SIMULAÇÃO (RAW)</text>
+          <text x="524" y="54" text-anchor="middle" font-family="var(--font-mono)" font-size="11" letter-spacing="0.08em" fill="var(--ink-faint)">STAGING (NPZ)</text>
+          <text x="720" y="54" text-anchor="middle" font-family="var(--font-mono)" font-size="11" letter-spacing="0.08em" fill="var(--ink-faint)">CHUNKS (.PT)</text>
+          <text x="916" y="54" text-anchor="middle" font-family="var(--font-mono)" font-size="11" letter-spacing="0.08em" fill="var(--ink-faint)">TREINO</text>
+          <text x="1112" y="54" text-anchor="middle" font-family="var(--font-mono)" font-size="11" letter-spacing="0.08em" fill="var(--ink-faint)">RESULTADO</text>
+
+          <!-- ================= ROW 0 — Qtree v1 ================= -->
+          <text x="24" y="141" font-family="var(--font-display)" font-weight="700" font-size="15" letter-spacing="0.03em" fill="var(--ink)">QTREE V1</text>
+          <text x="24" y="156" font-family="var(--font-mono)" font-size="9" fill="var(--ink-faint)">motor_default_v4_135x270</text>
+
+          <g><rect x="240" y="90" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="252" y="100" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="280" y="111" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="328" y="148" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">CSVs</text></g>
+
+          <g><rect x="436" y="90" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="448" y="100" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="476" y="111" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="524" y="148" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">4 parsers</text></g>
+
+          <g><rect x="632" y="90" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="644" y="100" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="672" y="111" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="720" y="148" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">4 datasets</text></g>
+
+          <g><rect x="828" y="90" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="840" y="100" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="868" y="111" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="916" y="148" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">48 runs</text></g>
+
+          <g><rect x="1024" y="90" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="1036" y="100" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="1064" y="111" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="1112" y="148" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">mse 0,027</text></g>
+
+          <g stroke="var(--ink-faint)" stroke-width="1.5">
+            <line x1="416" y1="136" x2="436" y2="136" marker-end="url(#arrow-d1)"/>
+            <line x1="612" y1="136" x2="632" y2="136" marker-end="url(#arrow-d1)"/>
+            <line x1="808" y1="136" x2="828" y2="136" marker-end="url(#arrow-d1)"/>
+            <line x1="1004" y1="136" x2="1024" y2="136" marker-end="url(#arrow-d1)"/>
+          </g>
+
+          <!-- ================= ROW 1 — FEMM Mesh v1 ================= -->
+          <text x="24" y="269" font-family="var(--font-display)" font-weight="700" font-size="15" letter-spacing="0.03em" fill="var(--ink)">FEMM MESH V1</text>
+          <text x="24" y="284" font-family="var(--font-mono)" font-size="9" fill="var(--ink-faint)">mesh_138x276_FEMM_MESH_A</text>
+
+          <g><rect x="240" y="218" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="252" y="228" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="280" y="239" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="328" y="276" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">.npz malha</text></g>
+
+          <g><rect x="436" y="218" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="448" y="228" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="476" y="239" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="524" y="276" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">FEMM_MESH(_A)</text></g>
+
+          <g><rect x="632" y="218" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="644" y="228" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="672" y="239" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="720" y="276" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">mesh_138x276</text></g>
+
+          <g><rect x="828" y="218" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="840" y="228" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="868" y="239" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="916" y="276" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">5 runs</text></g>
+
+          <g><rect x="1024" y="218" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="1036" y="228" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="1064" y="239" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="1112" y="276" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">alvo A *</text></g>
+
+          <g stroke="var(--ink-faint)" stroke-width="1.5">
+            <line x1="416" y1="264" x2="436" y2="264" marker-end="url(#arrow-d1)"/>
+            <line x1="612" y1="264" x2="632" y2="264" marker-end="url(#arrow-d1)"/>
+            <line x1="808" y1="264" x2="828" y2="264" marker-end="url(#arrow-d1)"/>
+            <line x1="1004" y1="264" x2="1024" y2="264" marker-end="url(#arrow-d1)"/>
+          </g>
+
+          <!-- ================= ROW 2 — FEMM Mesh v2 (bipartite) ================= -->
+          <text x="24" y="391" font-family="var(--font-display)" font-weight="700" font-size="15" letter-spacing="0.03em" fill="var(--ink)">FEMM MESH V2</text>
+          <text x="24" y="408" font-family="var(--font-display)" font-weight="700" font-size="15" letter-spacing="0.03em" fill="var(--ink)">(BIPARTITE)</text>
+          <text x="24" y="422" font-family="var(--font-mono)" font-size="9" fill="var(--ink-faint)">mesh_ans_138x276_B</text>
+
+          <g><rect x="240" y="346" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="252" y="356" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="280" y="367" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="328" y="404" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">.ans.gz × 4000</text></g>
+
+          <g><rect x="436" y="346" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="448" y="356" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="476" y="367" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="524" y="404" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">grafo duplo</text></g>
+
+          <g><rect x="632" y="346" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="644" y="356" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="672" y="367" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="720" y="404" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">126 chunks †</text></g>
+
+          <g><rect x="828" y="346" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="840" y="356" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="868" y="367" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="916" y="398" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13" fill="var(--ink)">5 runs</text>
+            <text x="916" y="414" text-anchor="middle" font-family="var(--font-body)" font-size="11" fill="var(--ink-dim)">(2 falharam)</text></g>
+
+          <g><rect x="1022" y="344" width="180" height="96" rx="11" fill="var(--surface)" stroke="var(--accent)" stroke-width="3"/>
+            <rect x="1036" y="354" width="90" height="16" rx="8" fill="var(--accent-bg)"/>
+            <text x="1081" y="365" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--accent)">MELHOR</text>
+            <text x="1112" y="404" text-anchor="middle" font-family="var(--font-display)" font-weight="800" font-size="19" fill="var(--ink)">0,053 T</text>
+            <text x="1112" y="420" text-anchor="middle" font-family="var(--font-body)" font-size="10.5" fill="var(--ink-dim)">run_0015 · mae_graph</text></g>
+
+          <g stroke="var(--ink-faint)" stroke-width="1.5">
+            <line x1="416" y1="392" x2="436" y2="392" marker-end="url(#arrow-d1)"/>
+            <line x1="612" y1="392" x2="632" y2="392" marker-end="url(#arrow-d1)"/>
+            <line x1="808" y1="392" x2="828" y2="392" marker-end="url(#arrow-d1)"/>
+            <line x1="1004" y1="392" x2="1022" y2="392" marker-end="url(#arrow-d1)"/>
+          </g>
+
+          <!-- ================= ROW 3 — FEMM Mesh v3 ================= -->
+          <text x="24" y="519" font-family="var(--font-display)" font-weight="700" font-size="15" letter-spacing="0.03em" fill="var(--ink)">FEMM MESH V3</text>
+          <text x="24" y="534" font-family="var(--font-mono)" font-size="9" fill="var(--ink-faint)">node_cell_count + 8 viz.</text>
+
+          <g><rect x="240" y="474" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-done)" stroke-width="2"/>
+            <rect x="252" y="484" width="56" height="16" rx="8" fill="var(--status-done-bg)"/>
+            <text x="280" y="495" text-anchor="middle" font-family="var(--font-mono)" font-size="8.5" font-weight="700" letter-spacing="0.4" fill="var(--status-done)">OK</text>
+            <text x="328" y="527" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13" fill="var(--ink)">(reusa v2)</text>
+            <text x="328" y="542" text-anchor="middle" font-family="var(--font-body)" font-size="10.5" fill="var(--ink-dim)">mesmo .ans.gz</text></g>
+
+          <g><rect x="436" y="474" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-partial)" stroke-width="2"/>
+            <rect x="448" y="484" width="56" height="16" rx="8" fill="var(--status-partial-bg)"/>
+            <text x="476" y="495" text-anchor="middle" font-family="var(--font-mono)" font-size="8" font-weight="700" letter-spacing="0.2" fill="var(--status-partial)">PARCIAL</text>
+            <text x="524" y="527" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">código pronto</text></g>
+
+          <g><rect x="632" y="474" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-pending)" stroke-width="2" stroke-dasharray="5 4"/>
+            <rect x="644" y="484" width="56" height="16" rx="8" fill="var(--status-pending-bg)"/>
+            <text x="672" y="495" text-anchor="middle" font-family="var(--font-mono)" font-size="7.5" font-weight="700" letter-spacing="0.1" fill="var(--status-pending)">PEND.</text>
+            <text x="720" y="527" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">não gerados</text></g>
+
+          <g><rect x="828" y="474" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-partial)" stroke-width="2"/>
+            <rect x="840" y="484" width="56" height="16" rx="8" fill="var(--status-partial-bg)"/>
+            <text x="868" y="495" text-anchor="middle" font-family="var(--font-mono)" font-size="8" font-weight="700" letter-spacing="0.2" fill="var(--status-partial)">PARCIAL</text>
+            <text x="916" y="527" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="13.5" fill="var(--ink)">smoke test</text></g>
+
+          <g><rect x="1024" y="474" width="176" height="92" rx="10" fill="var(--surface)" stroke="var(--status-pending)" stroke-width="2" stroke-dasharray="5 4"/>
+            <rect x="1036" y="484" width="56" height="16" rx="8" fill="var(--status-pending-bg)"/>
+            <text x="1064" y="495" text-anchor="middle" font-family="var(--font-mono)" font-size="7.5" font-weight="700" letter-spacing="0.1" fill="var(--status-pending)">PEND.</text>
+            <text x="1112" y="527" text-anchor="middle" font-family="var(--font-body)" font-weight="600" font-size="16" fill="var(--ink-faint)">—</text></g>
+
+          <g stroke="var(--ink-faint)" stroke-width="1.5">
+            <line x1="416" y1="520" x2="436" y2="520" marker-end="url(#arrow-d1)"/>
+            <line x1="612" y1="520" x2="632" y2="520" marker-end="url(#arrow-d1)"/>
+            <line x1="808" y1="520" x2="828" y2="520" marker-end="url(#arrow-d1)"/>
+            <line x1="1004" y1="520" x2="1024" y2="520" marker-end="url(#arrow-d1)"/>
+          </g>
+
+        </svg>
+      </div>
+
+      <div class="legend">
+        <span class="item"><span class="swatch sw-done"></span>concluído</span>
+        <span class="item"><span class="swatch sw-partial"></span>parcial / código pronto, não rodado em escala</span>
+        <span class="item"><span class="swatch sw-pending"></span>pendente</span>
+      </div>
+
+      <figcaption>
+        <b>*</b> alvo é A (potencial vetor, escala ~10⁻³) — não comparável ao mae_graph em Tesla das outras linhas.
+        &nbsp;·&nbsp;
+        <b>†</b> os 126 chunks de <code>mesh_ans_138x276_B</code> já existem em disco — corrige um trecho do CLAUDE.md que ainda registra esse passo como "nunca construído".
+      </figcaption>
+    </figure>
+  </section>
+
+  <section class="block">
+    <h2>Pendências que a auditoria confirmou</h2>
+    <p class="intro">O que ainda falta, hoje, pra fechar as pontas soltas encontradas neste levantamento.</p>
+    <div class="checklist">
+      <div class="check-row">
+        <span class="chip chip-pending">pendente</span>
+        <span class="desc"><code>FNO_BipartiteGNN_v3</code> — staging (<code>npz_parser='FEMM_MESH_V3'</code>) e chunks nunca rodados em escala; só smoke test de 4 amostras.</span>
+      </div>
+      <div class="check-row">
+        <span class="chip chip-pending">pendente</span>
+        <span class="desc"><code>src/bench/eval_manager.py</code> e <code>scripts/bench_eval.py</code> não existem; <code>eval_results.jsonl</code> nunca foi populado em lugar nenhum do repo.</span>
+      </div>
+      <div class="check-row">
+        <span class="chip chip-partial">desatualizado</span>
+        <span class="desc">CLAUDE.md ainda registra os chunks de <code>femm_mesh_v2</code> como "nunca construídos" e não menciona <code>graph_div_b_loss</code> nem <code>FNO_GNN_Field</code>.</span>
+      </div>
+      <div class="check-row">
+        <span class="chip chip-partial">stale</span>
+        <span class="desc"><code>tests/check_chunks.py</code> e <code>tests/test_fno8_outputs.py</code> apontam para paths que não existem mais desde a unificação raw→npz→chunks de 2026-07-27.</span>
+      </div>
+    </div>
+  </section>
+
+  <footer class="page">Fonte: git log, data/logs/, data/torch/, data/raw/, tests/ (levantamento local, atualizado em 2026-08-27) · sem sincronizar com a VM Linux</footer>
+
+</div>

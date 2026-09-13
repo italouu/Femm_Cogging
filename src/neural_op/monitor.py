@@ -9,6 +9,12 @@ class TrainingMonitor:
     patience conta em heartbeats, não em épocas individuais:
         patience=3, checkpoint_every=50 → para após 150 épocas sem melhora.
 
+    gl_threshold (critério ativo por padrão, Prechelt 1998): para quando o test_loss do
+    heartbeat atual fica gl_threshold% (ou mais) pior que o melhor test_loss já visto —
+    GL(t) = 100·(test_loss(t)/melhor_test_loss - 1). Dimensionless (independe da escala
+    da loss), ao contrário de early_stop_min_delta. Os dois critérios (patience e GL)
+    podem coexistir; cada um só age se seu campo não for None.
+
     Quando mgr (ModelManager) é fornecido, os caminhos de checkpoint são derivados dele
     e as métricas de cada heartbeat são registradas via mgr.log().
     """
@@ -70,4 +76,13 @@ class TrainingMonitor:
                       f"(patience={self.cfg.early_stop_patience})")
                 self.stopped_early = True
                 return True
+
+        if self.cfg.gl_threshold is not None:
+            gl = 100.0 * (test_loss / self._best_loss - 1.0)
+            if gl > self.cfg.gl_threshold:
+                print(f"  early stop: generalization loss {gl:.2f}% > {self.cfg.gl_threshold}% "
+                      f"(best test={self._best_loss:.4e}, atual={test_loss:.4e})")
+                self.stopped_early = True
+                return True
+
         return False

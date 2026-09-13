@@ -11,10 +11,21 @@ from src.neural_op.monitor import TrainingMonitor
 from src.training.model_manager import ModelManager
 
 # ── Configuração ───────────────────────────────────────────────────────────────
-from src.configs.training import FNOConfig, FNORefConfig
+from src.configs.training import FNOConfig, FNORefConfig, DivBLossCfg
 from src.configs.monitor import MonitorCfg
 
-_nn = NnCfg()
+# Parâmetros/loss reconstruídos da run_0015 (mesh_ans_138x276_B/FNO_BipartiteGNN,
+# ver config.json da run) — mesmo dataset/batch_size/n_epochs/scheduler do default
+# de NnCfg, então só o que difere é passado explicitamente. loss_cfg precisa de
+# override manual porque o default de DivBLossCfg (lambda_div=0.3) não bate com o
+# valor usado na run_0015 (lambda_div=5e-12). monitor_cfg fica no default de NnCfg
+# (gl_threshold=5.0 ativo) — critério novo, não existia na run_0015.
+_nn = NnCfg(
+    arch='FNO_BipartiteGNN',
+    loss='graph_div_b_loss',
+    loss_cfg=DivBLossCfg(lambda_div=5e-12),
+    lr=0.01,
+)
 
 # [REMOVIDO] DEVICE em nível de módulo — torch.cuda.is_available() inicializa o
 # contexto CUDA imediatamente, antes de qualquer print. Após crash de OOM, o

@@ -4,7 +4,7 @@ from typing import Any, Optional
 from src.configs.monitor import MonitorCfg   # noqa: F401  re-exportado daqui por retrocompatibilidade
 from src.configs.loss    import (            # noqa: F401  re-exportado daqui por retrocompatibilidade
     LossCfg, MseLossCfg, MaeLossCfg, RelativeL2LossCfg,
-    MaskedFNOLossCfg, SingleMaterialFNOLossCfg, MaskedFNOGNNLossCfg,
+    MaskedFNOLossCfg, SingleMaterialFNOLossCfg, MaskedFNOGNNLossCfg, DivBLossCfg,
     LOSS_CFG_REGISTRY,
 )
 

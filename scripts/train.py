@@ -14,18 +14,24 @@ from src.training.model_manager import ModelManager
 from src.configs.training import FNOConfig, FNORefConfig, DivBLossCfg
 from src.configs.monitor import MonitorCfg
 
+# [REMOVIDO] _nn construído em nível de módulo — rodava (detecção de dims +
+# Normalizer.fit) como efeito colateral de QUALQUER import deste arquivo, ex:
+# scripts/run_best_configs.py importando `run` daqui só pra reaproveitar o
+# pipeline. Movido para dentro do if __name__ abaixo, onde só roda quando o
+# script é executado diretamente (python -m scripts.train).
+#
 # Parâmetros/loss reconstruídos da run_0015 (mesh_ans_138x276_B/FNO_BipartiteGNN,
 # ver config.json da run) — mesmo dataset/batch_size/n_epochs/scheduler do default
 # de NnCfg, então só o que difere é passado explicitamente. loss_cfg precisa de
 # override manual porque o default de DivBLossCfg (lambda_div=0.3) não bate com o
 # valor usado na run_0015 (lambda_div=5e-12). monitor_cfg fica no default de NnCfg
 # (gl_threshold=5.0 ativo) — critério novo, não existia na run_0015.
-_nn = NnCfg(
-    arch='FNO_BipartiteGNN',
-    loss='graph_div_b_loss',
-    loss_cfg=DivBLossCfg(lambda_div=5e-12),
-    lr=0.01,
-)
+# _nn = NnCfg(
+#     arch='FNO_BipartiteGNN',
+#     loss='graph_div_b_loss',
+#     loss_cfg=DivBLossCfg(lambda_div=5e-12),
+#     lr=0.01,
+# )
 
 # [REMOVIDO] DEVICE em nível de módulo — torch.cuda.is_available() inicializa o
 # contexto CUDA imediatamente, antes de qualquer print. Após crash de OOM, o
@@ -33,7 +39,13 @@ _nn = NnCfg(
 # output visível no console. Movido para dentro do if __name__ abaixo.
 # DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-if __name__ == '__main__':
+def run(_nn):
+    """
+    Executa um treino completo a partir de um NnCfg já construído. Extraído do
+    antigo corpo de `if __name__ == '__main__':` (mesma lógica, sem alteração)
+    pra ser reaproveitado por scripts/run_best_configs.py (sequência de treinos)
+    sem duplicar o pipeline model/optimizer/scheduler/fit/ModelManager.
+    """
     entry       = ARCH_REGISTRY[_nn.arch]
     chunk_paths = sorted(glob.glob(
         f'data/torch/data_chunks/{_nn.dataset}/data_chunk_*.pt'
@@ -133,4 +145,21 @@ if __name__ == '__main__':
         status = 'stopped'
     finally:
         mgr.close(status, monitor.last_epoch, model, optimizer, scheduler)
+    return status
+
+
+if __name__ == '__main__':
+    # Parâmetros/loss reconstruídos da run_0015 (mesh_ans_138x276_B/FNO_BipartiteGNN,
+    # ver config.json da run) — mesmo dataset/batch_size/n_epochs/scheduler do default
+    # de NnCfg, então só o que difere é passado explicitamente. loss_cfg precisa de
+    # override manual porque o default de DivBLossCfg (lambda_div=0.3) não bate com o
+    # valor usado na run_0015 (lambda_div=5e-12). monitor_cfg fica no default de NnCfg
+    # (gl_threshold=5.0 ativo) — critério novo, não existia na run_0015.
+    _nn = NnCfg(
+        arch='FNO_BipartiteGNN',
+        loss='graph_div_b_loss',
+        loss_cfg=DivBLossCfg(lambda_div=5e-12),
+        lr=0.01,
+    )
+    run(_nn)
 

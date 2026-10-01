@@ -1,0 +1,509 @@
+<!doctype html>
+<title>Integral de Superfície — Malha FEMM</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#f6f2e8;
+  --surface:#ffffff;
+  --surface-alt:#efe7d6;
+  --border:#ddd0b4;
+  --text:#241f18;
+  --text-muted:#6f6353;
+  --copper:#a8552a;
+  --copper-strong:#8a431f;
+  --indigo:#2d4a6b;
+  --good:#3f7d54;
+  --good-bg:#e7f1e9;
+  --warn:#a8791f;
+  --warn-bg:#f5ecd8;
+  --bad:#ad3f28;
+  --bad-bg:#f6e5df;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1a1610;
+    --surface:#221c14;
+    --surface-alt:#2b2318;
+    --border:#4a3d28;
+    --text:#ece3d2;
+    --text-muted:#a8977f;
+    --copper:#dd935e;
+    --copper-strong:#eaab7c;
+    --indigo:#8fb2d8;
+    --good:#7ac296;
+    --good-bg:#213228;
+    --warn:#d9b25b;
+    --warn-bg:#332a17;
+    --bad:#e2836a;
+    --bad-bg:#382220;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1a1610;
+  --surface:#221c14;
+  --surface-alt:#2b2318;
+  --border:#4a3d28;
+  --text:#ece3d2;
+  --text-muted:#a8977f;
+  --copper:#dd935e;
+  --copper-strong:#eaab7c;
+  --indigo:#8fb2d8;
+  --good:#7ac296;
+  --good-bg:#213228;
+  --warn:#d9b25b;
+  --warn-bg:#332a17;
+  --bad:#e2836a;
+  --bad-bg:#382220;
+}
+
+*{box-sizing:border-box;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;
+  padding:0 20px 64px;
+  line-height:1.5;
+}
+.wrap{max-width:1120px;margin:0 auto;}
+
+header.page{padding-top:40px;padding-bottom:28px;border-bottom:1px solid var(--border);}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:12.5px;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+  color:var(--copper);
+  margin:0 0 10px;
+}
+h1{
+  font-family:"Spectral",Georgia,serif;
+  font-weight:700;
+  font-size:clamp(28px,4.4vw,40px);
+  line-height:1.12;
+  margin:0 0 14px;
+  text-wrap:balance;
+  color:var(--text);
+}
+.lede{
+  max-width:66ch;
+  color:var(--text-muted);
+  font-size:15.5px;
+  margin:0 0 4px;
+}
+.lede b{color:var(--text);font-weight:600;}
+code.inline{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:.92em;
+  background:var(--surface-alt);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:.05em .35em;
+}
+
+.stats{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:1px;
+  background:var(--border);
+  border:1px solid var(--border);
+  margin:26px 0 0;
+  border-radius:10px;
+  overflow:hidden;
+}
+.stat{
+  background:var(--surface);
+  padding:16px 18px;
+}
+.stat .n{
+  font-family:"IBM Plex Mono",monospace;
+  font-weight:600;
+  font-size:23px;
+  color:var(--indigo);
+  font-variant-numeric:tabular-nums;
+}
+.stat .l{
+  font-size:12px;
+  color:var(--text-muted);
+  margin-top:3px;
+}
+
+section.top5{margin-top:34px;}
+h2{
+  font-family:"Spectral",Georgia,serif;
+  font-weight:600;
+  font-size:21px;
+  margin:0 0 4px;
+  color:var(--text);
+}
+.section-note{
+  font-size:13px;
+  color:var(--text-muted);
+  margin:0 0 14px;
+  max-width:70ch;
+}
+.rank-list{
+  display:flex;
+  flex-direction:column;
+  border:1px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+  background:var(--surface);
+}
+.rank-row{
+  display:grid;
+  grid-template-columns:28px 1.6fr auto auto;
+  gap:14px;
+  align-items:center;
+  padding:11px 16px;
+  border-top:1px solid var(--border);
+  font-size:13.5px;
+}
+.rank-row:first-child{border-top:none;}
+.rank-num{
+  font-family:"IBM Plex Mono",monospace;
+  color:var(--text-muted);
+  font-size:12px;
+}
+.rank-main b{font-weight:600;}
+.rank-main .sub{color:var(--text-muted);font-size:12px;display:block;margin-top:1px;}
+.rank-metric{
+  font-family:"IBM Plex Mono",monospace;
+  font-variant-numeric:tabular-nums;
+  text-align:right;
+  white-space:nowrap;
+}
+.rank-metric .pct{font-weight:600;color:var(--good);}
+.rank-metric .abs{color:var(--text-muted);font-size:12px;}
+
+.groups{margin-top:44px;display:flex;flex-direction:column;gap:40px;}
+.group-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  gap:16px;
+  flex-wrap:wrap;
+  margin-bottom:4px;
+}
+.group-head h2{margin:0;}
+.group-meta{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:12px;
+  color:var(--text-muted);
+  white-space:nowrap;
+}
+.group-desc{font-size:13px;color:var(--text-muted);margin:2px 0 14px;max-width:76ch;}
+
+.table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface);}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:13.5px;}
+thead th{
+  text-align:left;
+  font-family:"IBM Plex Mono",monospace;
+  font-weight:500;
+  font-size:11px;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  color:var(--text-muted);
+  padding:10px 14px;
+  border-bottom:1px solid var(--border);
+  background:var(--surface-alt);
+  white-space:nowrap;
+  cursor:pointer;
+  user-select:none;
+}
+thead th:hover{color:var(--copper);}
+thead th.num,tbody td.num{text-align:right;}
+thead th .arrow{opacity:.45;margin-left:3px;font-size:9px;}
+tbody td{
+  padding:9px 14px;
+  border-bottom:1px solid var(--border);
+  white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover{background:var(--surface-alt);}
+tbody td.num{font-family:"IBM Plex Mono",monospace;}
+tbody td.run-cell b{font-weight:600;}
+tbody td.run-cell .sub{display:block;color:var(--text-muted);font-size:11.5px;margin-top:1px;font-family:"IBM Plex Mono",monospace;}
+
+.pill{
+  display:inline-block;
+  font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px;
+  padding:2px 7px;
+  border-radius:99px;
+  letter-spacing:.03em;
+}
+.pill.done{background:var(--good-bg);color:var(--good);}
+.pill.stopped{background:var(--warn-bg);color:var(--warn);}
+
+.bar-cell{width:120px;}
+.bar-track{
+  position:relative;
+  height:7px;
+  border-radius:99px;
+  background:var(--surface-alt);
+  overflow:hidden;
+}
+.bar-fill{
+  position:absolute;left:0;top:0;bottom:0;
+  border-radius:99px;
+  background:var(--copper);
+}
+.bar-fill.best{background:var(--good);}
+
+.best-badge{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:10px;
+  color:var(--good);
+}
+
+footer.methodology{
+  margin-top:52px;
+  padding-top:22px;
+  border-top:1px solid var(--border);
+  font-size:12.5px;
+  color:var(--text-muted);
+  max-width:78ch;
+}
+footer.methodology h3{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  color:var(--text);
+  margin:0 0 8px;
+}
+footer.methodology p{margin:0 0 10px;}
+footer.methodology code{
+  font-family:"IBM Plex Mono",monospace;
+  background:var(--surface-alt);
+  border:1px solid var(--border);
+  padding:.05em .35em;
+  border-radius:4px;
+}
+
+@media (max-width:520px){
+  .rank-row{grid-template-columns:20px 1fr;grid-template-areas:"n main" ". metric";}
+  .rank-num{grid-area:n;}
+  .rank-main{grid-area:main;}
+  .rank-metric{grid-area:metric;text-align:left;}
+}
+</style>
+
+<div class="wrap">
+  <header class="page">
+    <p class="eyebrow">FEMM cogging · Neural Operators</p>
+    <h1>Erro por integral de superfície, todos os runs sobre malha</h1>
+    <p class="lede">
+      Para cada checkpoint <code class="inline">best.pth</code> presente nos 7 diretórios de log
+      gerados a partir da <b>malha real do FEMM</b> (<code class="inline">mode='femm_mesh'</code> e
+      <code class="inline">'femm_mesh_v2'</code>), a predição foi rodada sobre o test set real
+      (320 amostras, 10 chunks) e comparada contra o ground-truth via
+      <b>|pred − true| ponderado pela área física (mm²)</b> — não por contagem de pixel/nó.
+    </p>
+    <p class="lede">L1 = integral do erro absoluto / área total · L2 = raiz da integral do erro² / área total.</p>
+  </header>
+
+  <div class="stats" id="stats"></div>
+
+  <section class="top5">
+    <h2>Melhores por L2 (integral de superfície)</h2>
+    <p class="section-note">
+      Ranking único entre TODOS os 49 runs, comparável entre alvo B (Tesla) e alvo A (Wb/m) porque
+      normalizado por B_ref — a RMS do campo verdadeiro na própria amostra.
+    </p>
+    <div class="rank-list" id="rank-list"></div>
+  </section>
+
+  <div class="groups" id="groups"></div>
+
+  <footer class="methodology">
+    <h3>Metodologia</h3>
+    <p>
+      Domínio de amostragem fixo (setor do motor, <code>generate_samples_constrained</code>):
+      raio 28,5–46,5&nbsp;mm, ângulo 0–120°. <code>err = |mag_pred − mag_true|</code>, onde
+      <code>mag</code> é <code>hypot(Bx,By)</code> para alvo vetorial ou <code>|A|</code> para alvo
+      escalar (auto-detectado pela largura de <code>node_y</code>/<code>y_hw</code> do chunk).
+    </p>
+    <p>
+      Peso de área: <code>r·dr·dθ</code> na grade polar (FNO2d); <code>node_dual_area</code>
+      (mm², já lumped) nos grafos v1 (<code>FNO_GNN</code>/<code>GNN_PostBase</code>); área do
+      elemento / 3, somada por vértice via <code>cross_edge_index</code>, nos grafos v2/v3
+      (<code>FNO_BipartiteGNN[_v3]</code>). Sem threshold de relevância, sem normalização por
+      B_ref no valor absoluto — só no percentual mostrado ao lado.
+    </p>
+    <p>
+      Runs sem <code>checkpoints/best.pth</code> foram excluídos (não há o que avaliar); status
+      <code>stopped</code> indica treino interrompido manualmente, não necessariamente pior
+      resultado — o checkpoint "best" já reflete o menor test_loss visto até a interrupção.
+    </p>
+  </footer>
+</div>
+
+<script>
+const RESULTS = [{"problem":"mesh_138x276_FEMM_MESH","arch":"FNO2d","run":"run_0001","status":"done","loss":"mae","epoch":489,"unit":"T","L1_area":0.026119207152279635,"L1_area_pct":4.4476713875416,"L2_area":0.05703544139036143,"L2_area_pct":9.712197589641468,"B_ref":0.5872557767069372,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH","arch":"FNO2d","run":"run_0002","status":"done","loss":"mae","epoch":499,"unit":"T","L1_area":0.02497405110919949,"L1_area_pct":4.252670148132487,"L2_area":0.049740015078207016,"L2_area_pct":8.469906478762347,"B_ref":0.5872557767069372,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH","arch":"FNO_GNN","run":"run_0001","status":"stopped","loss":"mae","epoch":239,"unit":"T","L1_area":0.08510294058699282,"L1_area_pct":10.982396848143505,"L2_area":0.14969500813399123,"L2_area_pct":19.317898702137594,"B_ref":0.7749031633416057,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH","arch":"FNO_GNN","run":"run_0002","status":"stopped","loss":"mae","epoch":129,"unit":"T","L1_area":0.07251863479011321,"L1_area_pct":9.358412537302334,"L2_area":0.1432990343020535,"L2_area_pct":18.4925086231558,"B_ref":0.7749031633416057,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH","arch":"FNO_GNN","run":"run_0003","status":"done","loss":"mae","epoch":159,"unit":"T","L1_area":0.07738840006446018,"L1_area_pct":9.986847870221501,"L2_area":0.13870713478476304,"L2_area_pct":17.899931416800253,"B_ref":0.7749031633416057,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH","arch":"FNO_GNN","run":"run_0004","status":"done","loss":"mse","epoch":499,"unit":"T","L1_area":0.11820620323580985,"L1_area_pct":15.25431935599161,"L2_area":0.16583931889035597,"L2_area_pct":21.401295895503775,"B_ref":0.7749031633416057,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH","arch":"FNO_GNN","run":"run_0005","status":"stopped","loss":"mse","epoch":529,"unit":"T","L1_area":0.11562620330353525,"L1_area_pct":14.921374537293374,"L2_area":0.16287772895038136,"L2_area_pct":21.019107503446712,"B_ref":0.7749031633416057,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH","arch":"GNN_PostBase","run":"run_0001","status":"stopped","loss":"mae","epoch":69,"unit":"T","L1_area":0.057912998571945276,"L1_area_pct":7.473578804635116,"L2_area":0.14045290264113797,"L2_area_pct":18.12521993528386,"B_ref":0.7749031633416057,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH","arch":"GNN_PostBase","run":"run_0002","status":"stopped","loss":"mse","epoch":149,"unit":"T","L1_area":0.06353806567383662,"L1_area_pct":8.199484616870341,"L2_area":0.13945540809667917,"L2_area_pct":17.996494877541508,"B_ref":0.7749031633416057,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH","arch":"GNN_PostBase","run":"run_0003","status":"stopped","loss":"mae","epoch":29,"unit":"T","L1_area":0.056955563299192886,"L1_area_pct":7.3500233311197345,"L2_area":0.1421007500402515,"L2_area_pct":18.337871977121907,"B_ref":0.7749031633416057,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH","arch":"GNN_PostBase","run":"run_0004","status":"stopped","loss":"mae","epoch":409,"unit":"T","L1_area":0.05586766953247151,"L1_area_pct":7.2096323999445335,"L2_area":0.1396271108796459,"L2_area_pct":18.01865284399325,"B_ref":0.7749031633416057,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH_A","arch":"FNO2d","run":"run_0001","status":"stopped","loss":"mae","epoch":119,"unit":"Wb/m (A)","L1_area":0.0005221926236720772,"L1_area_pct":60.20229354667924,"L2_area":0.0007573183724290625,"L2_area_pct":87.30935845983629,"B_ref":0.0008673965606761859,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH_A","arch":"FNO2d","run":"run_0002","status":"stopped","loss":"mse","epoch":69,"unit":"Wb/m (A)","L1_area":0.0005730921328591841,"L1_area_pct":66.0703718276708,"L2_area":0.0008834479423532025,"L2_area_pct":101.85052401689299,"B_ref":0.0008673965606761859,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH_A","arch":"FNO2d","run":"run_0003","status":"stopped","loss":"mse","epoch":289,"unit":"Wb/m (A)","L1_area":1.804526261707315e-05,"L1_area_pct":2.0803936094703697,"L2_area":2.6604950357842286e-05,"L2_area_pct":3.067218797490064,"B_ref":0.0008673965606761859,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH_A","arch":"FNO_GNN","run":"run_0001","status":"stopped","loss":"mse","epoch":189,"unit":"Wb/m (A)","L1_area":3.3904908988839256e-05,"L1_area_pct":2.65468546384668,"L2_area":4.5673374041245223e-05,"L2_area_pct":3.5761323586516127,"B_ref":0.0012771723599868787,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH_A","arch":"GNN_PostBase","run":"run_0001","status":"stopped","loss":"mae","epoch":369,"unit":"Wb/m (A)","L1_area":2.6707234669373757e-05,"L1_area_pct":2.0911221935344844,"L2_area":3.9505239519240266e-05,"L2_area_pct":3.09317996199402,"B_ref":0.0012771723599868787,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH_best_mse_mae","arch":"FNO2d","run":"run_0001","status":"stopped","loss":"mse","epoch":109,"unit":"T","L1_area":0.018238837907847694,"L1_area_pct":3.105774116028758,"L2_area":0.026668637057900905,"L2_area_pct":4.541230263829242,"B_ref":0.5872557767069372,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH_best_mse_mae","arch":"FNO2d","run":"run_0002","status":"stopped","loss":"mae","epoch":129,"unit":"T","L1_area":0.01448149565098689,"L1_area_pct":2.465960527828695,"L2_area":0.02517629475414978,"L2_area_pct":4.287108914505187,"B_ref":0.5872557767069372,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH_best_mse_mae","arch":"FNO_GNN","run":"run_0001","status":"stopped","loss":"mse","epoch":89,"unit":"T","L1_area":0.07899869368639027,"L1_area_pct":10.194653657848697,"L2_area":0.13331343738140836,"L2_area_pct":17.203883489973432,"B_ref":0.7749031633416057,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH_best_mse_mae","arch":"FNO_GNN","run":"run_0002","status":"stopped","loss":"mae","epoch":269,"unit":"T","L1_area":0.05242610877028698,"L1_area_pct":6.765504549524678,"L2_area":0.13305764264701994,"L2_area_pct":17.170873593190283,"B_ref":0.7749031633416057,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH_best_mse_mae","arch":"GNN_PostBase","run":"run_0001","status":"stopped","loss":"mse","epoch":49,"unit":"T","L1_area":0.061653074815250335,"L1_area_pct":7.956229595112828,"L2_area":0.14056697257368483,"L2_area_pct":18.13994047559692,"B_ref":0.7749031633416057,"n_samples":320},{"problem":"mesh_138x276_FEMM_MESH_best_mse_mae","arch":"GNN_PostBase","run":"run_0002","status":"stopped","loss":"mae","epoch":29,"unit":"T","L1_area":0.05817123186201089,"L1_area_pct":7.506903393084599,"L2_area":0.1418445026337754,"L2_area_pct":18.304803663737935,"B_ref":0.7749031633416057,"n_samples":320},{"problem":"mesh_ans_138x276","arch":"FNO2d","run":"run_0001","status":"stopped","loss":"mae","epoch":49,"unit":"Wb/m (A)","L1_area":3.230017569368143e-05,"L1_area_pct":3.7238072128417405,"L2_area":8.131111278668481e-05,"L2_area_pct":9.374156696567953,"B_ref":0.0008673965607642795,"n_samples":320},{"problem":"mesh_ans_138x276","arch":"FNO_BipartiteGNN","run":"run_0001","status":"stopped","loss":"mse","epoch":79,"unit":"Wb/m (A)","L1_area":4.432677067594561e-05,"L1_area_pct":3.470696052050563,"L2_area":5.8737159537433045e-05,"L2_area_pct":4.599000211532647,"B_ref":0.0012771723599868787,"n_samples":320},{"problem":"mesh_ans_138x276","arch":"FNO_BipartiteGNN","run":"run_0002","status":"done","loss":"mae","epoch":469,"unit":"Wb/m (A)","L1_area":2.387591629079462e-05,"L1_area_pct":1.873293799695484,"L2_area":3.544784269650256e-05,"L2_area_pct":2.7812220116361064,"B_ref":0.0012745420016163937,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0001","status":"stopped","loss":"graph_div_b_loss","epoch":199,"unit":"T","L1_area":0.4240790413770243,"L1_area_pct":56.48838190471117,"L2_area":0.5773166087427009,"L2_area_pct":76.90000658532244,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0002","status":"stopped","loss":"graph_div_b_loss","epoch":9,"unit":"T","L1_area":0.42170837893826585,"L1_area_pct":56.17260377813149,"L2_area":0.574846723060693,"L2_area_pct":76.57101167622908,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0003","status":"stopped","loss":"graph_div_b_loss","epoch":29,"unit":"T","L1_area":0.059171503286465095,"L1_area_pct":7.881791245019547,"L2_area":0.08688800130391543,"L2_area_pct":11.57369764055152,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0005","status":"stopped","loss":"graph_div_b_loss","epoch":109,"unit":"T","L1_area":0.0383639878718712,"L1_area_pct":5.110178497048871,"L2_area":0.058042231261162494,"L2_area_pct":7.731369405655673,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0007","status":"stopped","loss":"graph_div_b_loss","epoch":109,"unit":"T","L1_area":0.03962212405488611,"L1_area_pct":5.277765362373577,"L2_area":0.07033492340511531,"L2_area_pct":9.368786539522715,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0008","status":"stopped","loss":"graph_div_b_loss","epoch":99,"unit":"T","L1_area":0.05260416591188128,"L1_area_pct":7.007005590656688,"L2_area":0.07199526395623244,"L2_area_pct":9.589948025925906,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0009","status":"stopped","loss":"graph_div_b_loss","epoch":139,"unit":"T","L1_area":0.06192634842098321,"L1_area_pct":8.248743461148155,"L2_area":0.09540946368244466,"L2_area_pct":12.708777600320234,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0010","status":"stopped","loss":"graph_div_b_loss","epoch":19,"unit":"T","L1_area":0.4244744060775219,"L1_area_pct":56.541045465072074,"L2_area":0.5772805638163266,"L2_area_pct":76.89520531157842,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0011","status":"stopped","loss":"graph_div_b_loss","epoch":79,"unit":"T","L1_area":0.10168329301823381,"L1_area_pct":13.544467254716436,"L2_area":0.14854841084590578,"L2_area_pct":19.787017382312175,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0012","status":"done","loss":"graph_div_b_loss","epoch":499,"unit":"T","L1_area":0.3050676827594606,"L1_area_pct":40.63577326185523,"L2_area":0.42791656486561014,"L2_area_pct":56.9995495674366,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0014","status":"done","loss":"graph_div_b_loss","epoch":89,"unit":"T","L1_area":0.037743177162207805,"L1_area_pct":5.027484968163006,"L2_area":0.07836786430889421,"L2_area_pct":10.438794225158892,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0015","status":"stopped","loss":"graph_div_b_loss","epoch":109,"unit":"T","L1_area":0.023000541865235598,"L1_area_pct":3.06372931960961,"L2_area":0.0338702214187313,"L2_area_pct":4.511597641057294,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0016","status":"stopped","loss":"graph_div_b_loss","epoch":39,"unit":"T","L1_area":0.03423486031609897,"L1_area_pct":4.56016844810528,"L2_area":0.04969479012945851,"L2_area_pct":6.619469508307113,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0017","status":"stopped","loss":"graph_div_b_loss","epoch":79,"unit":"T","L1_area":0.02878053602993861,"L1_area_pct":3.8336389023198554,"L2_area":0.04219941331688966,"L2_area_pct":5.621066695158695,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0018","status":"stopped","loss":"graph_div_b_loss","epoch":59,"unit":"T","L1_area":0.033642225459068024,"L1_area_pct":4.481228012790898,"L2_area":0.049465164480930836,"L2_area_pct":6.588882801435137,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0023","status":"stopped","loss":"graph_div_b_loss","epoch":19,"unit":"T","L1_area":0.4241822977415287,"L1_area_pct":56.502135908996024,"L2_area":0.5774272870454897,"L2_area_pct":76.91474921022606,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0024","status":"stopped","loss":"graph_div_b_loss","epoch":9,"unit":"T","L1_area":0.06173698337887438,"L1_area_pct":8.223519567075693,"L2_area":0.08947955870498922,"L2_area_pct":11.918899524908941,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B","arch":"FNO_BipartiteGNN","run":"run_0025","status":"stopped","loss":"graph_div_b_loss","epoch":89,"unit":"T","L1_area":0.026986055473864956,"L1_area_pct":3.5946096339954456,"L2_area":0.03948872772173356,"L2_area_pct":5.259996639384246,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B_best_mse_mae","arch":"FNO_BipartiteGNN","run":"run_0001","status":"stopped","loss":"mse","epoch":49,"unit":"T","L1_area":0.04046076376868473,"L1_area_pct":5.3894742557904465,"L2_area":0.054656763624058594,"L2_area_pct":7.2804167054472595,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B_best_mse_mae","arch":"FNO_BipartiteGNN","run":"run_0002","status":"stopped","loss":"mae","epoch":109,"unit":"T","L1_area":0.02359442854930963,"L1_area_pct":3.142836501396203,"L2_area":0.03498081711870313,"L2_area_pct":4.659531747487148,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B_v3","arch":"FNO_BipartiteGNN_v3","run":"run_0001","status":"stopped","loss":"mae","epoch":99,"unit":"T","L1_area":0.036047311402816896,"L1_area_pct":4.801591435757972,"L2_area":0.05292461357107714,"L2_area_pct":7.049690014990297,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B_v3","arch":"FNO_BipartiteGNN_v3","run":"run_0002","status":"stopped","loss":"mse","epoch":49,"unit":"T","L1_area":0.061333266761534104,"L1_area_pct":8.169743510641627,"L2_area":0.08134243212811999,"L2_area_pct":10.835014048775465,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B_v3","arch":"FNO_BipartiteGNN_v3","run":"run_0003","status":"stopped","loss":"mse","epoch":109,"unit":"T","L1_area":0.04513826785718189,"L1_area_pct":6.012529421294295,"L2_area":0.060502158205874845,"L2_area_pct":8.05903778619953,"B_ref":0.7507367481199808,"n_samples":320},{"problem":"mesh_ans_138x276_B_v3","arch":"FNO_BipartiteGNN_v3","run":"run_0004","status":"stopped","loss":"mse","epoch":119,"unit":"T","L1_area":0.03795377413134293,"L1_area_pct":5.044522486205253,"L2_area":0.04963110506263429,"L2_area_pct":6.596583112848263,"B_ref":0.7523759530288802,"n_samples":320}];
+
+const PROBLEM_INFO = {
+  'mesh_138x276_FEMM_MESH': {
+    order: 0,
+    title: 'mesh_138x276_FEMM_MESH',
+    desc: 'Pipeline v1 (malha FEMM como grafo único). Alvo B (Bx,By). Exploração livre de hiperparâmetros por arquitetura.',
+  },
+  'mesh_138x276_FEMM_MESH_best_mse_mae': {
+    order: 1,
+    title: 'mesh_138x276_FEMM_MESH_best_mse_mae',
+    desc: 'Mesmo pipeline v1 / alvo B, com os melhores hiperparâmetros já conhecidos por arquitetura — comparação direta loss mse vs mae.',
+  },
+  'mesh_138x276_FEMM_MESH_A': {
+    order: 2,
+    title: 'mesh_138x276_FEMM_MESH_A',
+    desc: 'Pipeline v1, alvo escalar A (potencial vetor) em vez de Bx,By.',
+  },
+  'mesh_ans_138x276': {
+    order: 3,
+    title: 'mesh_ans_138x276',
+    desc: 'Pipeline v2 (grafo duplo vértices+elementos, direto do .ans.gz bruto). Alvo escalar A.',
+  },
+  'mesh_ans_138x276_B': {
+    order: 4,
+    title: 'mesh_ans_138x276_B',
+    desc: 'Pipeline v2, alvo B. Sweep grande de FNO_BipartiteGNN, majoritariamente com a loss física graph_div_b_loss.',
+  },
+  'mesh_ans_138x276_B_best_mse_mae': {
+    order: 5,
+    title: 'mesh_ans_138x276_B_best_mse_mae',
+    desc: 'Mesmo pipeline v2 / alvo B, melhores hiperparâmetros já conhecidos — comparação mse vs mae.',
+  },
+  'mesh_ans_138x276_B_v3': {
+    order: 6,
+    title: 'mesh_ans_138x276_B_v3',
+    desc: 'Pipeline v3 (node_cell_count + projeção das 8 células vizinhas do FNO). Alvo B.',
+  },
+};
+
+function fmtAbs(v, unit){
+  if(unit === 'T') return v.toFixed(4) + ' T';
+  return v.toExponential(2).replace('e-', '·10⁻').replace('+','') + ' Wb/m';
+}
+function fmtPct(v){ return v.toFixed(2) + '%'; }
+
+// ---- stat tiles ----
+const statsEl = document.getElementById('stats');
+const problems = [...new Set(RESULTS.map(r=>r.problem))];
+const archs = [...new Set(RESULTS.map(r=>r.arch))];
+const tiles = [
+  [RESULTS.length, 'runs avaliados'],
+  [problems.length, 'datasets mesh_*'],
+  [archs.length, 'arquiteturas'],
+  ['320', 'amostras/run (test set)'],
+  ['28,5–46,5 mm', 'janela radial'],
+  ['0–120°', 'setor angular'],
+];
+statsEl.innerHTML = tiles.map(([n,l])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+
+// ---- top 5 ranking (comparável via %, cruza alvo A e B) ----
+const ranked = [...RESULTS].sort((a,b)=>a.L2_area_pct - b.L2_area_pct).slice(0,5);
+document.getElementById('rank-list').innerHTML = ranked.map((r,i)=>`
+  <div class="rank-row">
+    <div class="rank-num">${i+1}</div>
+    <div class="rank-main">
+      <b>${r.arch}</b> — ${r.problem}
+      <span class="sub">${r.run} · loss=${r.loss} · época ${r.epoch}</span>
+    </div>
+    <div class="rank-metric">
+      <span class="pct">${fmtPct(r.L2_area_pct)}</span> L2
+      <div class="abs">${fmtAbs(r.L2_area, r.unit)}</div>
+    </div>
+    <div class="rank-metric">
+      <span class="pct" style="color:var(--indigo)">${fmtPct(r.L1_area_pct)}</span> L1
+      <div class="abs">${fmtAbs(r.L1_area, r.unit)}</div>
+    </div>
+  </div>
+`).join('');
+
+// ---- grouped tables ----
+const groupsEl = document.getElementById('groups');
+const byProblem = {};
+RESULTS.forEach(r=>{ (byProblem[r.problem] = byProblem[r.problem] || []).push(r); });
+
+const sortedProblems = Object.keys(byProblem).sort((a,b)=>
+  (PROBLEM_INFO[a]?.order ?? 99) - (PROBLEM_INFO[b]?.order ?? 99));
+
+const COLS = [
+  {key:'arch', label:'Arquitetura / run'},
+  {key:'loss', label:'Loss'},
+  {key:'status', label:'Status'},
+  {key:'epoch', label:'Época', num:true},
+  {key:'L1_area_pct', label:'L1', num:true},
+  {key:'L2_area_pct', label:'L2', num:true},
+];
+
+sortedProblems.forEach(problem=>{
+  const rows = byProblem[problem];
+  const info = PROBLEM_INFO[problem] || {title:problem, desc:''};
+  const unit = rows[0].unit;
+  const maxL2 = Math.max(...rows.map(r=>r.L2_area_pct));
+  const minL2 = Math.min(...rows.map(r=>r.L2_area_pct));
+
+  const section = document.createElement('section');
+  section.className = 'group';
+  section.innerHTML = `
+    <div class="group-head">
+      <h2>${info.title}</h2>
+      <span class="group-meta">${rows.length} run${rows.length>1?'s':''} · alvo ${unit === 'T' ? 'B (Bx,By)' : 'A (potencial vetor)'}</span>
+    </div>
+    <p class="group-desc">${info.desc}</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>
+          ${COLS.map(c=>`<th class="${c.num?'num':''}" data-key="${c.key}">${c.label}<span class="arrow"></span></th>`).join('')}
+          <th class="num">L2 relativo</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  `;
+  groupsEl.appendChild(section);
+
+  const tbody = section.querySelector('tbody');
+  let sortKey = 'L2_area_pct', sortAsc = true;
+
+  function render(){
+    const sorted = [...rows].sort((a,b)=>{
+      const av = a[sortKey], bv = b[sortKey];
+      const cmp = (typeof av === 'string') ? av.localeCompare(bv) : (av - bv);
+      return sortAsc ? cmp : -cmp;
+    });
+    tbody.innerHTML = sorted.map(r=>{
+      const isBest = r.L2_area_pct === minL2;
+      const barPct = maxL2 > 0 ? (r.L2_area_pct / maxL2 * 100) : 0;
+      return `
+        <tr>
+          <td class="run-cell"><b>${r.arch}</b><span class="sub">${r.run}${isBest ? ' · <span class=\"best-badge\">melhor L2</span>' : ''}</span></td>
+          <td>${r.loss}</td>
+          <td><span class="pill ${r.status === 'done' ? 'done' : 'stopped'}">${r.status}</span></td>
+          <td class="num">${r.epoch}</td>
+          <td class="num">${fmtPct(r.L1_area_pct)}<span class="sub" style="display:block;font-size:11px;color:var(--text-muted)">${fmtAbs(r.L1_area, r.unit)}</span></td>
+          <td class="num">${fmtPct(r.L2_area_pct)}<span class="sub" style="display:block;font-size:11px;color:var(--text-muted)">${fmtAbs(r.L2_area, r.unit)}</span></td>
+          <td class="num bar-cell">
+            <div class="bar-track"><div class="bar-fill ${isBest?'best':''}" style="width:${barPct}%"></div></div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  section.querySelectorAll('thead th[data-key]').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const key = th.dataset.key;
+      if(sortKey === key){ sortAsc = !sortAsc; } else { sortKey = key; sortAsc = true; }
+      section.querySelectorAll('thead .arrow').forEach(a=>a.textContent='');
+      th.querySelector('.arrow').textContent = sortAsc ? '▲' : '▼';
+      render();
+    });
+  });
+
+  render();
+});
+</script>

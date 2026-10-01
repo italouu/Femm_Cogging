@@ -1,0 +1,16 @@
+device: cuda
+Carregando modelos treinados (loss='mae', checkpoint='best')...
+  [FNO2d] carregado de data\logs\mesh_138x276_FEMM_MESH_best_mse_mae\FNO2d\run_0002\checkpoints\best.pth (epoch 129)
+  [FNO_GNN] carregado de data\logs\mesh_138x276_FEMM_MESH_best_mse_mae\FNO_GNN\run_0002\checkpoints\best.pth (epoch 269)
+  [GNN_PostBase] carregado de data\logs\mesh_138x276_FEMM_MESH_best_mse_mae\GNN_PostBase\run_0002\checkpoints\best.pth (epoch 29)
+  [FNO_BipartiteGNN] carregado de data\logs\mesh_138x276_FEMM_MESH_best_mse_mae\FNO_BipartiteGNN\run_0002\checkpoints\best.pth (epoch 109)
+Gerando design fixo (seed=42)...
+  r_gap = 38.4481 mm, rotor_phase fixo = 0.0°
+Resolvendo FEMM (motor completo, 360°)...
+Montando entradas (malha fatiada [0,120)x[r_in,r_ext])...
+  GT                  |B| mean=0.4095 T  max=0.5497 T
+  FNO2d               |B| mean=0.4040 T  max=0.5494 T
+  FNO_GNN             |B| mean=0.4012 T  max=0.5818 T
+  GNN_PostBase        |B| mean=0.4112 T  max=0.5832 T
+  FNO_BipartiteGNN    |B| mean=0.4110 T  max=0.5747 T
+Gráfico salvo em tests\airgap_b_magnitude_compare.png

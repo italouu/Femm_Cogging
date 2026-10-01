@@ -1,0 +1,22 @@
+device: cuda
+Carregando modelos treinados (loss='mae', checkpoint='best')...
+  [FNO2d] carregado de data\logs\mesh_138x276_FEMM_MESH_best_mse_mae\FNO2d\run_0002\checkpoints\best.pth (epoch 129)
+  [FNO_GNN] carregado de data\logs\mesh_138x276_FEMM_MESH_best_mse_mae\FNO_GNN\run_0002\checkpoints\best.pth (epoch 269)
+  [GNN_PostBase] carregado de data\logs\mesh_138x276_FEMM_MESH_best_mse_mae\GNN_PostBase\run_0002\checkpoints\best.pth (epoch 29)
+  [FNO_BipartiteGNN] carregado de data\logs\mesh_138x276_FEMM_MESH_best_mse_mae\FNO_BipartiteGNN\run_0002\checkpoints\best.pth (epoch 109)
+Gerando design fixo (seed=42)...
+  r_gap = 38.4481 mm, passo de ranhura = 10.0000°, N_PHASE=10
+[ 1/10] phase= 0.0000°  GT=  0.8679mNm  FNO2d= -4.8061mNm  FNO_GNN=  5.4267mNm  GNN_PostBase=  5.7296mNm  FNO_BipartiteGNN= -3.8928mNm   (20.9s)  [35898 nós, 71323 elems]
+[ 2/10] phase= 1.1111°  GT= -0.1786mNm  FNO2d=-143.4839mNm  FNO_GNN=-94.4744mNm  GNN_PostBase=-231.8146mNm  FNO_BipartiteGNN=-12.5609mNm   (21.1s)  [36026 nós, 71657 elems]
+[ 3/10] phase= 2.2222°  GT=  0.6786mNm  FNO2d=-140.2081mNm  FNO_GNN=-54.4920mNm  GNN_PostBase=-301.5910mNm  FNO_BipartiteGNN=-21.0694mNm   (20.4s)  [35879 nós, 71371 elems]
+[ 4/10] phase= 3.3333°  GT=  0.5190mNm  FNO2d=-52.2304mNm  FNO_GNN= 11.7614mNm  GNN_PostBase=-107.2709mNm  FNO_BipartiteGNN=-21.4860mNm   (22.9s)  [35966 nós, 71466 elems]
+[ 5/10] phase= 4.4444°  GT= -1.5104mNm  FNO2d=112.1062mNm  FNO_GNN= 84.2083mNm  GNN_PostBase= 81.7171mNm  FNO_BipartiteGNN= -4.9080mNm   (20.2s)  [35790 nós, 71184 elems]
+[ 6/10] phase= 5.5556°  GT= -0.6575mNm  FNO2d=  1.8161mNm  FNO_GNN= -9.5680mNm  GNN_PostBase=-47.5570mNm  FNO_BipartiteGNN=-11.6362mNm   (23.7s)  [35946 nós, 71513 elems]
+[ 7/10] phase= 6.6667°  GT=  0.5129mNm  FNO2d= 87.9454mNm  FNO_GNN= 93.4537mNm  GNN_PostBase=166.7594mNm  FNO_BipartiteGNN= -0.0993mNm   (22.4s)  [35859 nós, 71336 elems]
+[ 8/10] phase= 7.7778°  GT= -0.1430mNm  FNO2d=154.5963mNm  FNO_GNN= 75.1708mNm  GNN_PostBase=216.2307mNm  FNO_BipartiteGNN=  8.9115mNm   (23.9s)  [35560 nós, 70726 elems]
+[ 9/10] phase= 8.8889°  GT=  0.7635mNm  FNO2d= 73.2170mNm  FNO_GNN= 61.4101mNm  GNN_PostBase=136.3793mNm  FNO_BipartiteGNN= -3.9757mNm   (23.7s)  [35902 nós, 71395 elems]
+[10/10] phase=10.0000°  GT=  0.0696mNm  FNO2d=-149.9290mNm  FNO_GNN=-88.6509mNm  GNN_PostBase=-139.0544mNm  FNO_BipartiteGNN=-21.3398mNm   (23.4s)  [35904 nós, 71417 elems]
+Varredura completa em 222.5s
+Dados salvos em tests\cogging_torque_mesh_pipeline_data.json
+Estágios intermediários salvos em tests\data/ (raw/, mesh/, pred/)
+Gráfico salvo em tests\cogging_torque_mesh_pipeline.png

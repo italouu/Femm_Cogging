@@ -1,0 +1,98 @@
+[
+  {
+    "n_samples": 320,
+    "n_pts": 10201554,
+    "B_ref": 0.7749031633416057,
+    "mae_pointwise_T": 0.17631404231480935,
+    "mae_pointwise_pct": 22.75304201295197,
+    "mae_area_T": 0.05383022370160247,
+    "mae_area_pct": 6.946703310575096,
+    "label": "FNO2d (mse)",
+    "epoch": 109,
+    "dataset": "mesh_138x276_FEMM_MESH"
+  },
+  {
+    "n_samples": 320,
+    "n_pts": 10201554,
+    "B_ref": 0.7749031633416057,
+    "mae_pointwise_T": 0.17776664884849436,
+    "mae_pointwise_pct": 22.94049853686406,
+    "mae_area_T": 0.051135396079189044,
+    "mae_area_pct": 6.598940164172061,
+    "label": "FNO2d (mae)",
+    "epoch": 129,
+    "dataset": "mesh_138x276_FEMM_MESH"
+  },
+  {
+    "n_samples": 320,
+    "n_pts": 10201554,
+    "B_ref": 0.7749031633416057,
+    "mae_pointwise_T": 0.11856710146634737,
+    "mae_pointwise_pct": 15.300892688971853,
+    "mae_area_T": 0.07899869412488646,
+    "mae_area_pct": 10.19465371443592,
+    "label": "FNO_GNN (mse)",
+    "epoch": 89,
+    "dataset": "mesh_138x276_FEMM_MESH"
+  },
+  {
+    "n_samples": 320,
+    "n_pts": 10201554,
+    "B_ref": 0.7749031633416057,
+    "mae_pointwise_T": 0.09356327774398544,
+    "mae_pointwise_pct": 12.074189675586512,
+    "mae_area_T": 0.052426108719691264,
+    "mae_area_pct": 6.765504542995384,
+    "label": "FNO_GNN (mae)",
+    "epoch": 269,
+    "dataset": "mesh_138x276_FEMM_MESH"
+  },
+  {
+    "n_samples": 320,
+    "n_pts": 10201554,
+    "B_ref": 0.7749031633416057,
+    "mae_pointwise_T": 0.1774338900371974,
+    "mae_pointwise_pct": 22.897556550427716,
+    "mae_area_T": 0.06165307488271129,
+    "mae_area_pct": 7.956229603818556,
+    "label": "GNN_PostBase (mse)",
+    "epoch": 49,
+    "dataset": "mesh_138x276_FEMM_MESH"
+  },
+  {
+    "n_samples": 320,
+    "n_pts": 10201554,
+    "B_ref": 0.7749031633416057,
+    "mae_pointwise_T": 0.1809840729615342,
+    "mae_pointwise_pct": 23.35570191520173,
+    "mae_area_T": 0.058171231676493275,
+    "mae_area_pct": 7.506903369143851,
+    "label": "GNN_PostBase (mae)",
+    "epoch": 29,
+    "dataset": "mesh_138x276_FEMM_MESH"
+  },
+  {
+    "n_samples": 320,
+    "n_pts": 10201554,
+    "B_ref": 0.7507367481199808,
+    "mae_pointwise_T": 0.05122760141149513,
+    "mae_pointwise_pct": 6.82364377923166,
+    "mae_area_T": 0.04046076375918145,
+    "mae_area_pct": 5.389474254524586,
+    "label": "FNO_BipartiteGNN (mse)",
+    "epoch": 49,
+    "dataset": "mesh_ans_138x276_B"
+  },
+  {
+    "n_samples": 320,
+    "n_pts": 10201554,
+    "B_ref": 0.7507367481199808,
+    "mae_pointwise_T": 0.04282776831831018,
+    "mae_pointwise_pct": 5.704765142449848,
+    "mae_area_T": 0.023594428588444762,
+    "mae_area_pct": 3.1428365066091,
+    "label": "FNO_BipartiteGNN (mae)",
+    "epoch": 109,
+    "dataset": "mesh_ans_138x276_B"
+  }
+]

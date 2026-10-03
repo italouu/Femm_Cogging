@@ -21,8 +21,14 @@ class FNO2d(nn.Module):
                  lift_layers,
                  proj_width,
                  proj_layers,
-                 data_res):
+                 data_res,
+                 interp_mode='legacy'):
         super().__init__()
+        # interp_mode não é usado no forward (FNO2d só produz grade) — fica no
+        # modelo pra que avaliações que interpolam a saída nos nós da malha
+        # (eval.py, scripts/eval_surface_integral_table.py) usem a mesma
+        # interpolação registrada no config da run (B1, src/neural_op/archs/interp.py).
+        self.interp_mode = interp_mode
 
         self.in_channels  = in_channels
         self.out_channels = out_channels

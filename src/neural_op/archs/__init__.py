@@ -79,6 +79,8 @@ def _gnn_post_base_kwargs(cfg):
         'base_out_ch':      cfg.base_out_ch,
         'base_normalize':   cfg.base_normalize,
         'base_norm_stats':  cfg.base_norm_stats,
+        # B1 — getattr: configs antigos reconstruídos sem o campo caem no legado
+        'interp_mode':      getattr(cfg, 'interp_mode', 'legacy'),
     }
 
 

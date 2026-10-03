@@ -431,7 +431,11 @@ def _plot_fno_gnn_mesh(model, y_hw_fno, y_nodes, node_x, node_y, Li, thr, eval_c
     vec = node_y.shape[1] >= 2   # False -> alvo escalar (A), True -> vetorial (Bx,By)
     c0_label = 'Bx' if vec else 'A'
 
-    fno_at_nodes = _interpolate_fno_to_nodes(y_hw_fno, node_x, Li)
+    # B1 — mesma interpolação usada no forward do modelo (model.interp_mode);
+    # EvalCfg.interp_mode, se setado, sobrescreve (comparar legacy × corrigida)
+    interp_mode = (getattr(eval_cfg, 'interp_mode', None)
+                   or getattr(model, 'interp_mode', 'legacy'))
+    fno_at_nodes = _interpolate_fno_to_nodes(y_hw_fno, node_x, Li, mode=interp_mode)
 
     c0_true, c0_fno, c0_gnn = node_y[:, 0].numpy(), fno_at_nodes[:, 0].numpy(), y_nodes[:, 0].numpy()
     if vec:

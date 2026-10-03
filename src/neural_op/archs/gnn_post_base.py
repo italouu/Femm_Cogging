@@ -111,8 +111,12 @@ class GNN_PostBase(torch.nn.Module):
 
     def __init__(self, base_run_dir, base_checkpoint, gnn_node_width, gnn_n_layers,
                  edge_dim, node_in_ch, base_out_ch, base_arch=None, base_arch_cfg=None,
-                 base_normalize=False, base_norm_stats=None):
+                 base_normalize=False, base_norm_stats=None, interp_mode='legacy'):
         super().__init__()
+        # B1 — interpolação da saída do FNO2d base nos nós (src/neural_op/archs/
+        # interp.py). Só age com base FNO2d; base FNO_GNN interpola internamente
+        # com o interp_mode dele próprio.
+        self.interp_mode = interp_mode
         self.base_arch, self.base_model = _load_frozen_base(
             base_run_dir, base_checkpoint,
             fallback_arch=base_arch, fallback_arch_cfg=base_arch_cfg,
@@ -154,7 +158,8 @@ class GNN_PostBase(torch.nn.Module):
         with torch.no_grad():
             if self.base_arch == 'FNO2d':
                 y_hw_base     = self.base_model(x_hw_base)
-                base_at_nodes = _interpolate_fno_to_nodes(y_hw_base, node_x, L)
+                base_at_nodes = _interpolate_fno_to_nodes(y_hw_base, node_x, L,
+                                                          mode=self.interp_mode)
                 base_key      = 'y_hw'
             else:  # 'FNO_GNN' / 'FNO_GNN_v2'
                 y_hw_base, base_at_nodes = self.base_model(x_hw_base, node_x, edge_index, edge_attr, L)

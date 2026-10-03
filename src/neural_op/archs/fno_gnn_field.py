@@ -19,7 +19,8 @@ class FNO_GNN_Field(FNO_GNN):
 
     def forward(self, x_hw, node_x, edge_index, edge_attr, L, return_components=False):
         y_hw_fno     = self.fno(x_hw)
-        fno_at_nodes = _interpolate_fno_to_nodes(y_hw_fno, node_x, L)
+        fno_at_nodes = _interpolate_fno_to_nodes(y_hw_fno, node_x, L,
+                                                 mode=getattr(self, 'interp_mode', 'legacy'))
         gnn_input    = torch.cat([node_x, fno_at_nodes], dim=-1)
         y_nodes      = self.gnn(gnn_input, edge_index, edge_attr)
         if return_components:

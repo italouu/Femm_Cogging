@@ -2,41 +2,45 @@ import torch
 import torch.nn.functional as F
 from src.neural_op.archs._blocks import GNN
 from src.neural_op.archs.fno import FNO2d
+from src.neural_op.archs.interp import interpolate_grid_to_nodes
 
 
-def _interpolate_fno_to_nodes(fno_out, node_x, L):
+def _interpolate_fno_to_nodes(fno_out, node_x, L, mode='legacy'):
     """
     Interpolação bilinear da saída do FNO (grade regular) nas posições dos nós quadtree.
 
     fno_out : [B, C, H, W]
     node_x  : [S_tot, 5]   colunas 3,4 = r_base, c_base ∈ [0,1]
     L       : [B]           nós por amostra
+    mode    : 'legacy' (align_corners=True, comportamento antigo) |
+              'cell_centered' (B1 — ver src/neural_op/archs/interp.py)
     Retorna : [S_tot, C]
     """
-    B, C, _, _ = fno_out.shape
-    device = fno_out.device
-    dtype  = fno_out.dtype
-
-    # F.grid_sample usa coordenadas em [-1, 1]; eixo x=coluna, eixo y=linha
-    r_norm = 2.0 * node_x[:, 3] - 1.0
-    c_norm = 2.0 * node_x[:, 4] - 1.0
-
-    fno_at_nodes = torch.empty(node_x.size(0), C, device=device, dtype=dtype)
-    offset = 0
-    for b in range(B):
-        n    = int(L[b].item())
-        grid = torch.stack(
-            [c_norm[offset:offset + n], r_norm[offset:offset + n]], dim=-1
-        ).unsqueeze(0).unsqueeze(2)                                   # [1, n, 1, 2]
-
-        interp = F.grid_sample(
-            fno_out[b:b + 1], grid,
-            mode='bilinear', align_corners=True, padding_mode='border',
-        )                                                              # [1, C, n, 1]
-        fno_at_nodes[offset:offset + n] = interp[0, :, :, 0].T       # [n, C]
-        offset += n
-
-    return fno_at_nodes   # [S_tot, C]
+    # [REMOVIDO 2026-10-03, B1] corpo próprio com grid_sample(align_corners=True)
+    # — centralizado em src/neural_op/archs/interp.py::interpolate_grid_to_nodes
+    # (mode='legacy' reproduz exatamente este código), pra treino e avaliação
+    # nunca divergirem. Corrigido no modo 'cell_centered' (grade centrada em
+    # células + wrap angular).
+    # B, C, _, _ = fno_out.shape
+    # device = fno_out.device
+    # dtype  = fno_out.dtype
+    # r_norm = 2.0 * node_x[:, 3] - 1.0
+    # c_norm = 2.0 * node_x[:, 4] - 1.0
+    # fno_at_nodes = torch.empty(node_x.size(0), C, device=device, dtype=dtype)
+    # offset = 0
+    # for b in range(B):
+    #     n    = int(L[b].item())
+    #     grid = torch.stack(
+    #         [c_norm[offset:offset + n], r_norm[offset:offset + n]], dim=-1
+    #     ).unsqueeze(0).unsqueeze(2)
+    #     interp = F.grid_sample(
+    #         fno_out[b:b + 1], grid,
+    #         mode='bilinear', align_corners=True, padding_mode='border',
+    #     )
+    #     fno_at_nodes[offset:offset + n] = interp[0, :, :, 0].T
+    #     offset += n
+    # return fno_at_nodes
+    return interpolate_grid_to_nodes(fno_out, node_x[:, 3], node_x[:, 4], L, mode=mode)
 
 
 class FNO_GNN(torch.nn.Module):
@@ -83,8 +87,10 @@ class FNO_GNN(torch.nn.Module):
                  edge_dim,
                  grid_in_ch,
                  grid_out_ch,
-                 node_in_ch):
+                 node_in_ch,
+                 interp_mode='legacy'):
         super().__init__()
+        self.interp_mode = interp_mode   # B1 — ver src/neural_op/archs/interp.py
 
         self.fno = FNO2d(
             in_channels=grid_in_ch,
@@ -105,7 +111,7 @@ class FNO_GNN(torch.nn.Module):
 
     def forward(self, x_hw, node_x, edge_index, edge_attr, L, return_components=False):
         y_hw_fno     = self.fno(x_hw)
-        fno_at_nodes = _interpolate_fno_to_nodes(y_hw_fno, node_x, L)
+        fno_at_nodes = _interpolate_fno_to_nodes(y_hw_fno, node_x, L, mode=self.interp_mode)
         gnn_input    = torch.cat([node_x, fno_at_nodes], dim=-1)
         delta        = self.gnn(gnn_input, edge_index, edge_attr)
         if return_components:

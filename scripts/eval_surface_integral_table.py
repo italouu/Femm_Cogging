@@ -222,7 +222,9 @@ def eval_chunk(arch, model, normalizer, chunks, acc_mesh, acc_grid):
 
         if arch == 'FNO2d':
             out_hw = _dec(normalizer, model(x_in), 'y_hw')
-            y_nodes = _interpolate_fno_to_nodes(out_hw, node_x.to(DEVICE), Li.to(DEVICE))
+            # B1 — interpolação registrada no config da run ('legacy' em runs antigas)
+            y_nodes = _interpolate_fno_to_nodes(out_hw, node_x.to(DEVICE), Li.to(DEVICE),
+                                                mode=getattr(model, 'interp_mode', 'legacy'))
             node_area = node_x[:, 2].numpy()
         elif arch in ('FNO_GNN', 'GNN_PostBase'):
             ei = d['edge_index'][:, es:ee] - ns

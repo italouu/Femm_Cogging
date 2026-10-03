@@ -115,6 +115,11 @@ class FNOConfig:
     proj_width: int = 64
     proj_layers: int = 3
     data_res: tuple = (135, 270)
+    # B1 (2026-10-03) — interpolação grade→nós usada ao avaliar a saída do FNO2d
+    # na malha (src/neural_op/archs/interp.py): 'legacy' (align_corners=True,
+    # comportamento antigo; default pra configs antigos reconstruídos sem o
+    # campo) | 'cell_centered' (correção: grade centrada em células + wrap angular)
+    interp_mode: str = 'legacy'
 
     @classmethod
     def from_dict(cls, d: dict):
@@ -182,6 +187,7 @@ class FNO_GNNConfig:
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
     lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
+    interp_mode: str = 'legacy'   # B1 — ver FNOConfig.interp_mode
 
     # edge_dim / grid_in_ch / grid_out_ch / node_in_ch — todos detectados
     # automaticamente em NnCfg.__post_init__ (helper _detect_chunk_dims) a
@@ -236,6 +242,7 @@ class FNO_BipartiteGNNConfig:
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
     lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
+    interp_mode: str = 'legacy'   # B1 — ver FNOConfig.interp_mode
 
     # edge_dim/grid_in_ch/grid_out_ch/node_in_ch/elem_in_ch/cross_edge_dim --
     # todos auto-detectados em NnCfg.__post_init__ (helper _detect_chunk_dims)
@@ -309,6 +316,7 @@ class GNN_PostBaseConfig:
     base_checkpoint: str = 'best'   # 'best', 'latest' ou 'final'
     gnn_node_width : int = 32
     gnn_n_layers   : int = 3
+    interp_mode    : str = 'legacy'   # B1 — interpolação da saída do FNO2d base nos nós
 
     # Snapshot de arch/arch_cfg/epoch de base_run_dir, capturado em __post_init__ e
     # gravado em config.json desta run (via NnCfg → ModelManager.open). Garante que os

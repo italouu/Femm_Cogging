@@ -14,6 +14,9 @@ class EvalCfg:
                                                          # config.json da run (treino); se setado, ignora chunk_index (split de
                                                          # treino não é reproduzível em outro dataset) e usa chunk_name
     sample_idx           : int   = 0
+    interp_mode          : Optional[str] = None        # B1: None -> usa o interp_mode do modelo/config
+                                                         # da run; 'legacy'|'cell_centered' sobrescreve
+                                                         # (só nos plots que interpolam FNO -> nós)
     irrelevance_threshold: float = 0.0001
     show_qtree_overlay   : bool  = False               # overlay de refinamento (FNO_GNN)
     error_cap_enabled    : bool  = False                # capa vmax do colormap de erro em error_cap

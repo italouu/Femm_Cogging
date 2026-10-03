@@ -132,6 +132,9 @@ class GNN_PostBase(torch.nn.Module):
             Normalizer.from_dict(base_norm_stats) if base_normalize and base_norm_stats else None
         )
         self.normalizer = None   # atribuído externamente (ver scripts/train.py/eval.py)
+        # B2 — base FNO_GNN/FNO_BipartiteGNN treinada com fno_node_rescale=True
+        # precisa das stats DELA no forward interno (no-op para FNO2d/rescale off)
+        self.base_model.normalizer = self._base_normalizer
         self.gnn = GNN(
             in_node_features=node_in_ch + base_out_ch,
             out_node_features=base_out_ch,

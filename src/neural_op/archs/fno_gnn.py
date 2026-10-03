@@ -43,6 +43,18 @@ def _interpolate_fno_to_nodes(fno_out, node_x, L, mode='legacy'):
     return interpolate_grid_to_nodes(fno_out, node_x[:, 3], node_x[:, 4], L, mode=mode)
 
 
+def _rescale_fno_to_node_space(fno_at_nodes, normalizer):
+    """B2 (2026-10-03): o estágio FNO produz saída no espaço normalizado de
+    y_hw, mas o resíduo da GNN é somado e comparado com node_y, normalizado
+    com OUTRAS stats (σ Bx 0,391 pixels × 0,539 nós; σ By 0,420 × 0,522 no
+    dataset unificado). Decodifica com as stats de y_hw e recodifica com as de
+    node_y — mesmo round-trip de GNN_PostBase._base_pred_at_nodes. No-op sem
+    normalizer (treino sem normalização: as duas escalas já são a física)."""
+    if normalizer is None:
+        return fno_at_nodes
+    return normalizer.encode(normalizer.decode(fno_at_nodes, 'y_hw'), 'node_y')
+
+
 class FNO_GNN(torch.nn.Module):
     """
     Arquitetura FNO + GNN para predição de B-field em resolução quadtree.
@@ -88,9 +100,14 @@ class FNO_GNN(torch.nn.Module):
                  grid_in_ch,
                  grid_out_ch,
                  node_in_ch,
-                 interp_mode='legacy'):
+                 interp_mode='legacy',
+                 fno_node_rescale=False):
         super().__init__()
         self.interp_mode = interp_mode   # B1 — ver src/neural_op/archs/interp.py
+        # B2 — True: FNO@nós recodificado de stats y_hw -> node_y antes do
+        # resíduo (_rescale_fno_to_node_space); False: comportamento antigo.
+        self.fno_node_rescale = fno_node_rescale
+        self.normalizer = None   # atribuído externamente (scripts/train.py/eval.py)
 
         self.fno = FNO2d(
             in_channels=grid_in_ch,
@@ -112,6 +129,8 @@ class FNO_GNN(torch.nn.Module):
     def forward(self, x_hw, node_x, edge_index, edge_attr, L, return_components=False):
         y_hw_fno     = self.fno(x_hw)
         fno_at_nodes = _interpolate_fno_to_nodes(y_hw_fno, node_x, L, mode=self.interp_mode)
+        if self.fno_node_rescale:
+            fno_at_nodes = _rescale_fno_to_node_space(fno_at_nodes, self.normalizer)
         gnn_input    = torch.cat([node_x, fno_at_nodes], dim=-1)
         delta        = self.gnn(gnn_input, edge_index, edge_attr)
         if return_components:

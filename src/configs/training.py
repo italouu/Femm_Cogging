@@ -188,6 +188,11 @@ class FNO_GNNConfig:
     gnn_n_layers: int = 3
     lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
     interp_mode: str = 'legacy'   # B1 — ver FNOConfig.interp_mode
+    # B2 (2026-10-03) — True: saída do FNO interpolada nos nós é recodificada de
+    # stats de y_hw para stats de node_y antes de somar o resíduo da GNN
+    # (fno_gnn.py::_rescale_fno_to_node_space); False: comportamento antigo
+    # (default pra configs antigos reconstruídos sem o campo).
+    fno_node_rescale: bool = False
 
     # edge_dim / grid_in_ch / grid_out_ch / node_in_ch — todos detectados
     # automaticamente em NnCfg.__post_init__ (helper _detect_chunk_dims) a
@@ -243,6 +248,7 @@ class FNO_BipartiteGNNConfig:
     gnn_n_layers: int = 3
     lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
     interp_mode: str = 'legacy'   # B1 — ver FNOConfig.interp_mode
+    fno_node_rescale: bool = False   # B2 — ver FNO_GNNConfig.fno_node_rescale
 
     # edge_dim/grid_in_ch/grid_out_ch/node_in_ch/elem_in_ch/cross_edge_dim --
     # todos auto-detectados em NnCfg.__post_init__ (helper _detect_chunk_dims)

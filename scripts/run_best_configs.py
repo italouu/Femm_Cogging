@@ -24,6 +24,19 @@ suavizado do FEMM (gabarito diferente). Por
 isso FNO2d precisa vir antes de GNN_PostBase em BEST_CONFIGS, e o
 GNN_PostBaseConfig é construído só na hora do treino (__post_init__ lê o
 config.json da base, que ainda não existe na importação do módulo).
+
+2026-10-03 — bateria definitiva (pré-artigo). Correções ligadas por chaves no
+topo do módulo, cada uma com o comportamento antigo disponível:
+  B1 INTERP_MODE (interpolação grade→nós centrada em células + wrap angular),
+  B2 FNO_NODE_RESCALE (FNO@nós recodificado y_hw→node_y antes do resíduo),
+  B3 FULL_SPECTRUM (data_res=138×276, modes=(69,139), sem sobreposição),
+  B4 METRICS_EVERY_EPOCH (epochs.csv/run_summary.json — ver ModelManager),
+  B5 N_REPEATS (repetições sem controle de semente; GNN_PostBase pareado com
+     o FNO2d da mesma loss E repetição — NnCfg.repeat), [DECISÃO PENDENTE]
+  B6 INCLUDE_REL_L2 (loss relative_l2 nas 4 archs), [DECISÃO PENDENTE].
+Antes de rodar: arquivar os logs da bateria anterior (B0,
+scripts/archive_old_battery_logs.py) — senão _find_base_run_dir pode achar o
+FNO2d antigo. Roteiro completo: docs/bateria_definitiva/ROTEIRO.md.
 """
 import json
 import traceback
@@ -32,10 +45,41 @@ from pathlib import Path
 from src.configs.training import (
     NnCfg, FNOConfig, FNO_GNNConfig, GNN_PostBaseConfig, FNO_BipartiteGNNConfig,
 )
+from src.configs.monitor import MonitorCfg
+from src.neural_op.archs.fno import full_spectrum_modes
 from scripts.train import run
 
 UNIFIED_ROOT = 'mesh_ans_138x276_unified'       # data/torch/data_chunks/<UNIFIED_ROOT>/<arch>/
 PROBLEM      = f'{UNIFIED_ROOT}_best_mse_mae'   # data/logs/<PROBLEM>/<arch>/
+
+# ── Correções da bateria definitiva (2026-10-03) ─────────────────────────────
+# Cada uma com o comportamento antigo disponível pela própria chave, pra
+# permitir comparar antes × depois. Hiperparâmetros (lr, γ, larguras, camadas,
+# batch, n_epochs, train_split, lambda_loss) NÃO mudam.
+INTERP_MODE      = 'cell_centered'  # B1: 'legacy' (antigo) | 'cell_centered'
+FNO_NODE_RESCALE = True             # B2: False = antigo (FNO@nós na escala de y_hw)
+FULL_SPECTRUM    = True             # B3: False = antigo (data_res/modes abaixo, comentados)
+GRID_HW          = (138, 276)       # grade real dos chunks unificados
+N_REPEATS        = 1                # B5: [DECISÃO PENDENTE] 1 = execução única;
+                                    #     N>1 = N repetições sem controle de semente
+INCLUDE_REL_L2   = False            # B6: [DECISÃO PENDENTE] True adiciona loss='relative_l2'
+                                    #     ATENÇÃO: relative_l2_loss normaliza por linha da
+                                    #     dim 0 — em nós [S,C] isso é POR NÓ (|e|/|y| com y em
+                                    #     z-score, ~0 em muitos nós), não por amostra
+METRICS_EVERY_EPOCH = True          # B4: mae_hw/mae_graph em toda época (epochs.csv);
+                                    #     custo: +1 forward sobre o test set por época
+
+if FULL_SPECTRUM:
+    DATA_RES             = GRID_HW
+    MODES1, MODES2       = full_spectrum_modes(*GRID_HW)   # (69, 139)
+    DATA_RES_BIPARTITE   = GRID_HW
+else:
+    # valores da bateria anterior: FNO2d/FNO_GNN com data_res=(135,270) (modes1
+    # truncado em 135 → weights1/weights2 sobrepostos nas linhas 3..134);
+    # Bipartite com (138,276) (modes1=138 → weights2 sobrescreve weights1 inteiro)
+    DATA_RES             = (135, 270)
+    MODES1, MODES2       = 270, 270
+    DATA_RES_BIPARTITE   = (138, 276)
 # [REMOVIDO 2026-10-01] base única com loss fixa — substituído por pareamento por loss
 # (GNN_PostBase mse -> FNO2d mse, mae -> FNO2d mae), decisão do usuário.
 # BASE_LOSS    = 'mae'   # loss do FNO2d desta bateria usado como base do GNN_PostBase
@@ -53,10 +97,16 @@ BEST_CONFIGS = [
         dataset=f'{UNIFIED_ROOT}/FNO2d',
         lr=0.005,
         scheduler_gamma=0.7,
+        # [REMOVIDO 2026-10-03, B3] modes/data_res fixos — agora via FULL_SPECTRUM
+        # arch_cfg=FNOConfig(
+        #     modes1=270, modes2=270, conv_width=8, conv_layers=4,
+        #     lift_width=64, lift_layers=3, proj_width=64, proj_layers=3,
+        #     data_res=(135, 270),
+        # ),
         arch_cfg=FNOConfig(
-            modes1=270, modes2=270, conv_width=8, conv_layers=4,
+            modes1=MODES1, modes2=MODES2, conv_width=8, conv_layers=4,
             lift_width=64, lift_layers=3, proj_width=64, proj_layers=3,
-            data_res=(135, 270),
+            data_res=DATA_RES, interp_mode=INTERP_MODE,
         ),
     ),
     dict(
@@ -66,10 +116,17 @@ BEST_CONFIGS = [
         dataset=f'{UNIFIED_ROOT}/FNO_GNN',
         lr=0.003,
         scheduler_gamma=0.8,
+        # [REMOVIDO 2026-10-03, B3] modes/data_res fixos — agora via FULL_SPECTRUM
+        # arch_cfg=FNO_GNNConfig(
+        #     fno_modes1=270, fno_modes2=270, fno_conv_width=6, fno_conv_layers=4,
+        #     fno_lift_width=64, fno_lift_layers=3, fno_proj_width=64, fno_proj_layers=3,
+        #     data_res=(135, 270), gnn_node_width=32, gnn_n_layers=3, lambda_loss=0,
+        # ),
         arch_cfg=FNO_GNNConfig(
-            fno_modes1=270, fno_modes2=270, fno_conv_width=6, fno_conv_layers=4,
+            fno_modes1=MODES1, fno_modes2=MODES2, fno_conv_width=6, fno_conv_layers=4,
             fno_lift_width=64, fno_lift_layers=3, fno_proj_width=64, fno_proj_layers=3,
-            data_res=(135, 270), gnn_node_width=32, gnn_n_layers=3, lambda_loss=0,
+            data_res=DATA_RES, gnn_node_width=32, gnn_n_layers=3, lambda_loss=0,
+            interp_mode=INTERP_MODE, fno_node_rescale=FNO_NODE_RESCALE,
         ),
     ),
     dict(
@@ -90,7 +147,10 @@ BEST_CONFIGS = [
         # [REMOVIDO 2026-10-01] fábrica sem loss (base com BASE_LOSS fixa)
         # arch_cfg=lambda: _make_postbase_cfg(gnn_node_width=64, gnn_n_layers=6),
         # fábrica recebe a loss do treino -> base = FNO2d desta bateria com a mesma loss
-        arch_cfg=lambda loss: _make_postbase_cfg(loss, gnn_node_width=64, gnn_n_layers=6),
+        # [REMOVIDO 2026-10-03, B5] fábrica só por loss — agora (loss, repetição)
+        # arch_cfg=lambda loss: _make_postbase_cfg(loss, gnn_node_width=64, gnn_n_layers=6),
+        arch_cfg=lambda loss, repeat: _make_postbase_cfg(
+            loss, repeat, gnn_node_width=64, gnn_n_layers=6, interp_mode=INTERP_MODE),
     ),
     dict(
         arch='FNO_BipartiteGNN',
@@ -99,81 +159,160 @@ BEST_CONFIGS = [
         dataset=f'{UNIFIED_ROOT}/FNO_BipartiteGNN',  # melhor run antigo: mesh_ans_138x276_B/run_0015
         lr=0.01,                                # (mae_graph=0.0503 T, lá com graph_div_b_loss — aqui mse/mae puros)
         scheduler_gamma=0.6,
+        # [REMOVIDO 2026-10-03, B3] modes/data_res fixos — agora via FULL_SPECTRUM
+        # arch_cfg=FNO_BipartiteGNNConfig(
+        #     fno_modes1=270, fno_modes2=270, fno_conv_width=6, fno_conv_layers=4,
+        #     fno_lift_width=64, fno_lift_layers=3, fno_proj_width=64, fno_proj_layers=3,
+        #     data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3, lambda_loss=0,
+        # ),
         arch_cfg=FNO_BipartiteGNNConfig(
-            fno_modes1=270, fno_modes2=270, fno_conv_width=6, fno_conv_layers=4,
+            fno_modes1=MODES1, fno_modes2=MODES2, fno_conv_width=6, fno_conv_layers=4,
             fno_lift_width=64, fno_lift_layers=3, fno_proj_width=64, fno_proj_layers=3,
-            data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3, lambda_loss=0,
+            data_res=DATA_RES_BIPARTITE, gnn_node_width=32, gnn_n_layers=3, lambda_loss=0,
+            interp_mode=INTERP_MODE, fno_node_rescale=FNO_NODE_RESCALE,
         ),
     ),
 ]
 
-LOSSES = ['mse', 'mae']
+# [REMOVIDO 2026-10-03, B6] lista fixa — relative_l2 entra por INCLUDE_REL_L2
+# LOSSES = ['mse', 'mae']
+LOSSES = ['mse', 'mae'] + (['relative_l2'] if INCLUDE_REL_L2 else [])
 
 
 # [REMOVIDO 2026-10-01] default loss=BASE_LOSS — loss agora sempre explícita
 # def _find_base_run_dir(arch: str = 'FNO2d', loss: str = BASE_LOSS) -> str:
-def _find_base_run_dir(loss: str, arch: str = 'FNO2d') -> str:
-    """Run mais recente de data/logs/<PROBLEM>/<arch>/ treinado com `loss` e com
-    checkpoints/best.pth — a base do GNN_PostBase desta bateria."""
+# [REMOVIDO 2026-10-03, B5] pareamento só por loss — agora (loss, repetição);
+# também passa a ignorar runs que não terminaram (status running/failed)
+# def _find_base_run_dir(loss: str, arch: str = 'FNO2d') -> str:
+#     candidates = []
+#     for run_dir in sorted((Path('data/logs') / PROBLEM / arch).glob('run_*')):
+#         cfg_path = run_dir / 'config.json'
+#         if not cfg_path.exists() or not (run_dir / 'checkpoints' / 'best.pth').exists():
+#             continue
+#         with open(cfg_path, encoding='utf-8') as f:
+#             if json.load(f).get('loss') == loss:
+#                 candidates.append(run_dir)
+#     if not candidates:
+#         raise FileNotFoundError(...)
+#     return candidates[-1].as_posix()
+def _find_base_run_dir(loss: str, repeat: int = 0, arch: str = 'FNO2d') -> str:
+    """Run mais recente de data/logs/<PROBLEM>/<arch>/ treinado com `loss`, na
+    repetição `repeat`, terminado (status done/stopped) e com checkpoints/best.pth
+    — a base do GNN_PostBase desta bateria."""
     candidates = []
     for run_dir in sorted((Path('data/logs') / PROBLEM / arch).glob('run_*')):
         cfg_path = run_dir / 'config.json'
         if not cfg_path.exists() or not (run_dir / 'checkpoints' / 'best.pth').exists():
             continue
+        status_path = run_dir / 'status.txt'
+        status = status_path.read_text().strip() if status_path.exists() else ''
+        if status not in ('done', 'stopped'):
+            continue
         with open(cfg_path, encoding='utf-8') as f:
-            if json.load(f).get('loss') == loss:
-                candidates.append(run_dir)
+            cfg = json.load(f)
+        # trava extra: a base tem que ter sido treinada com as MESMAS correções
+        # desta bateria (B1/B3) — nunca um FNO2d de configuração antiga
+        acfg = cfg.get('arch_cfg', {})
+        same_fixes = (acfg.get('interp_mode', 'legacy') == INTERP_MODE
+                      and tuple(acfg.get('data_res', ())) == tuple(DATA_RES)
+                      and acfg.get('modes1') == MODES1 and acfg.get('modes2') == MODES2)
+        if cfg.get('loss') == loss and cfg.get('repeat', 0) == repeat and same_fixes:
+            candidates.append(run_dir)
     if not candidates:
         raise FileNotFoundError(
-            f"nenhum run {arch} com loss={loss!r} e best.pth em data/logs/{PROBLEM}/{arch}/ "
-            f"— base do GNN_PostBase precisa ser treinada antes (ordem de BEST_CONFIGS)")
+            f"nenhum run {arch} com loss={loss!r}, repeat={repeat}, status done/stopped e "
+            f"best.pth em data/logs/{PROBLEM}/{arch}/ — base do GNN_PostBase precisa ser "
+            f"treinada antes (ordem de BEST_CONFIGS)")
     return candidates[-1].as_posix()
 
 
 # [REMOVIDO 2026-10-01] versão sem loss (base com BASE_LOSS fixa)
 # def _make_postbase_cfg(**kw) -> GNN_PostBaseConfig:
 #     base_run_dir = _find_base_run_dir()
-def _make_postbase_cfg(loss: str, **kw) -> GNN_PostBaseConfig:
-    base_run_dir = _find_base_run_dir(loss)
-    print(f"  GNN_PostBase base_run_dir = {base_run_dir}", flush=True)
+# [REMOVIDO 2026-10-03, B5] versão sem repetição
+# def _make_postbase_cfg(loss: str, **kw) -> GNN_PostBaseConfig:
+#     base_run_dir = _find_base_run_dir(loss)
+def _make_postbase_cfg(loss: str, repeat: int = 0, **kw) -> GNN_PostBaseConfig:
+    base_run_dir = _find_base_run_dir(loss, repeat)
+    print(f"  GNN_PostBase base_run_dir = {base_run_dir}  (loss={loss}, repeat={repeat})",
+          flush=True)
     return GNN_PostBaseConfig(base_run_dir=base_run_dir, base_checkpoint='best', **kw)
 
 
-def build_run_list():
+# [REMOVIDO 2026-10-03, B5] sem repetições
+# def build_run_list():
+#     runs = []
+#     for base in BEST_CONFIGS:
+#         for loss in LOSSES:
+#             runs.append(dict(base, loss=loss))
+#     return runs
+def build_run_list(n_repeats: int = None):
+    """Repetição externa: dentro de cada repetição, FNO2d vem antes de
+    GNN_PostBase (ordem de BEST_CONFIGS), garantindo a base da mesma
+    (loss, repetição)."""
+    n_repeats = N_REPEATS if n_repeats is None else n_repeats
     runs = []
-    for base in BEST_CONFIGS:
-        for loss in LOSSES:
-            runs.append(dict(base, loss=loss))
+    for rep in range(n_repeats):
+        for base in BEST_CONFIGS:
+            for loss in LOSSES:
+                runs.append(dict(base, loss=loss, repeat=rep))
     return runs
+
+
+def make_nn_cfg(spec, problem: str = None, **overrides) -> NnCfg:
+    """NnCfg de um item de build_run_list(). Fatorado do __main__ pra ser
+    reaproveitado pelo smoke test (scripts/verify_battery.py, V3), que troca
+    problem/n_epochs sem duplicar a montagem."""
+    arch_cfg = spec['arch_cfg']
+    if callable(arch_cfg):
+        arch_cfg = arch_cfg(spec['loss'], spec['repeat'])
+    kw = dict(
+        dataset=spec['dataset'],
+        problem=problem or PROBLEM,
+        arch=spec['arch'],
+        loss=spec['loss'],
+        lr=spec['lr'],
+        scheduler_gamma=spec['scheduler_gamma'],
+        arch_cfg=arch_cfg,
+        repeat=spec['repeat'],
+        # critério de parada = defaults atuais de MonitorCfg (gl_patience=3,
+        # min_epochs=100, early_stop_patience=10); só liga as métricas por época
+        monitor_cfg=MonitorCfg(metrics_every_epoch=METRICS_EVERY_EPOCH),
+    )
+    kw.update(overrides)
+    return NnCfg(**kw)
 
 
 if __name__ == '__main__':
     summary = []
     for spec in build_run_list():
-        label = f"{spec['arch']} / {spec['dataset']} / loss={spec['loss']}"
+        label = f"{spec['arch']} / {spec['dataset']} / loss={spec['loss']} / rep={spec['repeat']}"
         print(f"\n{'='*80}\n{label}\n{'='*80}", flush=True)
         try:
-            _nn = NnCfg(
-                dataset=spec['dataset'],
-                # sufixo só no problem (diretório de logs, data/logs/{problem}/{arch}/) —
-                # dataset continua apontando pros chunks reais; separa estas runs
-                # (best hparams × mse/mae) das demais já registradas em data/logs/{dataset}/.
-                # [REMOVIDO 2026-10-01] problem derivado do dataset — com dataset em
-                # subpasta (<UNIFIED_ROOT>/<arch>) viraria um problem por arch; um único
-                # PROBLEM agrupa a bateria em data/logs/<PROBLEM>/<arch>/.
-                # problem=f"{spec['dataset']}_best_mse_mae",
-                problem=PROBLEM,
-                arch=spec['arch'],
-                loss=spec['loss'],
-                lr=spec['lr'],
-                scheduler_gamma=spec['scheduler_gamma'],
-                # arch_cfg pode ser fábrica (GNN_PostBase — base só existe após o FNO2d;
-                # recebe a loss do treino pra parear com o FNO2d de mesma loss)
-                # [REMOVIDO 2026-10-01] fábrica sem argumento
-                # arch_cfg=spec['arch_cfg']() if callable(spec['arch_cfg']) else spec['arch_cfg'],
-                arch_cfg=(spec['arch_cfg'](spec['loss']) if callable(spec['arch_cfg'])
-                          else spec['arch_cfg']),
-            )
+            _nn = make_nn_cfg(spec)
+            # [REMOVIDO 2026-10-03, B5] montagem inline — fatorada em make_nn_cfg
+            # (repetição + reaproveitamento pelo smoke test V3)
+            # _nn = NnCfg(
+            #     dataset=spec['dataset'],
+            #     # sufixo só no problem (diretório de logs, data/logs/{problem}/{arch}/) —
+            #     # dataset continua apontando pros chunks reais; separa estas runs
+            #     # (best hparams × mse/mae) das demais já registradas em data/logs/{dataset}/.
+            #     # [REMOVIDO 2026-10-01] problem derivado do dataset — com dataset em
+            #     # subpasta (<UNIFIED_ROOT>/<arch>) viraria um problem por arch; um único
+            #     # PROBLEM agrupa a bateria em data/logs/<PROBLEM>/<arch>/.
+            #     # problem=f"{spec['dataset']}_best_mse_mae",
+            #     problem=PROBLEM,
+            #     arch=spec['arch'],
+            #     loss=spec['loss'],
+            #     lr=spec['lr'],
+            #     scheduler_gamma=spec['scheduler_gamma'],
+            #     # arch_cfg pode ser fábrica (GNN_PostBase — base só existe após o FNO2d;
+            #     # recebe a loss do treino pra parear com o FNO2d de mesma loss)
+            #     # [REMOVIDO 2026-10-01] fábrica sem argumento
+            #     # arch_cfg=spec['arch_cfg']() if callable(spec['arch_cfg']) else spec['arch_cfg'],
+            #     arch_cfg=(spec['arch_cfg'](spec['loss']) if callable(spec['arch_cfg'])
+            #               else spec['arch_cfg']),
+            # )
             status = run(_nn)
             summary.append((label, status, None))
         except Exception as e:

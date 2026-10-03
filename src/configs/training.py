@@ -504,6 +504,12 @@ class NnCfg:
     prefetch_factor: int = 2
     split_seed: int = 12
 
+    # B5 (2026-10-03) — índice da repetição (sem controle de semente) na bateria
+    # de scripts/run_best_configs.py; só rótulo gravado no config.json, usado
+    # por _find_base_run_dir pra parear GNN_PostBase com o FNO2d da mesma
+    # (loss, repetição). Configs antigos sem o campo = repetição 0.
+    repeat: int = 0
+
     # Resume
     resume_run:        Optional[str] = None     # caminho para run_XXXX/ existente
     resume_checkpoint: str           = 'latest' # 'latest' ou 'best'

@@ -101,7 +101,10 @@ print(f'GPU {p.name}  {gib:.1f} GiB')
 # GNN_PostBase (width 64 x 6 camadas, batch 32): pico ~25 GiB no smoke (RTX 4080 16 GB falhou)
 if gib < 26:
     print('AVISO: GPU com < 26 GiB — GNN_PostBase (batch 32) pode estourar memória (pico ~25 GiB)')
-import shapely, numpy, pandas, matplotlib, scipy  # dependências da cadeia de parsing/treino
+# [REMOVIDO] shapely/pandas não são importados por nenhum script da cadeia (verificado
+# importando todos e inspecionando sys.modules) — o precheck falhava à toa na VM sem shapely.
+# import shapely, numpy, pandas, matplotlib, scipy  # dependências da cadeia de parsing/treino
+import numpy, matplotlib, scipy  # dependências reais da cadeia de parsing/treino/eval
 EOF
 
     echo "--- disco"

@@ -1,6 +1,18 @@
+import warnings
+
 import torch
 import torch.nn as nn
 from src.neural_op.archs._blocks import MLP, FNO_Blocks
+
+
+def full_spectrum_modes(H, W):
+    """B3 (2026-10-03): (modes1, modes2) que cobrem o espectro completo de uma
+    grade H×W sem sobreposição dos blocos weights1/weights2 de SpectralConv:
+    weights1 cobre as linhas [0, modes1) e weights2 as linhas [H−modes1, H) do
+    rfft2 (frequências positivas/negativas do eixo 0); modes2 = W//2+1 colunas
+    do rfft. modes1 = ceil(H/2) → as duas faixas somam H linhas exatas
+    (138×276 → (69, 139))."""
+    return (H + 1) // 2, W // 2 + 1
 
 
 class FNO2d(nn.Module):
@@ -41,6 +53,15 @@ class FNO2d(nn.Module):
         self.proj_width   = proj_width
         self.proj_layers  = proj_layers
         self.data_res     = data_res
+        # B3 — aviso (não erro, runs antigas continuam carregando): blocos
+        # weights1/weights2 sobrepostos no eixo radial — a faixa de weights2
+        # sobrescreve parte (ou toda) a de weights1, que fica sem gradiente.
+        if 2 * self.modes1 > data_res[0]:
+            warnings.warn(
+                f"FNO2d: modes1={self.modes1} > data_res[0]/2={data_res[0] / 2:g} — "
+                f"weights1/weights2 sobrepostos em {2 * self.modes1 - data_res[0]} linha(s) "
+                f"do espectro (sem sobreposição: modes1=ceil(H/2), ver full_spectrum_modes)",
+                stacklevel=2)
 
         self.lift_layer = MLP(in_ch=in_channels,  out_ch=conv_width,
                               layers=lift_layers,  width=lift_width)

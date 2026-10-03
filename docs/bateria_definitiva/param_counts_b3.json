@@ -1,0 +1,130 @@
+[
+  {
+    "arch": "FNO2d",
+    "variant": "antes",
+    "modes": [
+      135,
+      136
+    ],
+    "data_res": [
+      135,
+      270
+    ],
+    "numel": 9410346,
+    "real": 18810666,
+    "trainable_real": 18810666,
+    "dead_spectral_real": 9191424
+  },
+  {
+    "arch": "FNO2d",
+    "variant": "depois",
+    "modes": [
+      69,
+      139
+    ],
+    "data_res": [
+      138,
+      276
+    ],
+    "numel": 4920618,
+    "real": 9831210,
+    "trainable_real": 9831210,
+    "dead_spectral_real": 0
+  },
+  {
+    "arch": "FNO_GNN",
+    "variant": "antes",
+    "modes": [
+      135,
+      136
+    ],
+    "data_res": [
+      135,
+      270
+    ],
+    "numel": 5310421,
+    "real": 10598101,
+    "trainable_real": 10598101,
+    "dead_spectral_real": 5170176
+  },
+  {
+    "arch": "FNO_GNN",
+    "variant": "depois",
+    "modes": [
+      69,
+      139
+    ],
+    "data_res": [
+      138,
+      276
+    ],
+    "numel": 2784949,
+    "real": 5547157,
+    "trainable_real": 5547157,
+    "dead_spectral_real": 0
+  },
+  {
+    "arch": "GNN_PostBase",
+    "variant": "antes",
+    "modes": [
+      135,
+      136
+    ],
+    "data_res": [
+      135,
+      270
+    ],
+    "numel": 9510642,
+    "real": 18910962,
+    "trainable_real": 100296,
+    "dead_spectral_real": 9191424
+  },
+  {
+    "arch": "GNN_PostBase",
+    "variant": "depois",
+    "modes": [
+      69,
+      139
+    ],
+    "data_res": [
+      138,
+      276
+    ],
+    "numel": 5020914,
+    "real": 9931506,
+    "trainable_real": 100296,
+    "dead_spectral_real": 0
+  },
+  {
+    "arch": "FNO_BipartiteGNN",
+    "variant": "antes",
+    "modes": [
+      138,
+      139
+    ],
+    "data_res": [
+      138,
+      276
+    ],
+    "numel": 5550544,
+    "real": 11074960,
+    "trainable_real": 11074960,
+    "dead_spectral_real": 5524416
+  },
+  {
+    "arch": "FNO_BipartiteGNN",
+    "variant": "depois",
+    "modes": [
+      69,
+      139
+    ],
+    "data_res": [
+      138,
+      276
+    ],
+    "numel": 2788336,
+    "real": 5550544,
+    "trainable_real": 5550544,
+    "dead_spectral_real": 0
+  }
+]

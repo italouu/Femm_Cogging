@@ -22,6 +22,19 @@ def count_params(model):
     return c
 
 
+def count_params_real(model, trainable_only=False):
+    """Nº de parâmetros REAIS: tensores complexos (pesos espectrais cfloat do
+    FNO) contam em dobro (parte real + imaginária). count_params acima conta
+    numel, ou seja, 1 por complexo — mantido por compatibilidade com o
+    n_params já gravado nos config.json antigos."""
+    c = 0
+    for p in model.parameters():
+        if trainable_only and not p.requires_grad:
+            continue
+        c += p.numel() * (2 if p.is_complex() else 1)
+    return c
+
+
 def _batch_size(batch):
     """Conta amostras no batch independente do formato (tuple grid ou dict qtree)."""
     if isinstance(batch, (tuple, list)):

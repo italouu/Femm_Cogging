@@ -54,6 +54,7 @@ def _detect_chunk_dims(dataset: str) -> dict:
     dims = {
         'x_hw_ch': sample['x_hw'].shape[1],
         'y_hw_ch': sample['y_hw'].shape[1],
+        'grid_hw': tuple(sample['x_hw'].shape[-2:]),   # B3 — checagem de data_res
     }
     if 'node_x' in sample:
         dims['node_x_ch'] = sample['node_x'].shape[1]
@@ -572,6 +573,15 @@ class NnCfg:
                 self.arch_cfg.elem_in_ch = dims['elem_in_ch']
             if hasattr(self.arch_cfg, 'cross_edge_dim'):
                 self.arch_cfg.cross_edge_dim = dims['cross_edge_dim']
+            # B3 (2026-10-03) — data_res só limita modes1/modes2 em FNO2d; se
+            # diferir da grade real o espectro pode ficar sobreposto sem aviso
+            # (ex: (135,270) numa grade 138×276). Só avisa, não corrige.
+            data_res = getattr(self.arch_cfg, 'data_res', None)
+            if data_res is not None and tuple(data_res) != dims['grid_hw']:
+                import warnings
+                warnings.warn(
+                    f"NnCfg: arch_cfg.data_res={tuple(data_res)} difere da grade real "
+                    f"{dims['grid_hw']} de '{self.dataset}'", stacklevel=2)
         if self.normalize:
             from src.neural_op.normalization import Normalizer
             self.norm_stats = Normalizer.fit(self.dataset, self.arch).to_dict()

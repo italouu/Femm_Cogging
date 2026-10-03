@@ -5,7 +5,11 @@ from typing import Optional
 @dataclass
 class MonitorCfg:
     checkpoint_every:     int           = 10
-    early_stop_patience:  Optional[int] = None  # None = desativado; conta heartbeats
+    # [REMOVIDO 2026-10-03] default None deixava runs estagnadas rodando até n_epochs
+    # (ex: FNO2d mae unified, best na época 209, rodou até 499 sem ganho)
+    # early_stop_patience:  Optional[int] = None  # None = desativado; conta heartbeats
+    early_stop_patience:  Optional[int] = 10    # heartbeats sem novo best (estagnação);
+                                                 # None = desativado; respeita min_epochs
     early_stop_min_delta: float         = 1e-6
     gl_threshold:         Optional[float] = 5.0  # % — generalization loss (Prechelt 1998);
                                                   # None = desativado; ativo por padrão (GL_5)

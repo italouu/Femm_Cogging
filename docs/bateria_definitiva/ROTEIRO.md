@@ -3,28 +3,19 @@
 Preparado em 2026-10-03. Todos os comandos rodam **da raiz do projeto**. Nada
 aqui dispara a bateria sozinho — o passo 6 é o único que treina de verdade.
 
-## Execução na VM (Linux) — um único comando
-
-`scripts/run_vm_pipeline.sh` roda tudo, ponta a ponta, com todas as correções
-(B1–B4 ligadas; B5/B6 pelas chaves `N_REPEATS`/`INCLUDE_REL_L2` no topo de
-`scripts/run_best_configs.py`, hoje 1 e `False`):
+## Execução — um único comando
 
 ```
 git pull
-tmux new -s bateria            # ou nohup — a bateria leva horas
-scripts/run_vm_pipeline.sh     # precheck → chunks → [Fase 0] → V1 → V2 → params → V3 → B0 → bateria
+python -m scripts.run_bateria_definitiva
 ```
 
-- Para na primeira falha; a bateria só começa se o smoke (V3) passar.
-- Fase 0 só roda se os 8 `best.pth` da bateria antiga estiverem em
-  `data/logs/mesh_ans_138x276_unified_best_mse_mae/` (copiar `old_logs.tar` e
-  `tar -xf` antes); sem eles é pulada com aviso e o resto segue.
-- B0 roda sozinho se essa pasta tiver runs (com Fase 0 completa, ou com
-  `--skip-phase0-check` se ela foi pulada).
-- `--no-battery` para antes da bateria; `--only <etapa>` refaz uma etapa.
-- Logs e marcadores em `data/logs/_vm_pipeline/` (`<etapa>.log`, `.done_<etapa>`);
-  etapas concluídas são puladas ao rodar de novo. A etapa `battery` não é
-  retomável por run: se falhar no meio, recomeça as 8.
+`scripts/run_bateria_definitiva.py` roda, em ordem, chunks → Fase 0 (só se os 8
+`best.pth` antigos estiverem em `data/logs/mesh_ans_138x276_unified_best_mse_mae/`)
+→ V1 → V2 → params → V3 → B0 → bateria, e para na primeira falha (a bateria só
+começa se o smoke V3 passar). Configuração no topo do arquivo: `RUN_BATTERY`,
+`SKIP_STEPS`. B1–B4 já ligados em `scripts/run_best_configs.py`; B5/B6 pelas
+chaves `N_REPEATS`/`INCLUDE_REL_L2` de lá.
 
 ## 0. Pré-requisitos na máquina de execução
 

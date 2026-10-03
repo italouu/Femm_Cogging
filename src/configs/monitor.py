@@ -20,3 +20,7 @@ class MonitorCfg:
                                                   # (ruído do início do treino); 0 = desativado
     log_grad_norm:        bool          = False  # TODO: não implementado
     save_best:            bool          = True
+    # B4 (2026-10-03) — calcula mae_hw/mae_graph (test set, unidade física) em
+    # TODA época, gravados em epochs.csv; False = só no heartbeat (antigo).
+    # Custo: uma passada forward extra sobre o test set por época.
+    metrics_every_epoch:  bool          = False

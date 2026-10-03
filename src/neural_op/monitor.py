@@ -40,6 +40,9 @@ class TrainingMonitor:
         self._best_loss      = float('inf')
         self._patience_count = 0
         self._gl_count       = 0    # heartbeats consecutivos com GL > gl_threshold
+        # B4 — registrados em run_summary.json (ModelManager.close)
+        self.best_epoch      = None
+        self.stop_reason     = None   # 'gl' | 'early_stop_patience' | None (não parou cedo)
 
     def step(self, epoch, train_losses, test_losses, model, optimizer, scheduler,
              *, lr=0.0, train_time_s=0.0, eval_time_s=0.0, samples_per_s=0.0,
@@ -57,6 +60,7 @@ class TrainingMonitor:
         if improved:
             self._best_loss      = test_loss
             self._patience_count = 0
+            self.best_epoch      = epoch
             if self.cfg.save_best:
                 save_checkpoint(str(self.best_path), epoch, model, optimizer, scheduler)
                 print(f"  best -> {self.best_path.name}  (test {test_loss:.4e})")
@@ -86,6 +90,7 @@ class TrainingMonitor:
                 print(f"  early stop: {self._patience_count} heartbeats sem melhora "
                       f"(patience={self.cfg.early_stop_patience})")
                 self.stopped_early = True
+                self.stop_reason   = 'early_stop_patience'
                 return True
 
         # [REMOVIDO 2026-10-02] GL parava no PRIMEIRO heartbeat acima do limiar — um único
@@ -107,6 +112,11 @@ class TrainingMonitor:
                       f"por {self._gl_count} heartbeats consecutivos "
                       f"(best test={self._best_loss:.4e}, atual={test_loss:.4e})")
                 self.stopped_early = True
+                self.stop_reason   = 'gl'
                 return True
 
         return False
+
+    @property
+    def best_loss(self):
+        return None if self._best_loss == float('inf') else self._best_loss

@@ -158,7 +158,8 @@ def save_checkpoint(path, epoch, model, optimizer, scheduler
 
 def fit(model, train_loader, test_loader,
         optimizer, scheduler, loss_fn, device, n_epochs, step_fn,
-        *, start_epoch=0, prev_losses=None, monitor=None, metric_fn=None, log_fn=None):
+        *, start_epoch=0, prev_losses=None, monitor=None, metric_fn=None, log_fn=None,
+        epoch_log_fn=None):
     """
     Loop completo de treino.
 
@@ -178,6 +179,12 @@ def fit(model, train_loader, test_loader,
                   src/neural_op/losses.py), passado por scripts/train.py como
                   `loss_obj.log_epoch`. None usa _default_log_epoch (mesmo texto
                   de sempre) — mantém fit() utilizável sem essa peça.
+    epoch_log_fn: (B4, 2026-10-03) callable(**row) | None — chamado em TODA época
+                  com epoch/train_loss/test_loss/lr (lr usado NA época, antes do
+                  scheduler.step)/train_time_s/eval_time_s/metric_time_s/
+                  epoch_time_s/mae_hw/mae_graph. mae_* só vêm preenchidos em toda
+                  época se monitor.cfg.metrics_every_epoch=True (senão só nos
+                  heartbeats, None nas demais). ModelManager.log_epoch -> epochs.csv.
 
     Returns
     -------
@@ -201,13 +208,25 @@ def fit(model, train_loader, test_loader,
     train_losses = list(prev_losses['train']) if prev_losses else []
     test_losses  = list(prev_losses['test'])  if prev_losses else []
 
+    metrics_every_epoch = (metric_fn is not None and monitor is not None
+                           and getattr(monitor.cfg, 'metrics_every_epoch', False))
+
     for i in range(n_epochs):
         ep = start_epoch + i
+        epoch_lr = optimizer.param_groups[0]['lr']   # B4 — lr usado nesta época
         t0 = time.perf_counter()
         train_loss, n_train_samples = train_epoch(model, train_loader, optimizer, loss_fn, device, step_fn)
         t1 = time.perf_counter()
         test_loss = eval_epoch(model, test_loader, loss_fn, device, step_fn)
         t2 = time.perf_counter()
+        is_heartbeat = monitor is not None and (i + 1) % monitor.cfg.checkpoint_every == 0
+        # B4 — mae_hw/mae_graph: toda época (metrics_every_epoch) ou só no
+        # heartbeat (antigo); calculado 1x e reaproveitado pelo monitor abaixo
+        if metric_fn is not None and (metrics_every_epoch or is_heartbeat):
+            mae_hw, mae_graph = compute_mae_metrics(model, test_loader, device, metric_fn)
+        else:
+            mae_hw, mae_graph = None, None
+        t3 = time.perf_counter()
         if scheduler is not None:
             scheduler.step()
         train_time_s  = t1 - t0
@@ -221,6 +240,11 @@ def fit(model, train_loader, test_loader,
         # print(f"epoch {ep:>4d}  train {train_loss:.4e}  test {test_loss:.4e}"
         #       f"  [{train_time_s:.1f}s + {eval_time_s:.1f}s eval]  {samples_per_s:.0f} samp/s")
         log_fn(ep, train_loss, test_loss, train_time_s, eval_time_s, samples_per_s)
+        if epoch_log_fn is not None:
+            epoch_log_fn(epoch=ep, train_loss=train_loss, test_loss=test_loss, lr=epoch_lr,
+                         train_time_s=train_time_s, eval_time_s=eval_time_s,
+                         metric_time_s=t3 - t2, epoch_time_s=t3 - t0,
+                         mae_hw=mae_hw, mae_graph=mae_graph)
 
         # [REMOVIDO] bloco de checkpoint inline — substituído por TrainingMonitor
         # if checkpoint_every > 0 and checkpoint_path and (i + 1) % checkpoint_every == 0:
@@ -228,12 +252,15 @@ def fit(model, train_loader, test_loader,
 
         if monitor is not None:
             monitor.last_epoch = ep
-            if (i + 1) % monitor.cfg.checkpoint_every == 0:
+            if is_heartbeat:
                 current_lr = optimizer.param_groups[0]['lr']
-                mae_hw, mae_graph = (
-                    compute_mae_metrics(model, test_loader, device, metric_fn)
-                    if metric_fn is not None else (None, None)
-                )
+                # [REMOVIDO 2026-10-03, B4] cálculo do MAE aqui — movido pra cima
+                # (logo após eval_epoch), pra poder rodar em toda época sem
+                # recalcular no heartbeat. Mesmo valor (modelo não muda entre os dois pontos).
+                # mae_hw, mae_graph = (
+                #     compute_mae_metrics(model, test_loader, device, metric_fn)
+                #     if metric_fn is not None else (None, None)
+                # )
                 should_stop = monitor.step(
                     ep, train_losses, test_losses, model, optimizer, scheduler,
                     lr=current_lr, train_time_s=train_time_s,

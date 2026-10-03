@@ -3,33 +3,28 @@
 Preparado em 2026-10-03. Todos os comandos rodam **da raiz do projeto**. Nada
 aqui dispara a bateria sozinho — o passo 6 é o único que treina de verdade.
 
-## Execução na VM (Linux) — caminho recomendado
+## Execução na VM (Linux) — um único comando
 
-Tudo dos passos 2–5 abaixo (e opcionalmente o B0 e a bateria) está encadeado em
-`scripts/run_vm_pipeline.sh`, que para na primeira falha e é retomável:
+`scripts/run_vm_pipeline.sh` roda tudo, ponta a ponta, com todas as correções
+(B1–B4 ligadas; B5/B6 pelas chaves `N_REPEATS`/`INCLUDE_REL_L2` no topo de
+`scripts/run_best_configs.py`, hoje 1 e `False`):
 
 ```
 git pull
-# 1) copiar para a VM (não estão no git — ver "Pré-requisitos" abaixo):
-#      data/raw/mesh_ans_138x276/                         (4000 .ans.gz + valid_designs.csv)
-#      data/logs/mesh_ans_138x276_unified_best_mse_mae/   (8 runs antigas — Fase 0 e V2)
-#      [opcional] data/torch/data_chunks/mesh_ans_138x276_unified/  (senão são gerados)
-# 2) revisar as decisões pendentes (seção 1) no topo de scripts/run_best_configs.py
-bash scripts/run_vm_pipeline.sh                    # precheck, chunks, Fase 0, V1, V2, params, V3
-# 3) revisar docs/bateria_definitiva/*.json/*.md
-bash scripts/run_vm_pipeline.sh --archive          # B0 (move logs antigos -> ..._oldcriterion)
-bash scripts/run_vm_pipeline.sh --battery          # bateria (exige archive concluído)
+tmux new -s bateria            # ou nohup — a bateria leva horas
+scripts/run_vm_pipeline.sh     # precheck → chunks → [Fase 0] → V1 → V2 → params → V3 → B0 → bateria
 ```
 
-- Logs por etapa e marcadores de conclusão em `data/logs/_vm_pipeline/`
-  (`<etapa>.log`, `.done_<etapa>`). Etapa com `.done_*` é pulada; apagar o
-  marcador (ou usar `--only <etapa>`) para refazer.
-- `PYTHON=python3.x bash scripts/run_vm_pipeline.sh` para escolher o interpretador.
-- O precheck avisa se a GPU tiver < 26 GiB: no smoke desta máquina (RTX 4080,
-  16 GB) o GNN_PostBase (width 64 × 6, batch 32) teve pico de ~25 GiB e falhou.
-- `docs/bateria_definitiva/phase0_results.*` e `verify_results.json` que estão
-  nesta máquina são **parciais** (Fase 0 em 1 chunk; V3 incompleto) e não foram
-  commitados — serão gerados de novo na VM.
+- Para na primeira falha; a bateria só começa se o smoke (V3) passar.
+- Fase 0 só roda se os 8 `best.pth` da bateria antiga estiverem em
+  `data/logs/mesh_ans_138x276_unified_best_mse_mae/` (copiar `old_logs.tar` e
+  `tar -xf` antes); sem eles é pulada com aviso e o resto segue.
+- B0 roda sozinho se essa pasta tiver runs (com Fase 0 completa, ou com
+  `--skip-phase0-check` se ela foi pulada).
+- `--no-battery` para antes da bateria; `--only <etapa>` refaz uma etapa.
+- Logs e marcadores em `data/logs/_vm_pipeline/` (`<etapa>.log`, `.done_<etapa>`);
+  etapas concluídas são puladas ao rodar de novo. A etapa `battery` não é
+  retomável por run: se falhar no meio, recomeça as 8.
 
 ## 0. Pré-requisitos na máquina de execução
 

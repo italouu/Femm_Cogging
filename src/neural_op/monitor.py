@@ -39,6 +39,7 @@ class TrainingMonitor:
 
         self._best_loss      = float('inf')
         self._patience_count = 0
+        self._gl_count       = 0    # heartbeats consecutivos com GL > gl_threshold
 
     def step(self, epoch, train_losses, test_losses, model, optimizer, scheduler,
              *, lr=0.0, train_time_s=0.0, eval_time_s=0.0, samples_per_s=0.0,
@@ -70,6 +71,16 @@ class TrainingMonitor:
                          train_time_s, eval_time_s, samples_per_s,
                          mae_hw=mae_hw, mae_graph=mae_graph)
 
+        # GL calculado sempre (mesmo antes de min_epochs), pra contagem consecutiva
+        # refletir o estado real ao sair do warm-up
+        if self.cfg.gl_threshold is not None:
+            gl = 100.0 * (test_loss / self._best_loss - 1.0)
+            self._gl_count = self._gl_count + 1 if gl > self.cfg.gl_threshold else 0
+
+        # warm-up: nenhum critério de parada age antes de min_epochs (ruído do início)
+        if epoch + 1 < getattr(self.cfg, 'min_epochs', 0):
+            return False
+
         if self.cfg.early_stop_patience is not None:
             if self._patience_count >= self.cfg.early_stop_patience:
                 print(f"  early stop: {self._patience_count} heartbeats sem melhora "
@@ -77,10 +88,23 @@ class TrainingMonitor:
                 self.stopped_early = True
                 return True
 
+        # [REMOVIDO 2026-10-02] GL parava no PRIMEIRO heartbeat acima do limiar — um único
+        # heartbeat ruidoso (ex: FNO2d mse parou na época 39, +6,8%) ou um pico de
+        # instabilidade da otimização (train_loss também explode e depois recupera) bastava
+        # pra encerrar o treino. Substituído por GL sustentado (gl_patience heartbeats
+        # consecutivos) + warm-up min_epochs, logo acima/abaixo.
+        # if self.cfg.gl_threshold is not None:
+        #     gl = 100.0 * (test_loss / self._best_loss - 1.0)
+        #     if gl > self.cfg.gl_threshold:
+        #         print(f"  early stop: generalization loss {gl:.2f}% > {self.cfg.gl_threshold}% "
+        #               f"(best test={self._best_loss:.4e}, atual={test_loss:.4e})")
+        #         self.stopped_early = True
+        #         return True
         if self.cfg.gl_threshold is not None:
-            gl = 100.0 * (test_loss / self._best_loss - 1.0)
-            if gl > self.cfg.gl_threshold:
+            gl_patience = getattr(self.cfg, 'gl_patience', 1)
+            if self._gl_count >= gl_patience:
                 print(f"  early stop: generalization loss {gl:.2f}% > {self.cfg.gl_threshold}% "
+                      f"por {self._gl_count} heartbeats consecutivos "
                       f"(best test={self._best_loss:.4e}, atual={test_loss:.4e})")
                 self.stopped_early = True
                 return True

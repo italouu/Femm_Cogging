@@ -1880,6 +1880,9 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
             direction = 0 if k % 2 == 0 else 180
             if sector - a1 < tol:                      # pedaço do fim minúsculo: polo todo no início
                 a1, a2, center = 0.0, a2 - sector, center - sector
+            elif 0.0 < a1 < tol:                       # começa logo depois de 0°: encosta no corte
+                a1 = 0.0                               # (fresta de vácuo de ~µm explodia a malha —
+                                                       #  sample 943: 0,0018° -> 78k nós; 2026-10-05)
             if abs(a2 - sector) < tol:                 # termina no corte: encosta exatamente em 120°
                 pieces.append((a1, sector, center, direction, k))
             elif a2 < sector:                          # cabe inteiro no setor

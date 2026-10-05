@@ -90,7 +90,7 @@ from scipy.spatial import cKDTree
 from src.data_gen.parsers.ans_parsing import (
     _parse_solution, _parse_block_materials, _block_magnet_polarity,
     _build_edges, _element_areas, _wrap_edge_pairs, _grid_polar_xy,
-    _element_b_from_A, _node_mean_of_elements,
+    _element_b_from_A, _node_mean_of_elements, _parse_label_materials,
 )
 from src.data_gen.motor_constants import N_POLES_SECTOR as _N_POLES_SECTOR
 
@@ -168,11 +168,16 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     finally:
         tmp_ans.unlink(missing_ok=True)
 
-    block_material_id, block_mu = _parse_block_materials(lines)
-    block_M = _block_magnet_polarity(block_material_id, _N_POLES_SECTOR)
-
-    elem_mu = block_mu[elems[:, 3]]
-    elem_M = block_M[elems[:, 3]]
+    # [REMOVIDO 2026-10-05] label do elemento indexando [BlockProps] + polaridade pela
+    # ordem de criação (exigia 14 blocos de ímã; quebra com a fase do rotor aplicada)
+    # block_material_id, block_mu = _parse_block_materials(lines)
+    # block_M = _block_magnet_polarity(block_material_id, _N_POLES_SECTOR)
+    #
+    # elem_mu = block_mu[elems[:, 3]]
+    # elem_M = block_M[elems[:, 3]]
+    _, label_mu, label_M = _parse_label_materials(lines)
+    elem_mu = label_mu[elems[:, 3]]
+    elem_M = label_M[elems[:, 3]]
     elem_area = _element_areas(nodes, elems)
 
     ang_1_rad, ang_2_rad = np.deg2rad(ang_1), np.deg2rad(ang_2)

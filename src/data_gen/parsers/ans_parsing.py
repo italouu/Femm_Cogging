@@ -135,6 +135,42 @@ def _block_magnet_polarity(block_material_id, n_poles_sector):
     return block_M
 
 
+def _parse_label_materials(lines):
+    """Por RÓTULO DE BLOCO ([BlockLabels], 0-based) — o índice que o campo
+    `label` de cada elemento do .ans de fato referencia: material_id, mu_r
+    constante e M (polaridade do ímã, MAGNETIZATION +-1). 2026-10-05.
+
+    Substitui o par _parse_block_materials + _block_magnet_polarity indexado
+    direto pelo label do elemento, que só funcionava por coincidência (cada
+    _create_sec chama mi_getmaterial logo antes de criar o rótulo, então
+    [BlockProps] e [BlockLabels] saem com a mesma ordem/tamanho) e exigia
+    exatamente N_POLES_SECTOR blocos de ímã — quebra com a fase do rotor
+    aplicada (polo partido no corte = 15 blocos). Aqui:
+      - material: rótulo -> sua referência em [BlockProps] (3ª coluna, 1-based)
+        -> _parse_block_materials;
+      - polaridade: magdir do rótulo (6ª coluna, graus) comparado ao ângulo da
+        posição do rótulo — magnetização radial para fora (N35p, magdir ~ θ)
+        ou para dentro (N35n, magdir ~ θ+180°). Independe de ordem/contagem.
+    Validado idêntico ao método antigo nos .ans de fase 0 (ver CLAUDE.md).
+    """
+    prop_material_id, prop_mu = _parse_block_materials(lines)
+    j = next(i for i, l in enumerate(lines) if l.strip().startswith('[NumBlockLabels]'))
+    n_labels = int(lines[j].split('=')[1].strip())
+    lab = np.array([[float(v) for v in l.split()[:6]] for l in lines[j + 1:j + 1 + n_labels]])
+    x, y, magdir = lab[:, 0], lab[:, 1], lab[:, 5]
+    prop = lab[:, 2].astype(np.int64) - 1
+    if (prop < 0).any():
+        raise ValueError("rótulo de bloco sem material ([BlockLabels] com blockprop=0)")
+
+    label_material_id = prop_material_id[prop]
+    label_mu = prop_mu[prop]
+    label_M = np.zeros(n_labels, dtype=np.float32)
+    mag = label_material_id == _MAGNET_ID
+    outward = np.cos(np.deg2rad(magdir[mag] - np.degrees(np.arctan2(y[mag], x[mag])))) > 0
+    label_M[mag] = np.where(outward, MAGNETIZATION['N35p'], MAGNETIZATION['N35n'])
+    return label_material_id, label_mu, label_M
+
+
 def _build_edges(elems):
     tri = elems[:, :3]
     edges = np.concatenate([tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]], axis=0)

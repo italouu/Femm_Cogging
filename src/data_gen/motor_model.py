@@ -1776,6 +1776,14 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
     Os polos NÃO precisam ser cortados: o polo 0 já começa exatamente em
     theta=0 (pole_offset=0 no modelo completo), então 14 polos completos
     fecham exatamente em 120 graus.
+    [ATUALIZADO 2026-10-05] o parágrafo acima só vale para phase=0. Até essa
+    data draw_motor ignorava self.phase (polos com phase=0 fixo — herança do
+    protótipo de 2026-07-22, teste isolado com fase 0), então rotor_phase
+    sorteado nunca chegava à simulação. Agora os polos são girados pela fase
+    (_pole_pieces): o polo que cruza 120° é partido em dois pedaços, um em cada
+    ponta do setor, com a magnetização do polo inteiro; o corte periódico da
+    faixa dos ímãs se adapta (modo "poles" em _draw_periodic_cuts). Validado
+    em tests/inspect_femm_phase_sym120.py (wrap exato nos cortes, |ΔA|~1e-12).
     """
 
     # [REMOVIDO 2026-08-13] N_POLES_SECTOR = 14 -- movido pra
@@ -1799,18 +1807,36 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
                           ang_in_1=0, ang_in_2=120,
                           material=self.material_iron)
 
-        # --- polos 0..13 (idêntico ao original, só o range muda) ---
-        step_ang = 360 / self.number_rotor_poles
-        pole_ang = step_ang * self.pole_embrance
-        for pole in range(self.N_POLES_SECTOR):
-            ang_1 = step_ang * pole
-            ang_2 = ang_1 + pole_ang
-            direction = 0 if pole % 2 == 0 else 180
+        # [REMOVIDO 2026-10-05] polos com phase=0 fixo — a fase do rotor sorteada
+        # (rotor_phase) nunca chegava ao desenho; substituído pelo laço abaixo, que
+        # gira os polos dentro do setor (com phase=0 o desenho é idêntico a este).
+        # # --- polos 0..13 (idêntico ao original, só o range muda) ---
+        # step_ang = 360 / self.number_rotor_poles
+        # pole_ang = step_ang * self.pole_embrance
+        # for pole in range(self.N_POLES_SECTOR):
+        #     ang_1 = step_ang * pole
+        #     ang_2 = ang_1 + pole_ang
+        #     direction = 0 if pole % 2 == 0 else 180
+        #     self._create_sec(r_in=self.rotor_inner_diameter / 2,
+        #                       r_ext=self.rotor_inner_diameter / 2 + self.pole_thickness,
+        #                       ang_in_1=ang_1, ang_in_2=ang_2,
+        #                       material=self.material_mag,
+        #                       direction=direction, phase=0)
+
+        # --- polos 0..13 girados pela fase do rotor, dentro do setor ---
+        # _create_sec usa magdir = centro do PEDAÇO desenhado + direction; o
+        # pedaço de um polo partido no corte recebe a magnetização do polo
+        # INTEIRO (direction corrigido pela diferença de centros).
+        self._pole_edges_at_cut = set()   # cortes (0/120) onde já existe aresta de polo
+        for a1, a2, center, direction, _ in self._pole_pieces():
             self._create_sec(r_in=self.rotor_inner_diameter / 2,
                               r_ext=self.rotor_inner_diameter / 2 + self.pole_thickness,
-                              ang_in_1=ang_1, ang_in_2=ang_2,
+                              ang_in_1=a1, ang_in_2=a2,
                               material=self.material_mag,
-                              direction=direction, phase=0)
+                              direction=direction + (center - (a1 + a2) / 2), phase=0)
+            for a in (a1, a2):
+                if a == 0.0 or a == self._SECTOR_DEG:
+                    self._pole_edges_at_cut.add(a)
 
         # --- bobinas (ranhura 0 só vp, ranhuras 1..11 completas, ranhura 12 só vn) ---
         self._create_coils_sector()
@@ -1825,6 +1851,43 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
         # --- cortes periódicos: por último, pra poder reaproveitar arestas
         #     já desenhadas (polo 0 e o lóbulo da bobina) ---
         self._draw_periodic_cuts()
+
+    _SECTOR_DEG = 120.0
+    _POLE_CUT_TOL_DEG = 0.01   # pedaço de polo mais estreito que isso é colado no corte
+
+    def _pole_pieces(self):
+        """Polos do setor girados pela fase do rotor (2026-10-05).
+
+        Polo k em θ = (k·passo + phase) mod 120°, largura passo·pole_embrance,
+        polaridade alternada pela paridade de k (14 polos, número par — a
+        periodicidade de 120° vale para qualquer fase). Um polo que cruza 120°
+        vira dois pedaços, [θ, 120°] e [0°, θ+largura−120°]; pedaços mais
+        estreitos que _POLE_CUT_TOL_DEG são colados no corte (evita elemento
+        degenerado). Com phase=0 dá exatamente os polos do desenho antigo.
+
+        Retorna [(a1, a2, centro_do_polo, direction, k)] em graus, a1/a2 em
+        [0, 120]; centro_do_polo já trazido para o referencial do pedaço (−120°
+        no pedaço do início do setor).
+        """
+        sector, tol = self._SECTOR_DEG, self._POLE_CUT_TOL_DEG
+        step = 360 / self.number_rotor_poles
+        width = step * self.pole_embrance
+        pieces = []
+        for k in range(self.N_POLES_SECTOR):
+            a1 = (step * k + self.phase) % sector
+            a2 = a1 + width
+            center = a1 + width / 2
+            direction = 0 if k % 2 == 0 else 180
+            if sector - a1 < tol:                      # pedaço do fim minúsculo: polo todo no início
+                a1, a2, center = 0.0, a2 - sector, center - sector
+            if abs(a2 - sector) < tol:                 # termina no corte: encosta exatamente em 120°
+                pieces.append((a1, sector, center, direction, k))
+            elif a2 < sector:                          # cabe inteiro no setor
+                pieces.append((a1, a2, center, direction, k))
+            else:                                      # cruza 120°: dois pedaços
+                pieces.append((a1, sector, center, direction, k))
+                pieces.append((0.0, a2 - sector, center - sector, direction, k))
+        return pieces
 
     # ------------------------------------------------------------------
     # bobinas / ranhuras
@@ -2013,7 +2076,9 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
             ("per_slot_bottom", slot_bottom,                         r_bs0,                           False),  # reaproveita aresta do lóbulo
             ("per_slot_throat", r_bs0,                                self.stator_outer_diameter / 2,  True),
             ("per_airgap", self.stator_outer_diameter / 2,           self.rotor_inner_diameter / 2,    True),
-            ("per_pole_ring", self.rotor_inner_diameter / 2,          self.rotor_inner_diameter / 2 + self.pole_thickness, "pole0"),  # theta=0 reaproveita polo0
+            # [REMOVIDO 2026-10-05] "pole0" supunha o polo 0 começando em theta=0 (phase=0)
+            # ("per_pole_ring", self.rotor_inner_diameter / 2,          self.rotor_inner_diameter / 2 + self.pole_thickness, "pole0"),  # theta=0 reaproveita polo0
+            ("per_pole_ring", self.rotor_inner_diameter / 2,          self.rotor_inner_diameter / 2 + self.pole_thickness, "poles"),  # reaproveita aresta de polo que cair no corte
             ("per_back_iron", self.rotor_inner_diameter / 2 + self.pole_thickness, self.rotor_outer_diameter / 2, "existing"),  # já desenhado por _create_sec
             ("per_outer_margin", self.rotor_outer_diameter / 2,      self.outer_diameter / 2,          True),
         ]
@@ -2032,6 +2097,14 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
                 # theta=0: aresta do polo 0 já existe; theta=120: precisa de novo segmento
                 self._apply_periodic_existing(r1, r2, 0, name)
                 self._draw_radial_cut(r1, r2, 120, name)
+            elif mode == "poles":
+                # faixa dos ímãs: aresta de polo no corte (registrada em draw_motor,
+                # _pole_edges_at_cut) é reaproveitada; senão (vão entre polos) desenha
+                for ang in (0.0, self._SECTOR_DEG):
+                    if ang in self._pole_edges_at_cut:
+                        self._apply_periodic_existing(r1, r2, ang, name)
+                    else:
+                        self._draw_radial_cut(r1, r2, ang, name)
             elif mode == "existing":
                 # back iron: _create_sec já desenhou os 2 segmentos (seg_1/seg_2), só falta a propriedade
                 self._apply_periodic_existing(r1, r2, 0, name)

@@ -669,7 +669,11 @@ def save_ans_gzip_sample(motor_params: dict, tmp_dir: Path, out_path: Path) -> d
     fem_file = str(tmp_dir / "model.fem")
     ans_file = tmp_dir / "model.ans"
 
-    model = BLDC_FEMM_Model_Sym120_Annular(motor_params=motor_params, phase=0)
+    # [REMOVIDO 2026-10-05] phase=0 fixo — rotor_phase sorteado (valid_designs.csv)
+    # nunca chegava ao desenho; agora aplicado (ver BLDC_FEMM_Model_Sym120._pole_pieces)
+    # model = BLDC_FEMM_Model_Sym120_Annular(motor_params=motor_params, phase=0)
+    phase = float(motor_params['rotor_phase']['value']) if 'rotor_phase' in motor_params else 0.0
+    model = BLDC_FEMM_Model_Sym120_Annular(motor_params=motor_params, phase=phase)
 
     femm.openfemm('bHide')
     femm.main_resize(1000, 1000)

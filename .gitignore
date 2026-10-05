@@ -96,3 +96,6 @@ __pycache__/
 
 CLAUDE.md
 tests
+
+# backup local dos logs da bateria antiga (1,1 GB) — nunca versionar (limite de 100 MB do GitHub)
+old_logs.tar

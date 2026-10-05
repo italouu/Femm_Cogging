@@ -71,11 +71,11 @@ INCLUDE_REL_L2   = False            # B6: [DECISÃO PENDENTE] True adiciona loss
                                     #     z-score, ~0 em muitos nós), não por amostra
 METRICS_EVERY_EPOCH = True          # B4: mae_hw/mae_graph em toda época (epochs.csv);
                                     #     custo: +1 forward sobre o test set por época
-ONLY_ARCHS = ('FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN')
-                                    # B1b (2026-10-05): só as archs em grafo — o FNO2d
-                                    #     não interpola no treino; FNO2d/run_0001 (mse) e
-                                    #     run_0002 (mae) continuam válidos e são as bases
-                                    #     do GNN_PostBase. None = todas de BEST_CONFIGS
+# [REMOVIDO 2026-10-05] só as archs em grafo — bateria completa retreina também o FNO2d
+# (decisão do usuário: as 8 runs na mesma execução, com cell_centered_border)
+# ONLY_ARCHS = ('FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN')
+ONLY_ARCHS = None                   # None = todas de BEST_CONFIGS (8 runs, FNO2d incluído);
+                                    #     tupla de archs = só essas
 
 if FULL_SPECTRUM:
     DATA_RES             = GRID_HW

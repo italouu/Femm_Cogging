@@ -74,6 +74,9 @@ METRICS_EVERY_EPOCH = True          # B4: mae_hw/mae_graph em toda época (epoch
 # [REMOVIDO 2026-10-05] só as archs em grafo — bateria completa retreina também o FNO2d
 # (decisão do usuário: as 8 runs na mesma execução, com cell_centered_border)
 # ONLY_ARCHS = ('FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN')
+N_EPOCHS = 350                      # 2026-10-05: limite de épocas da bateria (antes: default de
+                                    #     NnCfg, 500); StepLR com passo fixo (scheduler_step=100)
+                                    #     não depende disso; GL/paciência continuam valendo
 ONLY_ARCHS = None                   # None = todas de BEST_CONFIGS (8 runs, FNO2d incluído);
                                     #     tupla de archs = só essas
 
@@ -291,6 +294,7 @@ def make_nn_cfg(spec, problem: str = None, **overrides) -> NnCfg:
         scheduler_gamma=spec['scheduler_gamma'],
         arch_cfg=arch_cfg,
         repeat=spec['repeat'],
+        n_epochs=N_EPOCHS,
         # critério de parada = defaults atuais de MonitorCfg (gl_patience=3,
         # min_epochs=100, early_stop_patience=10); só liga as métricas por época
         monitor_cfg=MonitorCfg(metrics_every_epoch=METRICS_EVERY_EPOCH),

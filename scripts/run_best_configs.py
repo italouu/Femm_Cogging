@@ -71,6 +71,11 @@ INCLUDE_REL_L2   = False            # B6: [DECISÃO PENDENTE] True adiciona loss
                                     #     z-score, ~0 em muitos nós), não por amostra
 METRICS_EVERY_EPOCH = True          # B4: mae_hw/mae_graph em toda época (epochs.csv);
                                     #     custo: +1 forward sobre o test set por época
+ONLY_ARCHS = ('FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN')
+                                    # B1b (2026-10-05): só as archs em grafo — o FNO2d
+                                    #     não interpola no treino; FNO2d/run_0001 (mse) e
+                                    #     run_0002 (mae) continuam válidos e são as bases
+                                    #     do GNN_PostBase. None = todas de BEST_CONFIGS
 
 if FULL_SPECTRUM:
     DATA_RES             = GRID_HW
@@ -263,6 +268,8 @@ def build_run_list(n_repeats: int = None):
     runs = []
     for rep in range(n_repeats):
         for base in BEST_CONFIGS:
+            if ONLY_ARCHS is not None and base['arch'] not in ONLY_ARCHS:
+                continue
             for loss in LOSSES:
                 runs.append(dict(base, loss=loss, repeat=rep))
     return runs

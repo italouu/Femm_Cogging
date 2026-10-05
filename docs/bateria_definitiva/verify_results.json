@@ -7,14 +7,14 @@
     },
     "periodic": {
       "0.1": {
-        "got": 1.0046466923177189,
+        "got": 1.004646692317719,
         "expected": 1.0046466923177193,
-        "abs_err": 4.440892098500626e-16
+        "abs_err": 2.220446049250313e-16
       },
       "119.9": {
-        "got": 0.9952237459063922,
+        "got": 0.9952237459063923,
         "expected": 0.9952237459063923,
-        "abs_err": 1.1102230246251565e-16
+        "abs_err": 0.0
       },
       "0.0": {
         "got": 0.9999352191120551,
@@ -31,174 +31,312 @@
   "V2": {
     "ok": true,
     "FNO_GNN": {
-      "chunk": "data_chunk_0075.pt",
+      "chunk": "data_chunk_0000.pt",
       "n_samples": 32,
-      "n_nodes": 1026683,
-      "stats_source": "data\\logs\\mesh_ans_138x276_unified_best_mse_mae\\FNO_GNN\\run_0001\\config.json",
+      "n_nodes": 1012094,
+      "stats_source": "Normalizer.fit(mesh_ans_138x276_unified/FNO_GNN)",
       "encoded": {
         "node_y": {
           "mean": [
-            -0.000452429405413568,
-            -0.0023330722469836473
+            0.0020207655616104603,
+            -0.000645265681669116
           ],
           "std": [
-            0.9911024570465088,
-            0.9916860461235046
+            1.0176012516021729,
+            1.0104119777679443
           ]
         },
         "rescale_off": {
           "mean": [
-            -0.00021582606132142246,
-            -0.006061945576220751
+            0.005443112459033728,
+            -0.0033357238862663507
           ],
           "std": [
-            1.1601221561431885,
-            1.0535584688186646
+            1.203851580619812,
+            1.0826897621154785
           ]
         },
         "rescale_on": {
           "mean": [
-            0.006384395994246006,
-            -0.006734786089509726
+            0.010492193512618542,
+            -0.004541582893580198
           ],
           "std": [
-            0.8421268463134766,
-            0.8475719094276428
+            0.873869776725769,
+            0.8710075616836548
           ]
         }
       },
       "physical_T": {
         "rescale_off": {
           "mean": [
-            0.016479378566145897,
-            -0.014001364819705486
+            0.01953100599348545,
+            -0.012578296475112438
           ],
           "std": [
-            0.6256049871444702,
-            0.5499498248100281
+            0.6491864323616028,
+            0.5651561617851257
           ],
-          "max_abs_err_vs_ref_T": 0.8411829471588135
+          "max_abs_err_vs_ref_T": 0.8498978614807129
         },
         "rescale_on": {
           "mean": [
-            0.020038604736328125,
-            -0.014352581463754177
+            0.022253768518567085,
+            -0.013207745738327503
           ],
           "std": [
-            0.4541235566139221,
-            0.44242632389068604
+            0.47124117612838745,
+            0.4546595811843872
           ],
           "max_abs_err_vs_ref_T": 4.76837158203125e-07
         },
         "node_y_true": {
           "mean": [
-            0.016351791098713875,
-            -0.012054918333888054
+            0.017685478553175926,
+            -0.011173895560204983
           ],
           "std": [
-            0.5344598293304443,
-            0.5176528692245483
+            0.5487495064735413,
+            0.5274276733398438
           ]
         },
         "y_hw_interp_ref": {
           "mean": [
-            0.020038602873682976,
-            -0.014352581463754177
+            0.022253766655921936,
+            -0.013207744807004929
           ],
           "std": [
-            0.4541235566139221,
-            0.44242632389068604
+            0.47124117612838745,
+            0.4546595811843872
           ]
         }
       },
-      "encoded_max_abs_mean_diff": 0.006836825399659574,
-      "encoded_max_rel_std_diff": 0.15031302735035124,
+      "encoded_max_abs_mean_diff": 0.008471427951008081,
+      "encoded_max_rel_std_diff": 0.14124537941566429,
       "ok": true
     },
     "FNO_BipartiteGNN": {
-      "chunk": "data_chunk_0075.pt",
+      "chunk": "data_chunk_0000.pt",
       "n_samples": 32,
-      "n_nodes": 1026683,
-      "stats_source": "data\\logs\\mesh_ans_138x276_unified_best_mse_mae\\FNO_BipartiteGNN\\run_0001\\config.json",
+      "n_nodes": 1012094,
+      "stats_source": "Normalizer.fit(mesh_ans_138x276_unified/FNO_BipartiteGNN)",
       "encoded": {
         "node_y": {
           "mean": [
-            -0.000452429405413568,
-            -0.0023330722469836473
+            0.0020207655616104603,
+            -0.000645265681669116
           ],
           "std": [
-            0.9911024570465088,
-            0.9916860461235046
+            1.0176012516021729,
+            1.0104119777679443
           ]
         },
         "rescale_off": {
           "mean": [
-            -0.00021582606132142246,
-            -0.006061945576220751
+            0.005443112459033728,
+            -0.0033357238862663507
           ],
           "std": [
-            1.1601221561431885,
-            1.0535584688186646
+            1.203851580619812,
+            1.0826897621154785
           ]
         },
         "rescale_on": {
           "mean": [
-            0.006384395994246006,
-            -0.006734786089509726
+            0.010492193512618542,
+            -0.004541582893580198
           ],
           "std": [
-            0.8421268463134766,
-            0.8475719094276428
+            0.873869776725769,
+            0.8710075616836548
           ]
         }
       },
       "physical_T": {
         "rescale_off": {
           "mean": [
-            0.016479378566145897,
-            -0.014001364819705486
+            0.01953100599348545,
+            -0.012578296475112438
           ],
           "std": [
-            0.6256049871444702,
-            0.5499498248100281
+            0.6491864323616028,
+            0.5651561617851257
           ],
-          "max_abs_err_vs_ref_T": 0.8411829471588135
+          "max_abs_err_vs_ref_T": 0.8498978614807129
         },
         "rescale_on": {
           "mean": [
-            0.020038604736328125,
-            -0.014352581463754177
+            0.022253768518567085,
+            -0.013207745738327503
           ],
           "std": [
-            0.4541235566139221,
-            0.44242632389068604
+            0.47124117612838745,
+            0.4546595811843872
           ],
           "max_abs_err_vs_ref_T": 4.76837158203125e-07
         },
         "node_y_true": {
           "mean": [
-            0.016351791098713875,
-            -0.012054918333888054
+            0.017685478553175926,
+            -0.011173895560204983
           ],
           "std": [
-            0.5344598293304443,
-            0.5176528692245483
+            0.5487495064735413,
+            0.5274276733398438
           ]
         },
         "y_hw_interp_ref": {
           "mean": [
-            0.020038602873682976,
-            -0.014352581463754177
+            0.022253766655921936,
+            -0.013207744807004929
           ],
           "std": [
-            0.4541235566139221,
-            0.44242632389068604
+            0.47124117612838745,
+            0.4546595811843872
           ]
         }
       },
-      "encoded_max_abs_mean_diff": 0.006836825399659574,
-      "encoded_max_rel_std_diff": 0.15031302735035124,
+      "encoded_max_abs_mean_diff": 0.008471427951008081,
+      "encoded_max_rel_std_diff": 0.14124537941566429,
       "ok": true
     }
+  },
+  "V3": {
+    "ok": true,
+    "n_chunks": 4,
+    "n_epochs": 3,
+    "chunks_source": "hardlink/c\u00f3pia dos chunks reais",
+    "device": "cuda",
+    "gpu": "NVIDIA L40S-48Q",
+    "runs": [
+      {
+        "arch": "FNO2d",
+        "loss": "mse",
+        "status": "done",
+        "run_dir": "data/logs/_smoke_bateria_definitiva/FNO2d/run_0001",
+        "problems": [],
+        "stop_reason": "n_epochs",
+        "gpu_peak_mem_gib": 3.376,
+        "n_params_real": 9831210,
+        "wall_time_s": 2.5,
+        "epochs_csv_tail": "2,1.0836691856384277,1.0301796595255535,0.27731963992118835,,0.005,0.2786129261367023,0.07705641794018447,0.09967525699175894,0.10188125120475888",
+        "ok": true
+      },
+      {
+        "arch": "FNO2d",
+        "loss": "mae",
+        "status": "done",
+        "run_dir": "data/logs/_smoke_bateria_definitiva/FNO2d/run_0002",
+        "problems": [],
+        "stop_reason": "n_epochs",
+        "gpu_peak_mem_gib": 3.487,
+        "n_params_real": 9831210,
+        "wall_time_s": 1.8,
+        "epochs_csv_tail": "2,0.7508490085601807,0.7518906593322754,0.304191917181015,,0.005,0.2751718480139971,0.07562309503555298,0.09974659094586968,0.09980216203257442",
+        "ok": true
+      },
+      {
+        "arch": "FNO_GNN",
+        "loss": "mse",
+        "status": "done",
+        "run_dir": "data/logs/_smoke_bateria_definitiva/FNO_GNN/run_0001",
+        "problems": [],
+        "stop_reason": "n_epochs",
+        "gpu_peak_mem_gib": 13.43,
+        "n_params_real": 5547157,
+        "wall_time_s": 8.6,
+        "epochs_csv_tail": "2,39.39030838012695,1.9980899492899578,0.28894402583440143,0.5289970835049947,0.003,2.469178160885349,0.719154616817832,0.8772274071816355,0.8727961368858814",
+        "ok": true
+      },
+      {
+        "arch": "FNO_GNN",
+        "loss": "mae",
+        "status": "done",
+        "run_dir": "data/logs/_smoke_bateria_definitiva/FNO_GNN/run_0002",
+        "problems": [],
+        "stop_reason": "n_epochs",
+        "gpu_peak_mem_gib": 13.385,
+        "n_params_real": 5547157,
+        "wall_time_s": 8.4,
+        "epochs_csv_tail": "2,3.368135690689087,0.9572604497273763,0.30975422263145447,0.5081452329953512,0.003,2.4280858209822327,0.6703467250335962,0.8832709728740156,0.874468123074621",
+        "ok": true
+      },
+      {
+        "arch": "GNN_PostBase",
+        "loss": "mse",
+        "status": "done",
+        "run_dir": "data/logs/_smoke_bateria_definitiva/GNN_PostBase/run_0001",
+        "problems": [],
+        "stop_reason": "n_epochs",
+        "gpu_peak_mem_gib": 32.186,
+        "n_params_real": 9931506,
+        "wall_time_s": 11.3,
+        "postbase_base": {
+          "base_run_dir": "data/logs/_smoke_bateria_definitiva/FNO2d/run_0001",
+          "base_run_dir_abs": "/home/11124465910@corp.udesc.br/Projects/Femm_Cogging/data/logs/_smoke_bateria_definitiva/FNO2d/run_0001",
+          "base_checkpoint": "best",
+          "base_checkpoint_path": "/home/11124465910@corp.udesc.br/Projects/Femm_Cogging/data/logs/_smoke_bateria_definitiva/FNO2d/run_0001/checkpoints/best.pth",
+          "base_checkpoint_exists": true,
+          "base_checkpoint_epoch": 2,
+          "base_arch": "FNO2d",
+          "base_loss": "mse",
+          "base_repeat": 0,
+          "base_git_commit": "2cab72d9957864822bf20b83422d0730f63653e8"
+        },
+        "epochs_csv_tail": "2,1.1774049997329712,1.0462934970855713,0.27731963992118835,0.37292728821436566,0.001,3.3685604818165302,0.9485761488322169,1.2019602090585977,1.2180241239257157",
+        "ok": true
+      },
+      {
+        "arch": "GNN_PostBase",
+        "loss": "mae",
+        "status": "done",
+        "run_dir": "data/logs/_smoke_bateria_definitiva/GNN_PostBase/run_0002",
+        "problems": [],
+        "stop_reason": "n_epochs",
+        "gpu_peak_mem_gib": 32.224,
+        "n_params_real": 9931506,
+        "wall_time_s": 11.1,
+        "postbase_base": {
+          "base_run_dir": "data/logs/_smoke_bateria_definitiva/FNO2d/run_0002",
+          "base_run_dir_abs": "/home/11124465910@corp.udesc.br/Projects/Femm_Cogging/data/logs/_smoke_bateria_definitiva/FNO2d/run_0002",
+          "base_checkpoint": "best",
+          "base_checkpoint_path": "/home/11124465910@corp.udesc.br/Projects/Femm_Cogging/data/logs/_smoke_bateria_definitiva/FNO2d/run_0002/checkpoints/best.pth",
+          "base_checkpoint_exists": true,
+          "base_checkpoint_epoch": 0,
+          "base_arch": "FNO2d",
+          "base_loss": "mae",
+          "base_repeat": 0,
+          "base_git_commit": "2cab72d9957864822bf20b83422d0730f63653e8"
+        },
+        "epochs_csv_tail": "2,1.3341326713562012,0.7032771110534668,0.28069937229156494,0.3730790813763936,0.001,3.350683636032045,0.9694234209600836,1.1887155619915575,1.1925446530804038",
+        "ok": true
+      },
+      {
+        "arch": "FNO_BipartiteGNN",
+        "loss": "mse",
+        "status": "done",
+        "run_dir": "data/logs/_smoke_bateria_definitiva/FNO_BipartiteGNN/run_0001",
+        "problems": [],
+        "stop_reason": "n_epochs",
+        "gpu_peak_mem_gib": 16.521,
+        "n_params_real": 5550544,
+        "wall_time_s": 12.3,
+        "epochs_csv_tail": "2,0.9348510503768921,0.9684643745422363,0.27592143416404724,0.34895429015159607,0.01,3.7335445028729737,1.0008461149409413,1.3595473349560052,1.3731510529760271",
+        "ok": true
+      },
+      {
+        "arch": "FNO_BipartiteGNN",
+        "loss": "mae",
+        "status": "done",
+        "run_dir": "data/logs/_smoke_bateria_definitiva/FNO_BipartiteGNN/run_0002",
+        "problems": [],
+        "stop_reason": "n_epochs",
+        "gpu_peak_mem_gib": 16.585,
+        "n_params_real": 5550544,
+        "wall_time_s": 12.3,
+        "epochs_csv_tail": "2,0.6825786232948303,0.654667854309082,0.26857609550158185,0.3472938934961955,0.01,3.6641793421003968,0.9895226440858096,1.3495485067833215,1.3251081912312657",
+        "ok": true
+      }
+    ]
   }
 }

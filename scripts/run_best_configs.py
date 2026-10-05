@@ -56,7 +56,10 @@ PROBLEM      = f'{UNIFIED_ROOT}_best_mse_mae'   # data/logs/<PROBLEM>/<arch>/
 # Cada uma com o comportamento antigo disponível pela própria chave, pra
 # permitir comparar antes × depois. Hiperparâmetros (lr, γ, larguras, camadas,
 # batch, n_epochs, train_split, lambda_loss) NÃO mudam.
-INTERP_MODE      = 'cell_centered'  # B1: 'legacy' (antigo) | 'cell_centered'
+# [REMOVIDO 2026-10-05, B1b] padding circular mistura Bx/By girados de 120° no corte
+# INTERP_MODE      = 'cell_centered'  # B1: 'legacy' (antigo) | 'cell_centered'
+INTERP_MODE      = 'cell_centered_border'  # B1b: 'legacy' | 'cell_centered' (obsoleto)
+                                           #      | 'cell_centered_border'
 FNO_NODE_RESCALE = True             # B2: False = antigo (FNO@nós na escala de y_hw)
 FULL_SPECTRUM    = True             # B3: False = antigo (data_res/modes abaixo, comentados)
 GRID_HW          = (138, 276)       # grade real dos chunks unificados

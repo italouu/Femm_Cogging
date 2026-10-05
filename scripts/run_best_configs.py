@@ -216,8 +216,14 @@ def _find_base_run_dir(loss: str, repeat: int = 0, arch: str = 'FNO2d') -> str:
         # trava extra: a base tem que ter sido treinada com as MESMAS correções
         # desta bateria (B1/B3) — nunca um FNO2d de configuração antiga
         acfg = cfg.get('arch_cfg', {})
-        same_fixes = (acfg.get('interp_mode', 'legacy') == INTERP_MODE
-                      and tuple(acfg.get('data_res', ())) == tuple(DATA_RES)
+        # [REMOVIDO 2026-10-05, B1b] interp_mode na trava — o FNO2d não interpola
+        # no treino (só grade); o GNN_PostBase interpola a saída da base com o SEU
+        # interp_mode (GNN_PostBaseConfig.interp_mode), não com o do config da base.
+        # Exigir igualdade recusaria os FNO2d da bateria (treinados com 'cell_centered').
+        # same_fixes = (acfg.get('interp_mode', 'legacy') == INTERP_MODE
+        #               and tuple(acfg.get('data_res', ())) == tuple(DATA_RES)
+        #               and acfg.get('modes1') == MODES1 and acfg.get('modes2') == MODES2)
+        same_fixes = (tuple(acfg.get('data_res', ())) == tuple(DATA_RES)
                       and acfg.get('modes1') == MODES1 and acfg.get('modes2') == MODES2)
         if cfg.get('loss') == loss and cfg.get('repeat', 0) == repeat and same_fixes:
             candidates.append(run_dir)

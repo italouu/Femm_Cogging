@@ -33,6 +33,7 @@ from src.data_gen.parsers.ans_parsing import (
 )
 from src.data_gen.motor_constants import MATERIAL_ID
 from src.neural_op.archs.interp import interpolate_grid_to_nodes
+from scripts.run_best_configs import INTERP_MODE   # B1b: mesmo modo dos modelos da bateria
 
 DEVICE  = 'cuda' if torch.cuda.is_available() else 'cpu'
 OUT_DIR = LOG_ROOT / 'pos_bateria'
@@ -286,7 +287,9 @@ def arc_values_fno(out_hw, r_m, r_in, r_ext):
     cb = torch.as_tensor((th - ANG1_DEG) / (ANG2_DEG - ANG1_DEG), device=out_hw.device,
                          dtype=out_hw.dtype)
     L = torch.tensor([N_ARC], device=out_hw.device)
-    v = interpolate_grid_to_nodes(out_hw[None], rb.to(out_hw.dtype), cb, L, mode='cell_centered')
+    # [REMOVIDO 2026-10-06] 'cell_centered' fixo (wrap circular — obsoleto, ver interp.py)
+    # v = interpolate_grid_to_nodes(out_hw[None], rb.to(out_hw.dtype), cb, L, mode='cell_centered')
+    v = interpolate_grid_to_nodes(out_hw[None], rb.to(out_hw.dtype), cb, L, mode=INTERP_MODE)
     return v.double().cpu().numpy()
 
 

@@ -44,6 +44,7 @@ from scripts.pos_bateria_common import (
 )
 from src.data_gen.parsers.ans_parsing import (
     _parse_solution, _parse_block_materials, _block_magnet_polarity, _build_edges,
+    _parse_label_materials,
     _element_areas, _node_material_stats, _node_magnet_polarity, _wrap_edge_pairs,
     _build_bidirectional_edge_attrs, _element_b_from_A, _node_mean_of_elements,
     _grid_polar_xy, _MU_BY_ID,
@@ -167,11 +168,16 @@ def preprocess_timed(ans_path, r_in, r_ext):
     t['read_ans'] = _now() - s
 
     s = _now()
-    block_material_id, block_mu = _parse_block_materials(lines)
-    block_M = _block_magnet_polarity(block_material_id, N_POLES_SECTOR)
-    elem_material_id = block_material_id[elems[:, 3]]
-    elem_mu = block_mu[elems[:, 3]]
-    elem_M = block_M[elems[:, 3]]
+    # [REMOVIDO 2026-10-06] leitura antiga (quebra com polo partido — 15 blocos de ímã)
+    # block_material_id, block_mu = _parse_block_materials(lines)
+    # block_M = _block_magnet_polarity(block_material_id, N_POLES_SECTOR)
+    # elem_material_id = block_material_id[elems[:, 3]]
+    # elem_mu = block_mu[elems[:, 3]]
+    # elem_M = block_M[elems[:, 3]]
+    label_material_id, label_mu, label_M = _parse_label_materials(lines)
+    elem_material_id = label_material_id[elems[:, 3]]
+    elem_mu = label_mu[elems[:, 3]]
+    elem_M = label_M[elems[:, 3]]
     area = _element_areas(nodes, elems)
     t['materials'] = _now() - s
 
@@ -314,7 +320,10 @@ def run_femm():
             os.chdir(d)
             tm = {}
             try:
-                model = BLDC_FEMM_Model_Sym120_Annular(motor_params=motor_params_from_row(row), phase=0)
+                # [REMOVIDO 2026-10-06] phase=0 — a geração agora aplica rotor_phase
+                # model = BLDC_FEMM_Model_Sym120_Annular(motor_params=motor_params_from_row(row), phase=0)
+                model = BLDC_FEMM_Model_Sym120_Annular(motor_params=motor_params_from_row(row),
+                                                       phase=float(row['rotor_phase [deg]']))
                 s = _now()
                 femm.openfemm('bHide')
                 femm.main_resize(1000, 1000)

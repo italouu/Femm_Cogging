@@ -30,7 +30,7 @@ from scripts.pos_bateria_common import (
     DEVICE, OUT_DIR, MU_BINS, SAT_THR, FUND, RUN_ORDER, run_key,
     design_rows, test_samples, parse_worker, to_torch_sample, predict, load_runs,
     arc_values_from_nodes, arc_values_fno, to_polar, harmonics, thd, wrap_deg,
-    percentile_stats,
+    percentile_stats, INTERP_MODE,
 )
 from src.neural_op.archs.interp import interpolate_grid_to_nodes
 
@@ -107,8 +107,11 @@ def main():
                 # --- T0a: piso de representação da grade ---
                 yh = ts['v1']['y_hw'][None].to(DEVICE)
                 nx = ts['v1']['node_x'].to(DEVICE)
+                # [REMOVIDO 2026-10-06] 'cell_centered' fixo (wrap circular — obsoleto)
+                # fl = interpolate_grid_to_nodes(yh, nx[:, 3], nx[:, 4], ts['v1']['L'].to(DEVICE),
+                #                                mode='cell_centered').cpu()
                 fl = interpolate_grid_to_nodes(yh, nx[:, 3], nx[:, 4], ts['v1']['L'].to(DEVICE),
-                                               mode='cell_centered').cpu()
+                                               mode=INTERP_MODE).cpu()
                 mag_f = _mag(fl)
                 acc_floor.add(mag_f, mag_t, area)
                 for m, v in node_errors(mag_f, mag_t, area).items():

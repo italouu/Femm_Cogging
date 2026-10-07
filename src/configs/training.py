@@ -316,6 +316,48 @@ class FNO_BipartiteGNN_v3Config:
 
 
 @dataclass
+class FNO_BipartiteGNN_ElemConfig:
+    """Config de FNO_BipartiteGNN_Elem (PROTÓTIPO 2026-10-07,
+    src/neural_op/archs/femm_mesh_elem_gnn.py) -- FNO_BipartiteGNN com os
+    papéis trocados: elementos = grafo principal (saída Bx,By por elemento),
+    vértices = auxiliar estático. Dataset:
+    mesh_ans_138x276_unified/FNO_BipartiteGNN_Elem
+    (scripts/build_elem_proto_chunks.py). Mesmos campos de
+    FNO_BipartiteGNNConfig + aux_fno."""
+    fno_modes1: int = 270
+    fno_modes2: int = 270
+    fno_conv_width: int = 6
+    fno_conv_layers: int = 4
+    fno_lift_width: int = 64
+    fno_lift_layers: int = 3
+    fno_proj_width: int = 64
+    fno_proj_layers: int = 3
+    data_res: tuple = (138, 276)
+    gnn_node_width: int = 32
+    gnn_n_layers: int = 3
+    lambda_loss: float = 0   # peso da loss de grade; loss_elementos = 1 - lambda_loss
+    interp_mode: str = 'legacy'
+    fno_node_rescale: bool = False
+    # [REMOVIDO 2026-10-07] default True — decisão do usuário: auxiliar (vértices) só com posição
+    # aux_fno: bool = True     # auxiliar (vértices) recebe também o FNO interpolado no vértice
+    aux_fno: bool = False    # True = auxiliar (vértices) recebe também o FNO interpolado no vértice
+
+    # auto-detectados em NnCfg.__post_init__; defaults = layout de
+    # src/data_gen/parsers/femm_mesh_elem.py (node_x de elemento com 5 colunas,
+    # elem_x de vértice com 2)
+    edge_dim:       int = field(default=3, init=False)
+    grid_in_ch:     int = field(default=2, init=False)
+    grid_out_ch:    int = field(default=2, init=False)
+    node_in_ch:     int = field(default=5, init=False)
+    elem_in_ch:     int = field(default=2, init=False)
+    cross_edge_dim: int = field(default=1, init=False)
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        return _from_dict_generic(cls, d)
+
+
+@dataclass
 class GNN_PostBaseConfig:
     # Treino em duas etapas (não end-to-end): base_run_dir aponta para um run já treinado
     # (FNO2d ou FNO_GNN), congelado; só o GNN novo é treinado.

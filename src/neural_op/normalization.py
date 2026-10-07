@@ -32,7 +32,18 @@ _NODE_X_FULLY_STRUCTURAL_ARCHS = {'FNO_BipartiteGNN'}
 # grid_sample/gather de célula); a coluna 2 (contagem de nós por célula) é
 # uma feature real, normalizada normalmente — diferente de FNO_BipartiteGNN,
 # onde node_x é 100% estrutural.
-_NODE_X_PARTIAL_STRUCTURAL_ARCHS = {'FNO_BipartiteGNN_v3': {0, 1}}
+# [REMOVIDO 2026-10-07] sem FNO_BipartiteGNN_Elem — ver abaixo
+# _NODE_X_PARTIAL_STRUCTURAL_ARCHS = {'FNO_BipartiteGNN_v3': {0, 1}}
+# FNO_BipartiteGNN_Elem (PROTÓTIPO 2026-10-07, src/data_gen/parsers/
+# femm_mesh_elem.py): node_x = elementos [r_c, c_c, mu_r, M, area] -- só a
+# posição do centróide (0,1) fica crua (interpolação do FNO).
+_NODE_X_PARTIAL_STRUCTURAL_ARCHS = {'FNO_BipartiteGNN_v3': {0, 1},
+                                    'FNO_BipartiteGNN_Elem': {0, 1}}
+
+# elem_x estrutural por arch -- FNO_BipartiteGNN_Elem: elem_x = vértices
+# [r_base, c_base] (grafo auxiliar), crus pra interpolar o FNO no vértice
+# (aux_fno). Demais archs: elem_x normalizado por inteiro.
+_ELEM_X_STRUCTURAL_ARCHS = {'FNO_BipartiteGNN_Elem': {0, 1}}
 
 
 def _exclude_channels(arch: str, has_graph: bool, node_x_ch: int = None) -> dict:
@@ -47,6 +58,8 @@ def _exclude_channels(arch: str, has_graph: bool, node_x_ch: int = None) -> dict
             excl['node_x'] = set(range(node_x_ch)) if node_x_ch else set()
         else:
             excl['node_x'] = set(_NODE_X_STRUCTURAL)
+    if arch in _ELEM_X_STRUCTURAL_ARCHS:
+        excl['elem_x'] = set(_ELEM_X_STRUCTURAL_ARCHS[arch])
     return excl
 
 

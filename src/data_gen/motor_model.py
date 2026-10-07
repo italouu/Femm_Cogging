@@ -1001,13 +1001,149 @@ class BLDC_Process:
 
         return result
 
+# --------------------------------------------------------------------------- #
+# Biblioteca de materiais do FEMM (matlib.dat) — reprodutibilidade (2026-10-07)
+# --------------------------------------------------------------------------- #
+# iron_1008/vacuum/copper foram inseridos à mão no matlib.dat da máquina
+# original; numa instalação limpa do FEMM mi_getmaterial não os encontra.
+# _femm_library_materials() lê o matlib.dat da instalação registrada no COM
+# (a mesma que femm.openfemm() abre) e BLDC_FEMM_Model._get_material decide
+# entre mi_getmaterial (biblioteca) e mi_addmaterial (FEMM_MATERIAL_DEFS).
+
+_MATLIB_NUM_FIELDS = ('Mu_x', 'Mu_y', 'H_c', 'H_cAngle', 'J_re', 'J_im', 'Sigma', 'd_lam',
+                      'Phi_h', 'Phi_hx', 'Phi_hy', 'LamType', 'LamFill', 'NStrands', 'WireD')
+_MATLIB_CACHE = None
+
+
+def _femm_matlib_path():
+    """matlib.dat da instalação do FEMM registrada no COM (femm.ActiveFEMM ->
+    LocalServer32 -> <femm>/bin/femm.exe). None se não achar."""
+    try:
+        import winreg
+    except ImportError:
+        return None
+    try:
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r'femm.ActiveFEMM\CLSID') as k:
+            clsid = winreg.QueryValue(k, None)
+    except OSError:
+        return None
+    for root, sub in ((winreg.HKEY_CLASSES_ROOT, rf'CLSID\{clsid}\LocalServer32'),
+                      (winreg.HKEY_LOCAL_MACHINE, rf'SOFTWARE\WOW6432Node\Classes\CLSID\{clsid}\LocalServer32'),
+                      (winreg.HKEY_LOCAL_MACHINE, rf'SOFTWARE\Classes\CLSID\{clsid}\LocalServer32')):
+        try:
+            with winreg.OpenKey(root, sub) as k:
+                exe = winreg.QueryValue(k, None).strip().strip('"')
+        except OSError:
+            continue
+        p = Path(exe.split(' /')[0]).parent / 'matlib.dat'
+        if p.is_file():
+            return p
+    return None
+
+
+def _parse_matlib(path):
+    """{nome: {campo: valor, 'bh': ((B,H),...)}} — primeira ocorrência de cada
+    nome (pastas ignoradas, só os blocos <BeginBlock>..<EndBlock>)."""
+    mats, cur, bh_left = {}, None, 0
+    for raw in Path(path).read_text(encoding='latin-1').splitlines():
+        line = raw.strip()
+        if bh_left:
+            b, h = line.split()[:2]
+            cur['bh'].append((float(b), float(h)))
+            bh_left -= 1
+        elif line.startswith('<BeginBlock>'):
+            cur = {'bh': []}
+        elif cur is None:
+            continue
+        elif line.startswith('<EndBlock>'):
+            name = cur.pop('name', None)
+            if name is not None and name not in mats:
+                cur['bh'] = tuple(cur['bh'])
+                mats[name] = cur
+            cur = None
+        elif line.startswith('<BlockName>'):
+            cur['name'] = line.split('=', 1)[1].strip().strip('"')
+        elif line.startswith('<BHPoints>'):
+            bh_left = int(line.split('=', 1)[1])
+        elif line.startswith('<'):
+            key = line[1:line.index('>')]
+            if key in _MATLIB_NUM_FIELDS:
+                cur[key] = float(line.split('=', 1)[1])
+    return mats
+
+
+def _femm_library_materials():
+    """Materiais da biblioteca local do FEMM (cache por processo); {} se não achar."""
+    global _MATLIB_CACHE
+    if _MATLIB_CACHE is None:
+        p = _femm_matlib_path()
+        _MATLIB_CACHE = _parse_matlib(p) if p is not None else {}
+    return _MATLIB_CACHE
+
+
+def _same_material(lib, defn, rtol=1e-9):
+    """Biblioteca == FEMM_MATERIAL_DEFS (todos os campos numéricos + curva BH)."""
+    for f in _MATLIB_NUM_FIELDS:
+        if not np.isclose(lib.get(f, 0.0), float(defn[f]), rtol=rtol, atol=0.0):
+            return False
+    a, b = np.asarray(lib['bh'], float), np.asarray(defn['bh'], float)
+    return a.shape == b.shape and np.allclose(a, b, rtol=rtol, atol=0.0)
+
+
 class BLDC_FEMM_Model(BLDC_Process):
 
     N_TURNS = 18  # número de espiras por bobina
 
+    # True ignora a biblioteca local para os materiais de FEMM_MATERIAL_DEFS e
+    # os define explicitamente (teste de reprodutibilidade).
+    FORCE_EXPLICIT_MATERIALS = False
+
     def __init__(self, motor_params, phase):
         super().__init__(motor_params=motor_params)
         self.phase = phase
+        self._explicit_materials = set()   # já criados via mi_addmaterial neste documento
+
+    def _get_material(self, name):
+        """Substitui femm.mi_getmaterial(name) (2026-10-07).
+
+        - name na biblioteca local do FEMM -> mi_getmaterial (como antes; o .ans
+          sai idêntico). Se name também estiver em FEMM_MATERIAL_DEFS, as
+          propriedades da biblioteca precisam bater com a definição — senão
+          ValueError (evita reproduzir com outra curva BH sem perceber).
+        - fora da biblioteca (instalação limpa) ou FORCE_EXPLICIT_MATERIALS ->
+          mi_addmaterial + mi_addbhpoint com FEMM_MATERIAL_DEFS, UMA vez por
+          documento (o parser resolve material pelo índice em [BlockProps] de
+          cada rótulo, classificado por Mu_x/curva BH — não precisa repetir a
+          entrada a cada rótulo como o mi_getmaterial faz).
+        """
+        from src.data_gen.motor_constants import FEMM_MATERIAL_DEFS
+        defn = FEMM_MATERIAL_DEFS.get(name)
+        # FORCE simula instalação limpa: só os customizados (FEMM_MATERIAL_DEFS)
+        # deixam de vir da biblioteca; N35 etc. continuam da biblioteca padrão.
+        if self.FORCE_EXPLICIT_MATERIALS and defn is not None:
+            lib = None
+        else:
+            lib = _femm_library_materials().get(name)
+        if lib is not None:
+            if defn is not None and not _same_material(lib, defn):
+                raise ValueError(
+                    f"material '{name}' da biblioteca do FEMM ({_femm_matlib_path()}) difere "
+                    f"de FEMM_MATERIAL_DEFS (motor_constants.py) — renomeie/remova da "
+                    f"biblioteca ou confira a definição")
+            femm.mi_getmaterial(name)
+            return
+        if defn is None:
+            raise ValueError(f"material '{name}' não está na biblioteca do FEMM nem em "
+                             f"FEMM_MATERIAL_DEFS (motor_constants.py)")
+        if name in self._explicit_materials:
+            return
+        femm.mi_addmaterial(name, defn['Mu_x'], defn['Mu_y'], defn['H_c'], defn['J_re'],
+                            defn['Sigma'], defn['d_lam'], defn['Phi_h'], defn['LamFill'],
+                            defn['LamType'], defn['Phi_hx'], defn['Phi_hy'],
+                            defn['NStrands'], defn['WireD'])
+        for b, h in defn['bh']:
+            femm.mi_addbhpoint(name, b, h)
+        self._explicit_materials.add(name)
           
     def draw_motor(self):
         # rotor back iron
@@ -1059,7 +1195,8 @@ class BLDC_FEMM_Model(BLDC_Process):
         res = 1
         femm.mi_addboundprop("A=0", 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
 
-        femm.mi_getmaterial(self.material_gap)
+        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_gap) — exigia o material na biblioteca local do FEMM; ver _get_material
+        self._get_material(self.material_gap)
         femm.mi_addblocklabel(0,0)
         femm.mi_selectlabel(0,0)
         femm.mi_setblockprop(self.material_gap, 0, 1, "", 0, 0, 0)
@@ -1084,7 +1221,8 @@ class BLDC_FEMM_Model(BLDC_Process):
         femm.mi_setarcsegmentprop(1,"A=0", 0, 0)
         femm.mi_clearselected()
 
-        femm.mi_getmaterial(self.material_gap)
+        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_gap) — exigia o material na biblioteca local do FEMM; ver _get_material
+        self._get_material(self.material_gap)
         femm.mi_addblocklabel(r_in * np.cos(theta),r_in * np.sin(theta))
         femm.mi_selectlabel(r_in * np.cos(theta),r_in * np.sin(theta))
         femm.mi_setblockprop(self.material_gap, 0, 1, "", 0, 0, 0)
@@ -1112,7 +1250,8 @@ class BLDC_FEMM_Model(BLDC_Process):
             
         ang_avg = np.pi/2
         r_avg = (self.rotor_inner_diameter+self.stator_outer_diameter)/4
-        femm.mi_getmaterial(self.material_gap)
+        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_gap) — exigia o material na biblioteca local do FEMM; ver _get_material
+        self._get_material(self.material_gap)
         femm.mi_addblocklabel(r_avg * np.cos(ang_avg),r_avg * np.sin(ang_avg))
         femm.mi_selectlabel(r_avg * np.cos(ang_avg),r_avg * np.sin(ang_avg))
         femm.mi_setblockprop(self.material_gap, 0, 1, "", np.rad2deg(ang_avg), 0, 0)
@@ -1132,7 +1271,8 @@ class BLDC_FEMM_Model(BLDC_Process):
         
         ang_avg = np.pi/2
         r_avg = (self.stator_inner_diameter/2 + self.stator_outer_diameter/2 - (self.slot_Hs0 + self.slot_Hs1 + self.slot_Hs2))/2
-        femm.mi_getmaterial(self.material_iron)
+        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_iron) — exigia o material na biblioteca local do FEMM; ver _get_material
+        self._get_material(self.material_iron)
         femm.mi_addblocklabel(r_avg * np.cos(ang_avg),r_avg * np.sin(ang_avg))
         femm.mi_selectlabel(r_avg * np.cos(ang_avg),r_avg * np.sin(ang_avg))
         femm.mi_setblockprop(self.material_iron, 0, 1, "", np.rad2deg(ang_avg), 0, 0)
@@ -1167,14 +1307,16 @@ class BLDC_FEMM_Model(BLDC_Process):
             femm.mi_addcircprop('coil_' + str(i) + '_1', 0, 1)
 
             ang = step * i + step/2 - ang_offset
-            femm.mi_getmaterial(self.material_copper)
+            # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_copper) — exigia o material na biblioteca local do FEMM; ver _get_material
+            self._get_material(self.material_copper)
             femm.mi_addblocklabel(r*np.cos(ang),r*np.sin(ang))
             femm.mi_selectlabel(r*np.cos(ang),r*np.sin(ang))
             femm.mi_setblockprop(self.material_copper, 0, 1, 'coil_' + str(i) + '_0', 0, 0, n_turns)
             femm.mi_clearselected()
 
             ang = step * i + step/2 + ang_offset
-            femm.mi_getmaterial(self.material_copper)
+            # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_copper) — exigia o material na biblioteca local do FEMM; ver _get_material
+            self._get_material(self.material_copper)
             femm.mi_addblocklabel(r*np.cos(ang),r*np.sin(ang))
             femm.mi_selectlabel(r*np.cos(ang),r*np.sin(ang))
             femm.mi_setblockprop(self.material_copper, 0, 1, 'coil_' + str(i) + '_1', 0, 0, n_turns)
@@ -1213,7 +1355,8 @@ class BLDC_FEMM_Model(BLDC_Process):
         if material:
             ang_avg = (ang_in_1+ang_in_2+ang_ext_1+ang_ext_2)/4
             r_avg = (r_in+r_ext)/2
-            femm.mi_getmaterial(material)
+            # [REMOVIDO 2026-10-07] femm.mi_getmaterial(material) — exigia o material na biblioteca local do FEMM; ver _get_material
+            self._get_material(material)
             femm.mi_addblocklabel(r_avg * np.cos(ang_avg),r_avg * np.sin(ang_avg))
             femm.mi_selectlabel(r_avg * np.cos(ang_avg),r_avg * np.sin(ang_avg))
             femm.mi_setblockprop(material, 0, 1, "", np.rad2deg(ang_avg) + direction, 0, 0)
@@ -1935,14 +2078,16 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
             femm.mi_addcircprop('coil_' + str(i) + '_1', 0, 1)
 
             ang = step * i + step / 2 - ang_offset
-            femm.mi_getmaterial(self.material_copper)
+            # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_copper) — exigia o material na biblioteca local do FEMM; ver _get_material
+            self._get_material(self.material_copper)
             femm.mi_addblocklabel(r * np.cos(ang), r * np.sin(ang))
             femm.mi_selectlabel(r * np.cos(ang), r * np.sin(ang))
             femm.mi_setblockprop(self.material_copper, 0, 1, 'coil_' + str(i) + '_0', 0, 0, n_turns)
             femm.mi_clearselected()
 
             ang = step * i + step / 2 + ang_offset
-            femm.mi_getmaterial(self.material_copper)
+            # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_copper) — exigia o material na biblioteca local do FEMM; ver _get_material
+            self._get_material(self.material_copper)
             femm.mi_addblocklabel(r * np.cos(ang), r * np.sin(ang))
             femm.mi_selectlabel(r * np.cos(ang), r * np.sin(ang))
             femm.mi_setblockprop(self.material_copper, 0, 1, 'coil_' + str(i) + '_1', 0, 0, n_turns)
@@ -1973,7 +2118,8 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
         # label do "gap" (vácuo) entre estator e rotor — 90 graus cai dentro do setor
         ang_avg = np.pi / 2
         r_avg = (self.rotor_inner_diameter + self.stator_outer_diameter) / 4
-        femm.mi_getmaterial(self.material_gap)
+        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_gap) — exigia o material na biblioteca local do FEMM; ver _get_material
+        self._get_material(self.material_gap)
         femm.mi_addblocklabel(r_avg * np.cos(ang_avg), r_avg * np.sin(ang_avg))
         femm.mi_selectlabel(r_avg * np.cos(ang_avg), r_avg * np.sin(ang_avg))
         femm.mi_setblockprop(self.material_gap, 0, 1, "", np.rad2deg(ang_avg), 0, 0)
@@ -1990,7 +2136,8 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
         # buraco automaticamente); igual ao (0,0) do modelo original
         r_bore_lab = (self._bore_start_radius() + r_in2) / 2
         ang_bore = np.deg2rad(60)
-        femm.mi_getmaterial(self.material_gap)
+        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_gap) — exigia o material na biblioteca local do FEMM; ver _get_material
+        self._get_material(self.material_gap)
         femm.mi_addblocklabel(r_bore_lab * np.cos(ang_bore), r_bore_lab * np.sin(ang_bore))
         femm.mi_selectlabel(r_bore_lab * np.cos(ang_bore), r_bore_lab * np.sin(ang_bore))
         femm.mi_setblockprop(self.material_gap, 0, 1, "", 0, 0, 0)
@@ -1999,7 +2146,8 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
         ang_avg = np.deg2rad(60)
         r_avg = (self.stator_inner_diameter / 2 + self.stator_outer_diameter / 2
                  - (self.slot_Hs0 + self.slot_Hs1 + self.slot_Hs2)) / 2
-        femm.mi_getmaterial(self.material_iron)
+        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_iron) — exigia o material na biblioteca local do FEMM; ver _get_material
+        self._get_material(self.material_iron)
         femm.mi_addblocklabel(r_avg * np.cos(ang_avg), r_avg * np.sin(ang_avg))
         femm.mi_selectlabel(r_avg * np.cos(ang_avg), r_avg * np.sin(ang_avg))
         femm.mi_setblockprop(self.material_iron, 0, 1, "", np.rad2deg(ang_avg), 0, 0)
@@ -2023,7 +2171,8 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
 
         r_in = self.outer_diameter / 2 * 0.99
         theta = np.deg2rad(60)
-        femm.mi_getmaterial(self.material_gap)
+        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_gap) — exigia o material na biblioteca local do FEMM; ver _get_material
+        self._get_material(self.material_gap)
         femm.mi_addblocklabel(r_in * np.cos(theta), r_in * np.sin(theta))
         femm.mi_selectlabel(r_in * np.cos(theta), r_in * np.sin(theta))
         femm.mi_setblockprop(self.material_gap, 0, 1, "", 0, 0, 0)

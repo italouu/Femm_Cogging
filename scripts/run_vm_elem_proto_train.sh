@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+# [REMOVIDO 2026-10-07] substituído, a pedido do usuário, por dois executáveis Python:
+#   python -m scripts.build_elem_proto_chunks   (dataset, com precheck)
+#   python -m scripts.run_elem_proto            (precheck + smoke + treino)
+# Corpo antigo mantido abaixo só para rastreabilidade — não executa.
+echo "descontinuado — use python -m scripts.build_elem_proto_chunks e depois python -m scripts.run_elem_proto" >&2
+exit 2
 # run_vm_elem_proto_train.sh — PROTÓTIPO FNO_BipartiteGNN_Elem (2026-10-07): TREINO na VM (Linux).
 #
 # Exige os chunks prontos (bash scripts/run_vm_elem_proto_chunks.sh). Mesmos hiperparâmetros do

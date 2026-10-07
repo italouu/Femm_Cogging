@@ -3,7 +3,9 @@
 #   scripts/run_vm_elem_proto_chunks.sh  (dataset)
 #   scripts/run_vm_elem_proto_train.sh   (smoke + treino)
 # Corpo antigo mantido abaixo só para rastreabilidade — não executa.
-echo "run_vm_elem_proto.sh descontinuado — use scripts/run_vm_elem_proto_chunks.sh e depois scripts/run_vm_elem_proto_train.sh" >&2
+# [REMOVIDO 2026-10-07] apontava para os .sh, também descontinuados — agora os executáveis são Python
+# echo "run_vm_elem_proto.sh descontinuado — use scripts/run_vm_elem_proto_chunks.sh e depois scripts/run_vm_elem_proto_train.sh" >&2
+echo "descontinuado — use python -m scripts.build_elem_proto_chunks e depois python -m scripts.run_elem_proto" >&2
 exit 2
 # run_vm_elem_proto.sh — PROTÓTIPO FNO_BipartiteGNN_Elem (2026-10-07) na VM (Linux), ponta a ponta.
 #

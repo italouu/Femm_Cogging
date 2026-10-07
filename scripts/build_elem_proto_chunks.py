@@ -18,7 +18,12 @@ linha 1 por L -- coerentes com o layout trocado) e o _flush do
 build_data_chunks_femm_mesh_v2 (o log do _flush chama de "M_tot" o que aqui
 são os vértices).
 
-Execução (raiz do projeto):
+Executável 1 de 2 do protótipo (o 2º é scripts/run_elem_proto.py). Antes de
+gerar, faz um precheck (raw com 4000 .ans.gz + valid_designs.csv, disco livre,
+parser da amostra 0 conferido contra o layout da bateria) -- pular com
+--no-precheck.
+
+Execução (raiz do projeto; Windows ou VM Linux):
     python -m scripts.build_elem_proto_chunks                       # 4000 amostras
     python -m scripts.build_elem_proto_chunks --max-samples 64 --out-name _smoke_FNO_BipartiteGNN_Elem
 """
@@ -99,12 +104,70 @@ def run(max_samples=None, chunk_size=CHUNK_SIZE, out_name=OUT_NAME):
     return n_final == len(groups)
 
 
+N_RAW_EXPECTED = 4000
+MIN_FREE_GB    = 55       # chunks completos ~47 GB (medido 2026-10-07: ~11,7 MB/amostra)
+
+
+def precheck(out_name=OUT_NAME, max_samples=None) -> bool:
+    """Raw, disco e parser (amostra 0: x_hw/y_hw idênticos à bateria, média
+    nodal do B por elemento == node_y da bateria). True = pode gerar."""
+    import shutil
+    import numpy as np
+    from src.data_gen.parsers.femm_mesh_v2 import parse_ans_gzip_sample
+    from src.data_gen.parsers.ans_parsing import _node_mean_of_elements
+
+    ok = True
+    print("\n=== Precheck (chunks) ===", flush=True)
+    n_raw = len(list(RAW_DIR.glob("sample_*.ans.gz")))
+    has_csv = (RAW_DIR / "valid_designs.csv").exists()
+    print(f"  raw    : {RAW_DIR}  {n_raw} .ans.gz  valid_designs.csv={'sim' if has_csv else 'NÃO'}")
+    if not has_csv or (max_samples is None and n_raw != N_RAW_EXPECTED):
+        print(f"  ERRO: esperado {N_RAW_EXPECTED} sample_*.ans.gz + valid_designs.csv")
+        return False
+
+    out_dir = CHUNKS_ROOT / out_name
+    n_have = len(list(out_dir.glob("data_chunk_*.pt")))
+    free_gb = shutil.disk_usage('.').free / 2**30
+    print(f"  disco  : {free_gb:.0f} GB livres  |  chunks já presentes: {n_have}")
+    if max_samples is None and n_have == 0 and free_gb < MIN_FREE_GB:
+        print(f"  ERRO: < {MIN_FREE_GB} GB livres (chunks completos ~47 GB)")
+        ok = False
+
+    with open(RAW_DIR / "valid_designs.csv", newline='') as f:
+        row = next(csv.DictReader(f))
+    p = RAW_DIR / "sample_000000.ans.gz"
+    r_in, r_ext = float(row['inner_diameter [mm]']) / 2, float(row['outer_diameter [mm]']) / 2
+    TMP_PARSE.mkdir(parents=True, exist_ok=True)
+    d = _parse_one(p, r_in, r_ext, TMP_PARSE)
+    b = parse_ans_gzip_sample(p, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2, n_r=N_R, n_a=N_A,
+                              tmp_dir=TMP_PARSE, target_field='B')
+    cei = d['cross_edge_index']
+    tri = cei[0][np.argsort(cei[1], kind='stable')].reshape(-1, 3)
+    deg = np.bincount(d['edge_index'][1], minlength=int(d['L'][0]))
+    checks = {
+        'x_hw/y_hw idênticos à bateria': (np.array_equal(d['x_hw'], b['x_hw'])
+                                          and np.array_equal(d['y_hw'], b['y_hw'])),
+        'média nodal do B por elemento == node_y da bateria':
+            np.array_equal(_node_mean_of_elements(tri, d['node_y'], int(d['elem_L'][0])), b['node_y']),
+        'grau do grafo dual em [2,3]': bool(deg.min() >= 2 and deg.max() <= 3),
+        'tudo finito': all(np.isfinite(v).all() for v in d.values()),
+    }
+    for msg, c in checks.items():
+        print(f"  [{'ok' if c else 'FALHA'}] parser amostra 0: {msg}")
+        ok &= bool(c)
+    return ok
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--max-samples', type=int, default=None)
     ap.add_argument('--chunk-size', type=int, default=CHUNK_SIZE)
     ap.add_argument('--out-name', default=OUT_NAME)
+    ap.add_argument('--no-precheck', action='store_true')
     a = ap.parse_args()
+    if not a.no_precheck and not precheck(a.out_name, a.max_samples):
+        print("\nPrecheck falhou — nada foi gerado.")
+        raise SystemExit(2)
     ok = run(a.max_samples, a.chunk_size, a.out_name)
     raise SystemExit(0 if ok else 1)
 

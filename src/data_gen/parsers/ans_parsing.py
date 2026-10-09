@@ -246,6 +246,31 @@ def _node_magnet_polarity(nodes: np.ndarray, elems: np.ndarray, area: np.ndarray
     return node_M.astype(np.float32)
 
 
+#: ordem de prioridade de material por nó (ferro > ímã > cobre > ar) --
+#: decisão do usuário 2026-10-09, ver CLAUDE.md "Suavização de B do FEMM".
+MATERIAL_PRIORITY = (MATERIAL_ID['iron_1008'], _MAGNET_ID,
+                     MATERIAL_ID['copper'], MATERIAL_ID['vacuum'])
+
+
+def _node_material_priority(elems: np.ndarray, elem_material_id: np.ndarray, n_nodes: int,
+                             priority=MATERIAL_PRIORITY) -> np.ndarray:
+    """Material do nó = o de MAIOR prioridade entre os elementos incidentes
+    (alternativa ao voto por área de _node_material_stats, que serrilha as
+    interfaces -- ~50% das arestas de interface com lado trocado). 2026-10-09.
+
+    Retorna node_material_id [n_nodes] (int64).
+    """
+    rank_of = np.empty(_N_MATERIALS, dtype=np.int64)
+    rank_of[np.asarray(priority)] = np.arange(len(priority))
+    elem_rank = rank_of[elem_material_id]
+    node_rank = np.full(n_nodes, len(priority), dtype=np.int64)
+    for corner in range(3):
+        np.minimum.at(node_rank, elems[:, corner], elem_rank)
+    if (node_rank == len(priority)).any():
+        raise ValueError("nó sem elemento incidente")
+    return np.asarray(priority, dtype=np.int64)[node_rank]
+
+
 def _wrap_edge_pairs(nodes: np.ndarray, ang_1_deg: float, ang_2_deg: float, tol_deg: float = 1e-3):
     """Pares (i,j) de nós identificados pelo contorno periódico
     theta=ang_1 <-> theta=ang_2 do FEMM.

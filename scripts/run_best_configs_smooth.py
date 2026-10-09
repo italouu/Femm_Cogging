@@ -16,6 +16,8 @@ Troca só:
   problem -> mesh_ans_138x276_smooth_best_mse_mae
              (data/logs/<PROBLEM>/<arch>/ -- e é aqui que o GNN_PostBase procura
              o FNO2d base, nunca no da bateria sem smooth)
+  test_split -> TEST_SPLIT (0,30): teste = 37 chunks, 51 chunks ficam de fora
+             (avaliação final independente); treino idêntico ao da oficial
 
 Execução (a partir da raiz do projeto):
     python -m scripts.run_best_configs_smooth
@@ -30,6 +32,11 @@ from scripts.train import run
 
 PROBLEM = f'{SMOOTH_ROOT}_best_mse_mae'          # data/logs/<PROBLEM>/<arch>/
 EXPECTED_CHUNKS = 125                            # 4000 amostras / chunk_size 32
+TEST_SPLIT = 0.30   # fração do total usada como teste (parada/best.pth/métricas por época);
+                    # o resto (~40%, 51 chunks) fica fora do treino e do teste -- reservado
+                    # p/ avaliação final independente. Treino (37 chunks) idêntico ao da
+                    # bateria oficial; teste (37) é subconjunto dos 88 de teste dela
+                    # (mesmo split_seed). None = complemento (comportamento da oficial).
 
 
 def _smooth_dataset(arch: str) -> str:
@@ -67,7 +74,7 @@ if __name__ == '__main__':
         label = f"{spec['arch']} / {spec['dataset']} / loss={spec['loss']} / rep={spec['repeat']}"
         print(f"\n{'='*80}\n{label}\n{'='*80}", flush=True)
         try:
-            status = run(make_nn_cfg(spec, problem=PROBLEM))
+            status = run(make_nn_cfg(spec, problem=PROBLEM, test_split=TEST_SPLIT))
             summary.append((label, status, None))
         except Exception as e:
             traceback.print_exc()

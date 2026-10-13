@@ -3,7 +3,8 @@ from dataclasses import dataclass, asdict
 from src.neural_op.archs.fno            import FNO2d,          fno_step_fn, fno_metric_fn
 from src.neural_op.archs.fno_gnn        import FNO_GNN,        make_fno_gnn_step, fno_gnn_metric_fn
 from src.neural_op.archs.fno_gnn_v2     import FNO_GNN_v2
-from src.neural_op.archs.fno_gnn_field  import FNO_GNN_Field
+# [REMOVIDO 2026-10-13] FNO_GNN_Field fora do ARCH_REGISTRY (arch obsoleta)
+# from src.neural_op.archs.fno_gnn_field  import FNO_GNN_Field
 from src.neural_op.archs.fno_mat        import (MaskedFNO2d,    masked_fno_step_fn, masked_fno_metric_fn,
                                                 FNO2d_SingleMat, make_single_mat_step_fn,
                                                 make_single_mat_metric_fn)
@@ -112,15 +113,17 @@ ARCH_REGISTRY: dict = {
         eval_fn=fno_gnn_eval_fn,
         metric_fn=lambda cfg: fno_gnn_metric_fn,
     ),
-    'FNO_GNN_Field': ArchEntry(
-        cls=FNO_GNN_Field,
-        cfg_cls=FNO_GNNConfig,   # mesma config de FNO_GNN — só o forward muda (campo vs delta)
-        loader_mode='qtree',
-        model_kwargs=_fno_gnn_kwargs,
-        make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
-        eval_fn=fno_gnn_eval_fn,
-        metric_fn=lambda cfg: fno_gnn_metric_fn,
-    ),
+    # [REMOVIDO 2026-10-13] FNO_GNN_Field — arch obsoleta; compartilhava FNO_GNNConfig com
+    # FNO_GNN, o que impede derivar a arch do tipo de arch_cfg (NnCfg.__post_init__)
+    # 'FNO_GNN_Field': ArchEntry(
+    #     cls=FNO_GNN_Field,
+    #     cfg_cls=FNO_GNNConfig,   # mesma config de FNO_GNN — só o forward muda (campo vs delta)
+    #     loader_mode='qtree',
+    #     model_kwargs=_fno_gnn_kwargs,
+    #     make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
+    #     eval_fn=fno_gnn_eval_fn,
+    #     metric_fn=lambda cfg: fno_gnn_metric_fn,
+    # ),
     # FNO_GNN_v2 (2026-07-17): edge_attr [E,5] com delta_mu direcional
     # (mu_origem - mu_destino). Requer dataset gerado com npz_parser='FNO_GNN_v2'
     # (src/data_gen/parsers/fno_gnn_v2.py) — incompatível com chunks de FNO_GNN
@@ -214,22 +217,3 @@ ARCH_REGISTRY: dict = {
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),
 }
-
-try:
-    from src.neural_op.archs.fno_ref import FNORef
-    from src.configs.training import FNORefConfig
-
-    def _fno_ref_kwargs(cfg):
-        return {k: v for k, v in asdict(cfg).items() if k != 'data_res'}
-
-    ARCH_REGISTRY['FNO_ref'] = ArchEntry(
-        cls=FNORef,
-        cfg_cls=FNORefConfig,
-        loader_mode='grid',
-        model_kwargs=_fno_ref_kwargs,
-        make_step_fn=lambda cfg, lcfg: fno_step_fn,
-        eval_fn=fno_eval_fn,
-        metric_fn=lambda cfg: fno_metric_fn,
-    )
-except ImportError:
-    pass

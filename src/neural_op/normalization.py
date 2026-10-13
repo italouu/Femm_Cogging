@@ -7,7 +7,7 @@ import torch
 # forward (_make_material_masks: mu_r>10 ferro, 1.01<mu_r<10 ima, mu_r<0.9995
 # cobre) — para essas, a coluna mu_r de x_hw fica de fora do z-score, senão os
 # limiares quebram silenciosamente. Arch sem essa lógica (FNO2d, FNO_GNN,
-# FNO_ref/Darcy, ...) normalizam x_hw por inteiro.
+# ...) normalizam x_hw por inteiro.
 _MASKED_ARCHS = {'MaskedFNO2d', 'FNO2d_SingleMat', 'MaskedFNO_GNN'}
 
 # node_x[:, {0,2,3,4}] = mu_r, cell_area/node_dual_area, r_base, c_base — usadas

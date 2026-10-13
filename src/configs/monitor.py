@@ -23,4 +23,6 @@ class MonitorCfg:
     # B4 (2026-10-03) — calcula mae_hw/mae_graph (test set, unidade física) em
     # TODA época, gravados em epochs.csv; False = só no heartbeat (antigo).
     # Custo: uma passada forward extra sobre o test set por época.
-    metrics_every_epoch:  bool          = False
+    # [REMOVIDO 2026-10-13] default False — agora = bateria smooth (True)
+    # metrics_every_epoch:  bool          = False
+    metrics_every_epoch:  bool          = True

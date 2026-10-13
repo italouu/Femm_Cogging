@@ -160,11 +160,11 @@ def collect_masked_fno_gnn(model, d, thr):
 
 METRICS_REGISTRY = {
     'FNO2d':           collect_fno2d,
-    'FNO_ref':         collect_fno2d,
     'FNO2d_SingleMat': collect_single_mat_fno2d,
     'MaskedFNO2d':     collect_masked_fno2d,
     'FNO_GNN':         collect_fno_gnn,
-    'FNO_GNN_Field':   collect_fno_gnn,
+    # [REMOVIDO 2026-10-13] FNO_GNN_Field fora do ARCH_REGISTRY (arch obsoleta)
+    # 'FNO_GNN_Field':   collect_fno_gnn,
     'GNN_PostBase':    collect_fno_gnn,
     'MaskedFNO_GNN':   collect_masked_fno_gnn,
 }

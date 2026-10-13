@@ -254,17 +254,40 @@ def _scan_interface(mesh, B1, B2, con, ei, k, direction):
         if nxt == -1:
             return 'punt', e
         if lbl[ei] != lbl[nxt]:
-            return 'iface', (e, pt)
+            # [REMOVIDO 2026-10-11] payload sem nxt — nxt é necessário p/ bn_source='B'
+            # return 'iface', (e, pt)
+            return 'iface', (e, pt, nxt)
         e = nxt
     return 'none', None
 
 
-def _interface_contrib(mesh, B1, B2, e, k, pt):
-    """Contribuição do lado de interface (k, pt) — corpo comum aos dois scans."""
+# [REMOVIDO 2026-10-11] assinatura sem nxt/bn_source — ver bn_source abaixo
+# def _interface_contrib(mesh, B1, B2, e, k, pt):
+def _interface_contrib(mesh, B1, B2, e, k, pt, nxt=-1, bn_source='A'):
+    """Contribuição do lado de interface (k, pt) — corpo comum aos dois scans.
+
+    bn_source: origem da componente NORMAL à aresta de interface (k, pt)
+      'A' (padrão, fiel ao FEMM): bn = (A[pt] - A[k]) / |aresta| — usa o A da
+           solução do .ans (mesh.A).
+      'B': bn = média de B·n dos 2 elementos que compartilham a aresta (e, do
+           próprio lado, e nxt, do outro), n = (t_y, -t_x) — usa só o campo P0
+           fornecido (B1, B2). Para B = curl(A) P1 é idêntico a 'A' (B·n na aresta
+           é contínuo e vale exatamente (A[pt]-A[k])/|aresta|). Usar ao suavizar
+           um campo que NÃO vem do A do .ans (ex.: predição de um modelo), senão
+           a normal vem do gabarito.
+    """
     L = mesh.length_conv
     tn = complex(mesh.x[pt] - mesh.x[k], mesh.y[pt] - mesh.y[k])
     atn = abs(tn)
-    bn = (mesh.A[pt] - mesh.A[k]) / (atn * L)
+    # [REMOVIDO 2026-10-11] normal sempre a partir de mesh.A — agora depende de bn_source
+    # bn = (mesh.A[pt] - mesh.A[k]) / (atn * L)
+    if bn_source == 'A':
+        bn = (mesh.A[pt] - mesh.A[k]) / (atn * L)
+    elif bn_source == 'B':
+        nx_, ny_ = tn.imag / atn, -tn.real / atn
+        bn = 0.5 * ((B1[e] + B1[nxt]) * nx_ + (B2[e] + B2[nxt]) * ny_)
+    else:
+        raise ValueError(f"bn_source inválido: {bn_source!r}")
     z = 0.5 / atn
     tn = tn / abs(tn)
     bt = B1[e] * tn.real + B2[e] * tn.imag              # kludge with bt
@@ -275,7 +298,9 @@ def _interface_contrib(mesh, B1, B2, e, k, pt):
     return z, d1, d2, d1b, d2b, tn
 
 
-def _nodal_b_vertex(mesh, B1, B2, con, ei, i):
+# [REMOVIDO 2026-10-11] assinatura sem bn_source
+# def _nodal_b_vertex(mesh, B1, B2, con, ei, i):
+def _nodal_b_vertex(mesh, B1, B2, con, ei, i, bn_source='A'):
     """Ramo 'else' (m != NumList[k]) de GetNodalB para o vértice i do elemento ei.
 
     Retorna (b1, b2, rule) com rule em {'interface', 'punt', 'corner'}.
@@ -295,7 +320,10 @@ def _nodal_b_vertex(mesh, B1, B2, con, ei, i):
         v1, v2 = 1 + 0j, 1 + 0j
         rule = 'punt'
     elif kind == 'iface':
-        z, d1, d2, d1b, d2b, tn = _interface_contrib(mesh, B1, B2, pay[0], k, pay[1])
+        # [REMOVIDO 2026-10-11] sem nxt/bn_source
+        # z, d1, d2, d1b, d2b, tn = _interface_contrib(mesh, B1, B2, pay[0], k, pay[1])
+        z, d1, d2, d1b, d2b, tn = _interface_contrib(mesh, B1, B2, pay[0], k, pay[1],
+                                                     pay[2], bn_source)
         R += z
         b1 += d1; b2 += d2
         b1 += d1b; b2 += d2b
@@ -309,7 +337,10 @@ def _nodal_b_vertex(mesh, B1, B2, con, ei, i):
             v1, v2 = 1 + 0j, 1 + 0j
             rule = 'punt'
         elif kind == 'iface':
-            z, d1, d2, d1b, d2b, tn = _interface_contrib(mesh, B1, B2, pay[0], k, pay[1])
+            # [REMOVIDO 2026-10-11] sem nxt/bn_source
+            # z, d1, d2, d1b, d2b, tn = _interface_contrib(mesh, B1, B2, pay[0], k, pay[1])
+            z, d1, d2, d1b, d2b, tn = _interface_contrib(mesh, B1, B2, pay[0], k, pay[1],
+                                                         pay[2], bn_source)
             R += z
             b1 += d1; b2 += d2
             b1 += d1b; b2 += d2b
@@ -343,8 +374,14 @@ def _nodal_b_vertex(mesh, B1, B2, con, ei, i):
     return b1, b2, rule
 
 
-def nodal_b(mesh: AnsMesh, B1, B2, conlist=None, return_rule=False):
+# [REMOVIDO 2026-10-11] assinatura sem bn_source
+# def nodal_b(mesh: AnsMesh, B1, B2, conlist=None, return_rule=False):
+def nodal_b(mesh: AnsMesh, B1, B2, conlist=None, return_rule=False, bn_source='A'):
     """elm.b1[3]/elm.b2[3] de todos os elementos (P1 descontínuo).
+
+    bn_source='A' (padrão) = FEMM; 'B' = componente normal nas interfaces a partir
+    do próprio (B1, B2) em vez do A do .ans — ver _interface_contrib. Use 'B' ao
+    suavizar campos que não são curl(A) do .ans (predições).
 
     return_rule=True devolve também `rule` [M,3] (int8):
         0 = normal (média ponderada por 1/dist ao centróide)
@@ -395,7 +432,9 @@ def nodal_b(mesh: AnsMesh, B1, B2, conlist=None, return_rule=False):
     for ei, i in zip(*np.nonzero(~normal)):
         k = mesh.p[ei, i]
         con = con_idx[con_ptr[k]:con_ptr[k + 1]]
-        vb1, vb2, r = _nodal_b_vertex(mesh, B1, B2, con, int(ei), int(i))
+        # [REMOVIDO 2026-10-11] sem bn_source
+        # vb1, vb2, r = _nodal_b_vertex(mesh, B1, B2, con, int(ei), int(i))
+        vb1, vb2, r = _nodal_b_vertex(mesh, B1, B2, con, int(ei), int(i), bn_source)
         b1[ei, i], b2[ei, i] = vb1, vb2
         rule[ei, i] = rule_code[r]
 

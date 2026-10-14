@@ -552,11 +552,14 @@ class NnCfg:
     # lr: float = 1e-3
     # n_epochs: int = 500
     # test_split: Optional[float] = None
-    dataset: str = 'mesh_ans_138x276_smooth/FNO_BipartiteGNN_Elem'
+    # [REMOVIDO 2026-10-13] dataset/problem com sufixo _smooth — renomeados para o nome oficial
+    # dataset: str = 'mesh_ans_138x276_smooth/FNO_BipartiteGNN_Elem'
+    # problem: str = 'mesh_ans_138x276_smooth'
+    dataset: str = 'mesh_ans_138x276/FNO_BipartiteGNN_Elem'
     arch: str = field(default='', init=False)   # derivado de type(arch_cfg) — ARCH_REGISTRY
     loss: str = field(default='', init=False)   # derivado de type(loss_cfg) — LOSS_CFG_REGISTRY
 
-    problem: str = 'mesh_ans_138x276_smooth'
+    problem: str = 'mesh_ans_138x276'
 
     # Treino
     lr: float = 0.01

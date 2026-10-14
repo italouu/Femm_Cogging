@@ -8,8 +8,8 @@ Nada aqui treina; lê as runs em data/logs/ e grava em resultados/<dataset>/:
 
 Subcomandos:
   eval [N_AMOSTRAS] — os 8 runs da bateria smooth (4 archs × mse/mae, best.pth)
-      contra o gabarito smooth, nos chunks fora do treino ('teste37'/'fora51',
-      N -> metade de cada). Por amostra:
+      contra o gabarito smooth, nos chunks fora do treino ('teste'/'fora' — 'fora'
+      vazio no split 70/30; N -> dividido entre os subsets não vazios). Por amostra:
         mesh : |B| predito nos nós vs node_y (área dual do nó);
         grid : saída do estágio FNO (H×W) vs y_hw (r·dr·dθ);
         piso : y_hw do gabarito interpolado nos nós (INTERP_MODE) vs node_y.
@@ -27,14 +27,22 @@ from pathlib import Path
 
 import numpy as np
 
+from scripts.build_smooth_ans_chunks_direct import MAX_SAMPLES
 from src.postprocess.fields import mag
-from src.postprocess.inference import INTERP_MODE, floor_nodes, load_set, predict, to_torch_sample
+from src.postprocess.inference import (INTERP_MODE, find_runs, floor_nodes, load_set, predict,
+                                       to_torch_sample)
 from src.postprocess.metrics import Accum, grid_area_weights, merge, node_err, pstats
 from src.postprocess.samples import SUBSETS, design_rows, parse_smooth, samples_with_subset
 
-DATASET   = 'mesh_ans_138x276_smooth'
-ROOT_S    = Path('data/logs/mesh_ans_138x276_smooth_battery')        # bateria smooth
-SPLIT_RUN = ROOT_S / 'FNO2d' / 'run_0001'                            # referência do split
+# [REMOVIDO 2026-10-13] nomes com sufixo _smooth e run de referência do split fixa
+# (bateria de 4000 amostras). Agora o dataset smooth é o oficial e o split vem da run
+# FNO2d mse da própria bateria (find_runs).
+# DATASET   = 'mesh_ans_138x276_smooth'
+# ROOT_S    = Path('data/logs/mesh_ans_138x276_smooth_battery')        # bateria smooth
+# SPLIT_RUN = ROOT_S / 'FNO2d' / 'run_0001'                            # referência do split
+DATASET   = 'mesh_ans_138x276'
+ROOT_S    = Path('data/logs') / DATASET                              # logs da bateria smooth
+N_SAMPLES = MAX_SAMPLES   # amostras do raw no dataset (as mesmas do build dos chunks)
 OUT_ROOT  = Path('resultados') / DATASET
 N_WORKERS = 12
 
@@ -42,7 +50,9 @@ N_WORKERS = 12
 def run_eval(out_dir: Path, max_samples=None):
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = design_rows()
-    samples = samples_with_subset(SPLIT_RUN, max_samples)
+    # [REMOVIDO 2026-10-13] run de referência fixa
+    # samples = samples_with_subset(SPLIT_RUN, max_samples)
+    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], max_samples, N_SAMPLES)
     runs = load_set(ROOT_S)
     for k, r in runs.items():
         print(f"  {k:24s} {r['run']} best ép.{r['epoch']} interp={r['interp_mode']}")

@@ -5,7 +5,7 @@ Gera os 5 datasets da bateria smooth com um comando, direto do raw
 (data/raw/mesh_ans_138x276/), nas MAX_SAMPLES primeiras amostras (2000 -> 63 chunks):
   - FNO2d, FNO_GNN, GNN_PostBase, FNO_BipartiteGNN  (scripts.build_smooth_ans_chunks_direct)
   - FNO_BipartiteGNN_Elem                           (scripts.build_elem_smooth_chunks)
-Saída: data/torch/data_chunks/mesh_ans_138x276_smooth/<arch>/data_chunk_XXXX.pt
+Saída: data/torch/data_chunks/mesh_ans_138x276/<arch>/data_chunk_XXXX.pt
 Retomável: chunks já presentes são pulados (pode rodar de novo após interrupção).
 
 Ordem: precheck do parser Elem (amostra 0) + disco -> 4 datasets -> Elem -> contagem final.

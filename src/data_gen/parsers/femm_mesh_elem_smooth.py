@@ -4,14 +4,14 @@ parsers/femm_mesh_elem_smooth.py
 FNO_BipartiteGNN_Elem com gabarito B SUAVIZADO do FEMM (2026-10-10) -- versão
 smooth de `femm_mesh_elem.py` (bipartite com papéis trocados: elementos =
 grafo principal, vértices = auxiliar), coerente com os datasets
-`mesh_ans_138x276_smooth/<arch>` (`femm_mesh_smooth.py`).
+`mesh_ans_138x276/<arch>` (até 2026-10-13: `mesh_ans_138x276_smooth/<arch>`) (`femm_mesh_smooth.py`).
 
 Reaproveita parse_ans_gzip_sample_elem SEM mudança (x_hw, grafo dual, wrap,
 vértices, arestas cruzadas, contagens) e troca só o gabarito:
 
   y_hw [2,H,W]  -- point_b(smooth=True) no centro do pixel (_grid_smooth_b de
                    femm_mesh_smooth.py) -- idêntico ao y_hw das 4 archs de
-                   mesh_ans_138x276_smooth.
+                   mesh_ans_138x276 (antes mesh_ans_138x276_smooth).
   node_y [M,2]  -- B suavizado NO CENTRÓIDE de cada elemento:
                    point_b(smooth=True) no centróide = média dos 3 valores
                    nodais suavizados (b1,b2, P1 descontínuo) do elemento.

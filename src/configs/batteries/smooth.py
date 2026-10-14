@@ -2,12 +2,25 @@
 Bateria smooth (gabarito B suavizado do FEMM) — a única bateria do projeto: 5 archs × mse/mae
 (FNO2d, FNO_GNN, GNN_PostBase, FNO_BipartiteGNN e FNO_BipartiteGNN_Elem), na ordem em que
 foram treinadas (2026-10-09/10). Cada run escrita por inteiro.
-Logs: data/logs/mesh_ans_138x276_smooth_battery/<arch>/run_XXXX/
-      (Elem: data/logs/mesh_ans_138x276_smooth_elem_proto/FNO_BipartiteGNN_Elem/run_XXXX/).
-Chunks: python -m scripts.build_smooth_ans_chunks_direct (Elem: scripts.build_elem_smooth_chunks).
+Logs: data/logs/mesh_ans_138x276/<arch>/run_XXXX/ (as 5 archs, inclusive a Elem).
+Chunks: data/torch/data_chunks/mesh_ans_138x276/<arch>/ — python -m scripts.build_smooth_datasets.
+(Até 2026-10-13: chunks em mesh_ans_138x276_smooth/, logs em mesh_ans_138x276_smooth_battery/
+e, para a Elem, mesh_ans_138x276_smooth_elem_proto/ — runs de 4000 amostras.)
 
     python -m scripts.run_battery smooth [--dry-run]
+
+2026-10-13: dataset smooth reduzido às 2000 primeiras amostras do raw (63 chunks: 62×32 +
+1×16, scripts.build_smooth_datasets). Split 70/30: train_split=0.70 → 44 chunks de treino;
+test_split=None → teste = complemento (19 chunks). test_split=0.30 daria int(18,9)=18 e
+deixaria 1 chunk fora de tudo.
 """
+# [REMOVIDO 2026-10-13] valores de todas as runs na bateria de 4000 amostras (125 chunks:
+# 37 treino / 37 teste / 51 fora). Trocados para o dataset de 2000 amostras com 70/30 e
+# 500 épocas (pedido do usuário):
+#     dataset='mesh_ans_138x276_smooth/<arch>',
+#     problem='mesh_ans_138x276_smooth_battery',   (Elem: 'mesh_ans_138x276_smooth_elem_proto')
+#     n_epochs=350, ...
+#     train_split=0.30, test_split=0.30, split_seed=12,
 from src.configs.battery import BatteryCfg, BatteryRun
 from src.configs.training import (NnCfg, FNOConfig, FNO_GNNConfig, GNN_PostBaseConfig,
                                   FNO_BipartiteGNNConfig, FNO_BipartiteGNN_ElemConfig)
@@ -18,11 +31,11 @@ from src.configs.loss import MseLossCfg, MaeLossCfg
 # ── FNO2d ─────────────────────────────────────────────────────────────────────
 def fno2d_mse(runs):
     return NnCfg(
-        dataset='mesh_ans_138x276_smooth/FNO2d',
-        problem='mesh_ans_138x276_smooth_battery',
-        lr=0.005, n_epochs=350,
+        dataset='mesh_ans_138x276/FNO2d',
+        problem='mesh_ans_138x276',
+        lr=0.005, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.7,
-        batch_size=32, train_split=0.30, test_split=0.30, split_seed=12,
+        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -40,11 +53,11 @@ def fno2d_mse(runs):
 
 def fno2d_mae(runs):
     return NnCfg(
-        dataset='mesh_ans_138x276_smooth/FNO2d',
-        problem='mesh_ans_138x276_smooth_battery',
-        lr=0.005, n_epochs=350,
+        dataset='mesh_ans_138x276/FNO2d',
+        problem='mesh_ans_138x276',
+        lr=0.005, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.7,
-        batch_size=32, train_split=0.30, test_split=0.30, split_seed=12,
+        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -63,11 +76,11 @@ def fno2d_mae(runs):
 # ── FNO_GNN ───────────────────────────────────────────────────────────────────
 def fno_gnn_mse(runs):
     return NnCfg(
-        dataset='mesh_ans_138x276_smooth/FNO_GNN',
-        problem='mesh_ans_138x276_smooth_battery',
-        lr=0.003, n_epochs=350,
+        dataset='mesh_ans_138x276/FNO_GNN',
+        problem='mesh_ans_138x276',
+        lr=0.003, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.8,
-        batch_size=32, train_split=0.30, test_split=0.30, split_seed=12,
+        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -86,11 +99,11 @@ def fno_gnn_mse(runs):
 
 def fno_gnn_mae(runs):
     return NnCfg(
-        dataset='mesh_ans_138x276_smooth/FNO_GNN',
-        problem='mesh_ans_138x276_smooth_battery',
-        lr=0.003, n_epochs=350,
+        dataset='mesh_ans_138x276/FNO_GNN',
+        problem='mesh_ans_138x276',
+        lr=0.003, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.8,
-        batch_size=32, train_split=0.30, test_split=0.30, split_seed=12,
+        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -110,11 +123,11 @@ def fno_gnn_mae(runs):
 # ── GNN_PostBase (base = FNO2d desta bateria com a mesma loss) ───────────────
 def postbase_mse(runs):
     return NnCfg(
-        dataset='mesh_ans_138x276_smooth/GNN_PostBase',
-        problem='mesh_ans_138x276_smooth_battery',
-        lr=0.001, n_epochs=350,
+        dataset='mesh_ans_138x276/GNN_PostBase',
+        problem='mesh_ans_138x276',
+        lr=0.001, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.6,
-        batch_size=32, train_split=0.30, test_split=0.30, split_seed=12,
+        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -131,11 +144,11 @@ def postbase_mse(runs):
 
 def postbase_mae(runs):
     return NnCfg(
-        dataset='mesh_ans_138x276_smooth/GNN_PostBase',
-        problem='mesh_ans_138x276_smooth_battery',
-        lr=0.001, n_epochs=350,
+        dataset='mesh_ans_138x276/GNN_PostBase',
+        problem='mesh_ans_138x276',
+        lr=0.001, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.6,
-        batch_size=32, train_split=0.30, test_split=0.30, split_seed=12,
+        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -153,11 +166,11 @@ def postbase_mae(runs):
 # ── FNO_BipartiteGNN ──────────────────────────────────────────────────────────
 def bipartite_mse(runs):
     return NnCfg(
-        dataset='mesh_ans_138x276_smooth/FNO_BipartiteGNN',
-        problem='mesh_ans_138x276_smooth_battery',
-        lr=0.01, n_epochs=350,
+        dataset='mesh_ans_138x276/FNO_BipartiteGNN',
+        problem='mesh_ans_138x276',
+        lr=0.01, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.6,
-        batch_size=32, train_split=0.30, test_split=0.30, split_seed=12,
+        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -176,11 +189,11 @@ def bipartite_mse(runs):
 
 def bipartite_mae(runs):
     return NnCfg(
-        dataset='mesh_ans_138x276_smooth/FNO_BipartiteGNN',
-        problem='mesh_ans_138x276_smooth_battery',
-        lr=0.01, n_epochs=350,
+        dataset='mesh_ans_138x276/FNO_BipartiteGNN',
+        problem='mesh_ans_138x276',
+        lr=0.01, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.6,
-        batch_size=32, train_split=0.30, test_split=0.30, split_seed=12,
+        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -199,11 +212,11 @@ def bipartite_mae(runs):
 # ── FNO_BipartiteGNN_Elem ─────────────────────────────────────────────────────
 def elem_mse(runs):
     return NnCfg(
-        dataset='mesh_ans_138x276_smooth/FNO_BipartiteGNN_Elem',
-        problem='mesh_ans_138x276_smooth_elem_proto',
-        lr=0.01, n_epochs=350,
+        dataset='mesh_ans_138x276/FNO_BipartiteGNN_Elem',
+        problem='mesh_ans_138x276',
+        lr=0.01, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.6,
-        batch_size=32, train_split=0.30, test_split=0.30, split_seed=12,
+        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -222,11 +235,11 @@ def elem_mse(runs):
 
 def elem_mae(runs):
     return NnCfg(
-        dataset='mesh_ans_138x276_smooth/FNO_BipartiteGNN_Elem',
-        problem='mesh_ans_138x276_smooth_elem_proto',
-        lr=0.01, n_epochs=350,
+        dataset='mesh_ans_138x276/FNO_BipartiteGNN_Elem',
+        problem='mesh_ans_138x276',
+        lr=0.01, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.6,
-        batch_size=32, train_split=0.30, test_split=0.30, split_seed=12,
+        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,

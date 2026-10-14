@@ -10,7 +10,7 @@ src/data_gen/parsers/femm_mesh_elem_smooth.py).
 Raw: o MESMO da bateria (data/raw/mesh_ans_138x276/), amostras em ordem de
 índice, CHUNK_SIZE=32 (125 chunks) -> mesmo split (split_seed=12) da bateria
 smooth (scripts/run_best_configs_smooth.py).
-Saída: data/torch/data_chunks/mesh_ans_138x276_smooth/FNO_BipartiteGNN_Elem/
+Saída: data/torch/data_chunks/mesh_ans_138x276/FNO_BipartiteGNN_Elem/
 
 Precheck (amostra 0, pular com --no-precheck): x_hw/y_hw idênticos ao layout
 smooth da bipartite; node_y == média dos 3 valores nodais suavizados do

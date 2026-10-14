@@ -11,7 +11,7 @@ CLAUDE.md "Suavização de B do FEMM a partir do `.ans`"). 2026-10-09.
 Raw de origem: o MESMO raw da bateria oficial sem smooth
 (data/raw/mesh_ans_138x276/) -- mesmo chunking (CHUNK_SIZE amostras, mesma
 ordem), então o split_seed=12 dá o mesmo split treino/teste.
-Saída: data/torch/data_chunks/mesh_ans_138x276_smooth/<arch>/data_chunk_XXXX.pt
+Saída: data/torch/data_chunks/mesh_ans_138x276/<arch>/data_chunk_XXXX.pt
 
 Execução (a partir da raiz do projeto):
     python -m scripts.build_smooth_ans_chunks_direct
@@ -29,7 +29,9 @@ _dg = DatagenConfig()
 
 # raw da bateria oficial sem smooth (mesh_ans_138x276_unified) -- fonte única
 RAW_DATASET  = 'mesh_ans_138x276'
-OUT_DATASET  = 'mesh_ans_138x276_smooth'
+# [REMOVIDO 2026-10-13] nome com sufixo _smooth — o smooth passou a ser o dataset oficial
+# OUT_DATASET  = 'mesh_ans_138x276_smooth'
+OUT_DATASET  = 'mesh_ans_138x276'
 N_R, N_A     = _dg.n_r, _dg.n_a
 ANG_1, ANG_2 = _dg.ang_1, _dg.ang_2
 CHUNK_SIZE   = _dg.chunk_size

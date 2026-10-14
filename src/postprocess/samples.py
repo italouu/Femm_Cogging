@@ -22,10 +22,11 @@ from src.configs.datagen import DatagenConfig
 from src.data_gen.parsers.femm_mesh_smooth import parse_ans_gzip_sample_smooth
 from src.neural_op.dataloaders.grid_loader import split_chunk_paths
 
-RAW_DIR  = Path('data/raw/mesh_ans_138x276')
-TMP_ROOT = Path('data/temp') / 'postprocess'
-
 _dg = DatagenConfig()
+
+# [REMOVIDO 2026-10-14] RAW_DIR  = Path('data/raw/mesh_ans_138x276') — agora DatagenConfig.dataset
+RAW_DIR  = Path('data/raw') / _dg.dataset
+TMP_ROOT = Path('data/temp') / 'postprocess'
 N_R, N_A     = _dg.n_r, _dg.n_a
 ANG_1, ANG_2 = _dg.ang_1, _dg.ang_2
 CHUNK_SIZE   = _dg.chunk_size

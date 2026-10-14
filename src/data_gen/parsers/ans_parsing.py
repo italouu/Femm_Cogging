@@ -171,6 +171,63 @@ def _parse_label_materials(lines):
     return label_material_id, label_mu, label_M
 
 
+def _parse_label_currents(lines, elems: np.ndarray, area: np.ndarray) -> np.ndarray:
+    """Densidade de corrente J [A/mm²] por RÓTULO de bloco (2026-10-14).
+
+    Na magnetostática o FEMM trata o bloco num circuito em série como condutor
+    sólido de J uniforme = Turns·TotalAmps / área do bloco (os parâmetros de fio só
+    importam em CA) — o mesmo J que entra na EDP. TotalAmps vem de [CircuitProps];
+    InCircuit (5ª coluna de [BlockLabels], 1-based, 0 = nenhum) e Turns (8ª); a área
+    do bloco é a soma das áreas dos elementos do rótulo. Rótulos fora de circuito e
+    .ans sem circuitos -> 0. Validado em tests/proto_currents_sample.py.
+    """
+    amps, cur = [], None
+    for l in lines:
+        s = l.strip()
+        if s.startswith('<BeginCircuit>'):
+            cur = 0.0
+        elif cur is not None and s.startswith('<TotalAmps_re>'):
+            cur = float(s.split('=', 1)[1])
+        elif s.startswith('<EndCircuit>'):
+            amps.append(cur)
+            cur = None
+        elif s.startswith('[NumBlockLabels]'):
+            break
+    amps = np.array(amps, dtype=np.float64)
+
+    j = next(i for i, l in enumerate(lines) if l.strip().startswith('[NumBlockLabels]'))
+    n_labels = int(lines[j].split('=')[1].strip())
+    lab = [l.split() for l in lines[j + 1:j + 1 + n_labels]]
+    in_circ = np.array([int(t[4]) - 1 for t in lab], dtype=np.int64)
+    turns = np.array([float(t[7]) for t in lab], dtype=np.float64)
+
+    label_area = np.bincount(elems[:, 3], weights=area, minlength=n_labels)
+    label_J = np.zeros(n_labels, dtype=np.float64)
+    has = in_circ >= 0
+    label_J[has] = turns[has] * amps[in_circ[has]] / label_area[has]
+    return label_J.astype(np.float32)
+
+
+def _node_current_density(elems: np.ndarray, area: np.ndarray, elem_J: np.ndarray,
+                          elem_material_id: np.ndarray,
+                          node_material_id: np.ndarray) -> np.ndarray:
+    """J por nó (2026-10-14), seguindo o material do nó como M em
+    _node_magnet_polarity: nó de cobre -> média de J dos elementos de cobre
+    incidentes, ponderada por área (nó na divisa ida/volta da mesma ranhura fica
+    com a média dos dois lados); qualquer outro material -> 0."""
+    n_nodes = node_material_id.shape[0]
+    is_cu = elem_material_id == MATERIAL_ID['copper']
+    num = np.zeros(n_nodes, dtype=np.float64)
+    den = np.zeros(n_nodes, dtype=np.float64)
+    for corner in range(3):
+        idx = elems[:, corner]
+        np.add.at(num, idx[is_cu], (area * elem_J)[is_cu])
+        np.add.at(den, idx[is_cu], area[is_cu])
+    node_J = np.divide(num, den, out=np.zeros(n_nodes), where=den > 0)
+    node_J[node_material_id != MATERIAL_ID['copper']] = 0.0
+    return node_J.astype(np.float32)
+
+
 def _build_edges(elems):
     tri = elems[:, :3]
     edges = np.concatenate([tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]], axis=0)

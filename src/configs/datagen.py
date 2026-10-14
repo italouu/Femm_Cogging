@@ -4,7 +4,10 @@ from typing import Optional
 
 @dataclass
 class DatagenConfig:
-    dataset: str = 'mesh_ans_138x276'
+    # [REMOVIDO 2026-10-14] raw sem correntes (4000 amostras) — continua em data/raw/mesh_ans_138x276/
+    # dataset: str = 'mesh_ans_138x276'
+    # raw com correntes de fase (current_peak abaixo), 6000 amostras — 2026-10-14
+    dataset: str = 'BLDC_138x276'
 
     # Grade / Geometria
     n_r: int = 138
@@ -33,9 +36,14 @@ class DatagenConfig:
     mode: str = 'femm_mesh_v2'
     distribution: str = 'uniform'
     sample_method: str = 'legacy'  # 'fixed_geometry' |'constrained' | 'legacy' | 'constrained_lhs'
-    n_samples: int = 4000
+    # [REMOVIDO 2026-10-14] n_samples: int = 4000  (raw mesh_ans_138x276)
+    n_samples: int = 6000
     max_depth: int = 1
     datagen_seed: int = 12
+    # Correntes de fase (2026-10-14): pico [A] por fase do sorteio equilibrado
+    # (I ~ U[0, current_peak], θe ~ U[0, 360°) — BLDC_Process.add_phase_currents).
+    # 0 = sem correntes (raw sem as colunas current_* -> 0 A, como antes).
+    current_peak: float = 10.0
     cascade_buffer: Optional[int] = 1
     homogeneity_threshold: float = 0.90
 

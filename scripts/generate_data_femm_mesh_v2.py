@@ -27,6 +27,7 @@ esse .ans.gz ainda NÃO existem -- fora do escopo desta mudança, ver
 Execução (a partir da raiz do projeto):
     python -m scripts.generate_data_femm_mesh_v2
 """
+import csv
 import os
 import shutil
 from collections import deque
@@ -129,11 +130,34 @@ def multi_process(indices, motor_params_list, out_dir, max_workers):
     return failed
 
 
+def _check_existing_raw(motor_params_list):
+    """Recusa completar um raw já existente com parâmetros de outras colunas (2026-10-14):
+    ex. raw sem correntes + current_peak > 0 -> as amostras novas teriam corrente e as
+    antigas não, e o valid_designs.csv (reescrito abaixo) não descreveria as antigas."""
+    csv_path = OUT_DIR / "valid_designs.csv"
+    if not csv_path.exists() or not any(OUT_DIR.glob("sample_*.ans.gz")):
+        return
+    with open(csv_path, newline='') as f:
+        old_cols = next(csv.reader(f))
+    new_cols = [f"{k} [{v['unit']}]" if v['unit'] else k for k, v in motor_params_list.items()]
+    if old_cols != new_cols:
+        raise RuntimeError(
+            f"{OUT_DIR} já tem amostras geradas com outras colunas no valid_designs.csv "
+            f"(faltando: {sorted(set(new_cols) - set(old_cols))}, sobrando: "
+            f"{sorted(set(old_cols) - set(new_cols))}) — use outro DatagenConfig.dataset "
+            f"ou confira DatagenConfig.current_peak")
+
+
 def run():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     gen = _SAMPLE_METHODS[_dg.sample_method]
     motor_params_list = gen(num_samples=N_SAMPLES, seed=_dg.datagen_seed)
+    # correntes de fase (2026-10-14) — sorteio próprio, não altera a geometria
+    if _dg.current_peak > 0:
+        BLDC_Process.add_phase_currents(motor_params_list, i_peak=_dg.current_peak,
+                                        seed=_dg.datagen_seed)
+    _check_existing_raw(motor_params_list)
     BLDC_Process.export_params(params=motor_params_list)
 
     pending = [i for i in range(N_SAMPLES) if not (OUT_DIR / f"sample_{i:06d}.ans.gz").exists()]

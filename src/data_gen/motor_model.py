@@ -12,6 +12,7 @@ from src.data_gen.motor_constants import (
     PERMEABILITY as _MOTOR_PERMEABILITY,
     MATERIAL_ID as _MOTOR_MATERIAL_ID,
     N_POLES_SECTOR as _MOTOR_N_POLES_SECTOR,
+    WINDING_SECTOR as _MOTOR_WINDING_SECTOR,
 )
 _dg = DatagenConfig()
 DATASET                = _dg.dataset
@@ -64,6 +65,10 @@ class BLDC_Process:
         self.slot_Rs               = motor_params['slot_Rs']['value']
         self.pole_embrance         = motor_params['pole_embrance']['value']
         self.pole_thickness        = motor_params['pole_thickness']['value']
+        # correntes de fase (2026-10-14): amplitude [A] e ângulo elétrico θe [graus] do
+        # sistema trifásico equilibrado (ver phase_currents). Ausentes (CSV antigo) -> 0 A.
+        self.current_amplitude     = float(motor_params.get('current_amplitude', {'value': 0.0})['value'])
+        self.current_angle         = float(motor_params.get('current_angle', {'value': 0.0})['value'])
 
         self.material_iron ='iron_1008'
         self.material_mag = 'N35'
@@ -977,6 +982,32 @@ class BLDC_Process:
             samples['rotor_phase']['value'].append(rotor_phase)
 
         return samples
+
+    @staticmethod
+    def add_phase_currents(samples, i_peak, seed=42):
+        """Acrescenta as correntes de fase a `samples` (saída de qualquer generate_samples*),
+        in place, e devolve `samples` (2026-10-14).
+
+        Sistema trifásico equilibrado: amplitude I ~ U[0, i_peak] [A] e ângulo elétrico
+        θe ~ U[0, 360) [graus] — colunas 'current_amplitude' e 'current_angle'. Garante
+        |Ia|, |Ib|, |Ic| <= i_peak (sortear Ia, Ib independentes deixaria Ic chegar a
+        2·i_peak). Gerador próprio (seed + rótulo fixo), sorteado depois da geometria:
+        com o mesmo seed, geometria e rotor_phase saem idênticos aos de antes.
+        """
+        n = len(next(iter(samples.values()))['value'])
+        rng = np.random.default_rng([seed, 0x1A])
+        samples['current_amplitude'] = {'unit': 'A', 'value': list(rng.uniform(0.0, i_peak, n))}
+        samples['current_angle'] = {'unit': 'deg', 'value': list(rng.uniform(0.0, 360.0, n))}
+        return samples
+
+    @staticmethod
+    def phase_currents(amplitude, angle_deg):
+        """{'A','B','C'} -> corrente [A]: Ia = I·cos θe, Ib = I·cos(θe − 120°),
+        Ic = I·cos(θe + 120°) (Ia + Ib + Ic = 0). `+ 0.0` evita −0.0 (I = 0 dá o .ans
+        idêntico ao de antes das correntes)."""
+        th = np.deg2rad(angle_deg)
+        return {ph: float(amplitude * np.cos(th - shift)) + 0.0
+                for ph, shift in (('A', 0.0), ('B', 2 * np.pi / 3), ('C', -2 * np.pi / 3))}
 
     @staticmethod
     def export_params(params, filename="valid_designs.csv", data_path=None):
@@ -2072,10 +2103,14 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
         r = self.stator_outer_diameter / 2 - (self.slot_Hs0 + self.slot_Hs1 + self.slot_Hs2 / 2)
         step = 2 * np.pi / self.number_stator_slots
         ang_offset = step / 2 - self.slotoppener_ang / 2
+        # correntes de fase (2026-10-14): bobina do dente i = coil_i_0 (+sinal·I_fase) e
+        # coil_i_1 (−sinal·I_fase), tabela WINDING_SECTOR (motor_constants.py)
+        i_ph = self.phase_currents(self.current_amplitude, self.current_angle)
 
         for i in range(self.N_SLOTS_SECTOR):
-            femm.mi_addcircprop('coil_' + str(i) + '_0', 0, 1)
-            femm.mi_addcircprop('coil_' + str(i) + '_1', 0, 1)
+            ph, sign = _MOTOR_WINDING_SECTOR[i]
+            femm.mi_addcircprop('coil_' + str(i) + '_0', +sign * i_ph[ph] + 0.0, 1)
+            femm.mi_addcircprop('coil_' + str(i) + '_1', -sign * i_ph[ph] + 0.0, 1)
 
             ang = step * i + step / 2 - ang_offset
             # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_copper) — exigia o material na biblioteca local do FEMM; ver _get_material

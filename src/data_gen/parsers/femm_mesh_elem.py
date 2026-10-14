@@ -20,8 +20,8 @@ Normalizer/_detect_chunk_dims/step_fn/metric_fn da bipartite reaproveitados
 sem mudança), mas com o significado trocado:
 
   grafo PRINCIPAL = elementos (chaves node_*):
-    node_x     [M,5]  r_base_c, c_base_c (centróide, CRUS -- interpolação do
-                      FNO), mu_r, M, area
+    node_x     [M,6]  r_base_c, c_base_c (centróide, CRUS -- interpolação do
+                      FNO), mu_r, M, area, J [A/mm²] (2026-10-14)
     node_y     [M,2]  Bx, By por elemento (T)
     edge_index [2,F]  dual bidirecional: elementos que compartilham uma aresta
                       da malha + wrap periódico θ=0/120° (elementos cuja aresta
@@ -113,8 +113,8 @@ def parse_ans_gzip_sample_elem(ans_gz_path: Path, r_in: float, r_ext: float,
     assert elems.shape[0] == bip['elem_x'].shape[0], "contagem de elementos divergente"
 
     # --- principal: elementos ---
-    ex = bip['elem_x']                     # mu_r, M, area, r_base_c, c_base_c
-    node_x = ex[:, [3, 4, 0, 1, 2]].astype(np.float32)
+    ex = bip['elem_x']                     # mu_r, M, area, r_base_c, c_base_c, J
+    node_x = ex[:, [3, 4, 0, 1, 2, 5]].astype(np.float32)
     rc, cc = ex[:, 3].astype(np.float64), ex[:, 4].astype(np.float64)
     # A em float32, como em parse_ans_gzip_sample (node_A) -- média nodal deste
     # B por elemento reproduz exatamente o node_y da bateria

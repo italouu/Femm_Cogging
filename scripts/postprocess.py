@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from scripts.build_smooth_ans_chunks_direct import MAX_SAMPLES
+from src.configs.datagen import DatagenConfig
 from src.postprocess.fields import mag
 from src.postprocess.inference import (INTERP_MODE, find_runs, floor_nodes, load_set, predict,
                                        to_torch_sample)
@@ -40,7 +41,8 @@ from src.postprocess.samples import SUBSETS, design_rows, parse_smooth, samples_
 # DATASET   = 'mesh_ans_138x276_smooth'
 # ROOT_S    = Path('data/logs/mesh_ans_138x276_smooth_battery')        # bateria smooth
 # SPLIT_RUN = ROOT_S / 'FNO2d' / 'run_0001'                            # referência do split
-DATASET   = 'mesh_ans_138x276'
+# [REMOVIDO 2026-10-14] DATASET   = 'mesh_ans_138x276' — agora DatagenConfig.dataset (= raw)
+DATASET   = DatagenConfig().dataset
 ROOT_S    = Path('data/logs') / DATASET                              # logs da bateria smooth
 N_SAMPLES = MAX_SAMPLES   # amostras do raw no dataset (as mesmas do build dos chunks)
 OUT_ROOT  = Path('resultados') / DATASET

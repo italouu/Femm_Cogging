@@ -56,7 +56,10 @@ target_field='B' (2026-08-13, ver CLAUDE.md "Grafo duplo vértices+elementos"):
                   não constante-por-elemento) -- ver _grid_barycentric.
 
 Grafo 2 -- elementos/centróides (1 nó por triângulo, SEM arestas internas):
-    elem_x [M,5]  mu_r, M, area, r_base_centróide, c_base_centróide
+    elem_x [M,6]  mu_r, M, area, r_base_centróide, c_base_centróide, J
+                  (J [A/mm²] = Turns·I/área do bloco, 0 fora das bobinas --
+                  2026-10-14, _parse_label_currents; última coluna, fora dos
+                  índices estruturais da normalização)
 
 Arestas cruzadas (elemento -> vértice, unidirecional, conexão imediata --
 cada elemento liga só aos seus 3 vértices, sem busca por raio/k-NN):
@@ -64,7 +67,7 @@ cada elemento liga só aos seus 3 vértices, sem busca por raio/k-NN):
     cross_edge_attr [C,1]  center_dist (distância centróide-vértice, mm)
 
 Grade H×W (amostrada só do grafo, sem COM):
-    x_hw [2,H,W]  Mu_r, M -- constante por elemento (trifinder + valor do
+    x_hw [3,H,W]  Mu_r, M, J -- constante por elemento (trifinder + valor do
                   elemento; fallback pro elemento de centróide mais
                   próximo se o pixel cair fora da triangulação -- SEM
                   fallback por nó, nó não carrega material nesse design)
@@ -91,6 +94,7 @@ from src.data_gen.parsers.ans_parsing import (
     _parse_solution, _parse_block_materials, _block_magnet_polarity,
     _build_edges, _element_areas, _wrap_edge_pairs, _grid_polar_xy,
     _element_b_from_A, _node_mean_of_elements, _parse_label_materials,
+    _parse_label_currents,
 )
 from src.data_gen.motor_constants import N_POLES_SECTOR as _N_POLES_SECTOR
 
@@ -179,6 +183,8 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     elem_mu = label_mu[elems[:, 3]]
     elem_M = label_M[elems[:, 3]]
     elem_area = _element_areas(nodes, elems)
+    # densidade de corrente por elemento (2026-10-14) -- 0 sem correntes
+    elem_J = _parse_label_currents(lines, elems, elem_area)[elems[:, 3]]
 
     ang_1_rad, ang_2_rad = np.deg2rad(ang_1), np.deg2rad(ang_2)
 
@@ -231,7 +237,7 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     c_base_elem = ((th_elem - ang_1_rad) / (ang_2_rad - ang_1_rad)).astype(np.float32)
 
     elem_x = np.stack(
-        [elem_mu, elem_M, elem_area.astype(np.float32), r_base_elem, c_base_elem], axis=1
+        [elem_mu, elem_M, elem_area.astype(np.float32), r_base_elem, c_base_elem, elem_J], axis=1
     ).astype(np.float32)
 
     # --- arestas cruzadas: cada elemento -> seus 3 vértices (unidirecional) ---
@@ -246,6 +252,7 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     tri, trifinder = _build_trifinder(nodes, elems)
     Mu_hw = _grid_const_per_element(trifinder, elem_mu, centroids, Xg, Yg).reshape(n_r, n_a)
     M_hw = _grid_const_per_element(trifinder, elem_M, centroids, Xg, Yg).reshape(n_r, n_a)
+    J_hw = _grid_const_per_element(trifinder, elem_J, centroids, Xg, Yg).reshape(n_r, n_a)
     if target_field == 'A':
         A_hw = _grid_barycentric(tri, node_A, Xg, Yg).reshape(n_r, n_a)
         y_hw = A_hw[None, :, :]
@@ -262,7 +269,7 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
         'edge_index': edge_index, 'edge_attr': edge_attr,
         'elem_x': elem_x,
         'cross_edge_index': cross_edge_index, 'cross_edge_attr': cross_edge_attr,
-        'x_hw': np.stack([Mu_hw, M_hw], axis=0),
+        'x_hw': np.stack([Mu_hw, M_hw, J_hw], axis=0).astype(np.float32),
         'y_hw': y_hw,
         'L': np.array([n_nodes], dtype=np.int64),
         'elem_L': np.array([n_elems], dtype=np.int64),

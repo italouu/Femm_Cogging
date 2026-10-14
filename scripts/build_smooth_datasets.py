@@ -2,10 +2,11 @@
 build_smooth_datasets.py
 ------------------------
 Gera os 5 datasets da bateria smooth com um comando, direto do raw
-(data/raw/mesh_ans_138x276/), nas MAX_SAMPLES primeiras amostras (2000 -> 63 chunks):
+(data/raw/<DatagenConfig.dataset>/ — desde 2026-10-14 BLDC_138x276, com correntes; antes
+mesh_ans_138x276), nas MAX_SAMPLES primeiras amostras (None = todas; 6000 -> 188 chunks):
   - FNO2d, FNO_GNN, GNN_PostBase, FNO_BipartiteGNN  (scripts.build_smooth_ans_chunks_direct)
   - FNO_BipartiteGNN_Elem                           (scripts.build_elem_smooth_chunks)
-Saída: data/torch/data_chunks/mesh_ans_138x276/<arch>/data_chunk_XXXX.pt
+Saída: data/torch/data_chunks/<DatagenConfig.dataset>/<arch>/data_chunk_XXXX.pt
 Retomável: chunks já presentes são pulados (pode rodar de novo após interrupção).
 
 Ordem: precheck do parser Elem (amostra 0) + disco -> 4 datasets -> Elem -> contagem final.
@@ -20,6 +21,7 @@ import time
 
 from scripts import build_elem_smooth_chunks as elem
 from scripts import build_smooth_ans_chunks_direct as smooth
+from src.configs.datagen import DatagenConfig
 from src.data_gen.parsers.femm_mesh_smooth import SMOOTH_ARCHS
 
 GB_PER_CHUNK = 0.86 + 0.36   # 4 datasets + Elem, medido 2026-10-13
@@ -28,6 +30,13 @@ ARCHS = (*SMOOTH_ARCHS, elem.OUT_NAME)
 
 def main():
     n_samples = smooth.MAX_SAMPLES
+    if n_samples is None:   # todas (2026-10-14): o raw precisa estar completo (DatagenConfig.n_samples)
+        n_raw = len(list(smooth.RAW_DIR.glob("sample_*.ans.gz")))
+        if n_raw != DatagenConfig().n_samples:
+            print(f"  ERRO: {smooth.RAW_DIR} tem {n_raw} .ans.gz, esperado "
+                  f"{DatagenConfig().n_samples} (geração incompleta?) - nada foi gerado.")
+            raise SystemExit(2)
+        n_samples = n_raw
     n_chunks = math.ceil(n_samples / smooth.CHUNK_SIZE)
     need_gb = n_chunks * GB_PER_CHUNK
     free_gb = shutil.disk_usage('.').free / 2**30

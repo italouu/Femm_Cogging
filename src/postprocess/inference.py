@@ -70,7 +70,15 @@ def load_set(root: Path, losses=('mse', 'mae')):
 
 
 def _enc(normalizer, t, key):
-    return normalizer.encode(t, key) if normalizer is not None else t
+    """Normaliza; antes, descarta os canais de entrada a mais (dim 1) que a run não
+    conhece — canais novos entram sempre no fim (ex.: J, 2026-10-14), então os
+    primeiros são os mesmos do treino. Nº de canais da run = len(stats[key]['mean'])."""
+    if normalizer is None:
+        return t
+    st = normalizer.stats.get(key)
+    if st is not None and t.shape[1] > len(st['mean']):
+        t = t[:, :len(st['mean'])]
+    return normalizer.encode(t, key)
 
 
 def _dec(normalizer, t, key):

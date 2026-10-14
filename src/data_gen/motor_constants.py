@@ -63,3 +63,12 @@ FEMM_MATERIAL_DEFS = {
 # Simetria 120° (42 polos/36 ranhuras) — ver docstring de
 # BLDC_FEMM_Model_Sym120 em motor_model.py para a matemática completa.
 N_POLES_SECTOR = 14   # 120 / (360/42)
+
+# Enrolamento do setor 120° (2026-10-14, validado em tests/proto_currents_sample.py e
+# tests/proto_rotating_field.py): 1 célula 12 ranhuras / 14 polos, camada dupla
+# concentrada. Dente k -> (fase, sinal); a bobina do dente k são os circuitos
+# coil_k_0 (ida, +sinal·I_fase, lado de θ menor) e coil_k_1 (volta, −sinal·I_fase).
+# Layout clássico do 12/14 com B <-> C trocados, para que ABC com θe crescente gire
+# o campo em +θ, mesmo sentido de rotor_phase crescente (θe = +21·θ_rotor).
+WINDING_SECTOR = (('A', +1), ('A', -1), ('C', -1), ('C', +1), ('B', +1), ('B', -1),
+                  ('A', -1), ('A', +1), ('C', +1), ('C', -1), ('B', -1), ('B', +1))

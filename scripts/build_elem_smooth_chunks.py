@@ -31,11 +31,16 @@ from scripts.build_smooth_ans_chunks_direct import (
     RAW_DIR, CHUNKS_ROOT, N_R, N_A, ANG_1, ANG_2, CHUNK_SIZE, MAX_WORKERS, MAX_SAMPLES,
 )
 from scripts.build_unified_ans_chunks_direct import _sample_idx
-from scripts.build_elem_proto_chunks import _write_chunk, N_RAW_EXPECTED, MIN_FREE_GB
+# [REMOVIDO 2026-10-14] N_RAW_EXPECTED do protótipo (4000 fixo) — agora o nº do DatagenConfig
+# from scripts.build_elem_proto_chunks import _write_chunk, N_RAW_EXPECTED, MIN_FREE_GB
+from scripts.build_elem_proto_chunks import _write_chunk, MIN_FREE_GB
+from src.configs.datagen import DatagenConfig
+N_RAW_EXPECTED = DatagenConfig().n_samples   # precheck com max_samples=None: raw completo
 from src.data_gen.parsers.femm_mesh_elem_smooth import parse_ans_gzip_sample_elem_smooth
 
 OUT_NAME  = 'FNO_BipartiteGNN_Elem'
-TMP_PARSE = Path("data/temp") / "mesh_ans_138x276_elem_smooth_parse"
+# [REMOVIDO 2026-10-14] TMP_PARSE = Path("data/temp") / "mesh_ans_138x276_elem_smooth_parse"
+TMP_PARSE = Path("data/temp") / f"{DatagenConfig().dataset}_elem_smooth_parse"
 
 
 def _parse_one(path: Path, r_in: float, r_ext: float, tmp_dir: Path) -> dict:

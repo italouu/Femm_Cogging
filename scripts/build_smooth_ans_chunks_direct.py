@@ -27,11 +27,16 @@ from scripts.build_unified_ans_chunks_direct import _sample_idx, _dim, _builders
 
 _dg = DatagenConfig()
 
-# raw da bateria oficial sem smooth (mesh_ans_138x276_unified) -- fonte única
-RAW_DATASET  = 'mesh_ans_138x276'
-# [REMOVIDO 2026-10-13] nome com sufixo _smooth — o smooth passou a ser o dataset oficial
-# OUT_DATASET  = 'mesh_ans_138x276_smooth'
-OUT_DATASET  = 'mesh_ans_138x276'
+# [REMOVIDO 2026-10-14] raw/saída fixos no dataset sem correntes — agora vêm de
+# DatagenConfig.dataset (BLDC_138x276: raw com correntes, 6000 amostras)
+# # raw da bateria oficial sem smooth (mesh_ans_138x276_unified) -- fonte única
+# RAW_DATASET  = 'mesh_ans_138x276'
+# # [REMOVIDO 2026-10-13] nome com sufixo _smooth — o smooth passou a ser o dataset oficial
+# # OUT_DATASET  = 'mesh_ans_138x276_smooth'
+# OUT_DATASET  = 'mesh_ans_138x276'
+# raw e chunks com o mesmo nome: data/raw/<dataset>/ -> data/torch/data_chunks/<dataset>/<arch>/
+RAW_DATASET  = _dg.dataset
+OUT_DATASET  = _dg.dataset
 N_R, N_A     = _dg.n_r, _dg.n_a
 ANG_1, ANG_2 = _dg.ang_1, _dg.ang_2
 CHUNK_SIZE   = _dg.chunk_size
@@ -41,9 +46,14 @@ MAX_WORKERS  = _dg.npz_max_workers
 # do usuário: gerar local sem trazer >100 GB da VM; o dataset final será refeito na VM).
 # # None = todas as amostras do raw
 # MAX_SAMPLES = None
-# 2000 primeiras amostras (ordem de índice) -> 63 chunks (62 × 32 + 1 × 16). Usado também
-# por scripts/build_elem_smooth_chunks.py e scripts/build_smooth_datasets.py. None = todas.
-MAX_SAMPLES = 2000
+# [REMOVIDO 2026-10-14] 2000 primeiras amostras do mesh_ans_138x276 (63 chunks)
+# # 2000 primeiras amostras (ordem de índice) -> 63 chunks (62 × 32 + 1 × 16). Usado também
+# # por scripts/build_elem_smooth_chunks.py e scripts/build_smooth_datasets.py. None = todas.
+# MAX_SAMPLES = 2000
+# Todas as amostras do raw (BLDC_138x276: 6000 -> 188 chunks, 187 × 32 + 1 × 16). Usado também
+# por scripts/build_elem_smooth_chunks.py, scripts/build_smooth_datasets.py e
+# scripts/postprocess.py. None = todas.
+MAX_SAMPLES = None
 
 RAW_DIR     = Path("data/raw") / RAW_DATASET
 CHUNKS_ROOT = Path("data/torch/data_chunks") / OUT_DATASET

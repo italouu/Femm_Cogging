@@ -20,10 +20,13 @@ Diferenças em relação a parse_ans_gzip_sample_unified:
   y_hw [2,H,W]    -- (as 4 archs) point_b(smooth=True) no centro do pixel,
                      elemento via trifinder (= mo_getb com mo_smooth('on')).
                      Antes: interpolação baricêntrica do node_y antigo.
-  node_x [S,5]    -- (FNO_GNN/GNN_PostBase) mu_r pela prioridade; M segue o
+  node_x [S,6]    -- (FNO_GNN/GNN_PostBase) mu_r pela prioridade; M segue o
                      material escolhido (nó ímã -> +-1 pela polaridade dos
                      elementos de ímã incidentes; qualquer outro -> 0 --
-                     decisão do usuário 2026-10-09, opção (a)).
+                     decisão do usuário 2026-10-09, opção (a)). J [A/mm²]
+                     (2026-10-14, última coluna) segue o mesmo critério: nó de
+                     cobre -> média por área do J dos elementos de cobre
+                     incidentes; outro -> 0 (_node_current_density).
   edge_attr [E,4] -- delta_mu recalculado com o mu_r novo.
 
 Idênticos aos unificados: x_hw, a_hw, node_A, node_dual_area, r_base/c_base,
@@ -40,6 +43,7 @@ from src.data_gen.parsers.ans_parsing import (
     _parse_label_materials, _build_edges, _element_areas, _node_material_stats,
     _node_magnet_polarity, _node_material_priority, _wrap_edge_pairs,
     _build_bidirectional_edge_attrs, _grid_polar_xy, _MU_BY_ID, _MAGNET_ID,
+    _node_current_density,
 )
 from src.data_gen.parsers.femm_mesh_v2 import (
     parse_ans_gzip_sample, _build_trifinder, _grid_barycentric,
@@ -134,6 +138,9 @@ def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
     node_M = np.where(node_material_id == _MAGNET_ID,
                       _node_magnet_polarity(nodes, elems, area, elem_material_id, elem_M),
                       0.0).astype(np.float32)
+    # J (2026-10-14): elem_x do bipartite, coluna 5 (mesma ordem de elementos)
+    node_J = _node_current_density(elems, area, bip['elem_x'][:, 5], elem_material_id,
+                                   node_material_id)
 
     edges_undirected = _build_edges(elems)
     wrap_idx_1, wrap_idx_2 = _wrap_edge_pairs(nodes, ang_1, ang_2)
@@ -149,6 +156,7 @@ def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
         node_dual_area.astype(np.float32),   # node_dual_area (mm^2)
         r_base.astype(np.float32),           # r_base
         c_base.astype(np.float32),           # c_base
+        node_J,                              # J [A/mm²] (2026-10-14; antes node_x [S,5])
     ], axis=1)
 
     mesh_v1 = {

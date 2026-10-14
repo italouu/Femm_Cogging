@@ -28,7 +28,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 from scripts.build_smooth_ans_chunks_direct import (
-    RAW_DIR, CHUNKS_ROOT, N_R, N_A, ANG_1, ANG_2, CHUNK_SIZE, MAX_WORKERS,
+    RAW_DIR, CHUNKS_ROOT, N_R, N_A, ANG_1, ANG_2, CHUNK_SIZE, MAX_WORKERS, MAX_SAMPLES,
 )
 from scripts.build_unified_ans_chunks_direct import _sample_idx
 from scripts.build_elem_proto_chunks import _write_chunk, N_RAW_EXPECTED, MIN_FREE_GB
@@ -43,7 +43,7 @@ def _parse_one(path: Path, r_in: float, r_ext: float, tmp_dir: Path) -> dict:
                                              n_r=N_R, n_a=N_A, tmp_dir=tmp_dir)
 
 
-def run(max_samples=None, chunk_size=CHUNK_SIZE, out_name=OUT_NAME):
+def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, out_name=OUT_NAME):
     out_dir = CHUNKS_ROOT / out_name
     TMP_PARSE.mkdir(parents=True, exist_ok=True)
     ans_paths = sorted(RAW_DIR.glob("sample_*.ans.gz"), key=_sample_idx)
@@ -85,7 +85,7 @@ def run(max_samples=None, chunk_size=CHUNK_SIZE, out_name=OUT_NAME):
     return n_final == len(groups)
 
 
-def precheck(out_name=OUT_NAME, max_samples=None) -> bool:
+def precheck(out_name=OUT_NAME, max_samples=MAX_SAMPLES) -> bool:
     """Raw, disco e parser da amostra 0. True = pode gerar."""
     import shutil
     import numpy as np
@@ -145,7 +145,9 @@ def precheck(out_name=OUT_NAME, max_samples=None) -> bool:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--max-samples', type=int, default=None)
+    # [REMOVIDO 2026-10-13] default None (todas) — agora o mesmo limite dos 4 datasets smooth
+    # ap.add_argument('--max-samples', type=int, default=None)
+    ap.add_argument('--max-samples', type=int, default=MAX_SAMPLES)
     ap.add_argument('--chunk-size', type=int, default=CHUNK_SIZE)
     ap.add_argument('--out-name', default=OUT_NAME)
     ap.add_argument('--no-precheck', action='store_true')

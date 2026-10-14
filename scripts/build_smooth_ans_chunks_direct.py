@@ -35,8 +35,13 @@ ANG_1, ANG_2 = _dg.ang_1, _dg.ang_2
 CHUNK_SIZE   = _dg.chunk_size
 MAX_WORKERS  = _dg.npz_max_workers
 
-# None = todas as amostras do raw
-MAX_SAMPLES = None
+# [REMOVIDO 2026-10-13] todas as 4000 amostras do raw — dataset reduzido para 2000 (decisão
+# do usuário: gerar local sem trazer >100 GB da VM; o dataset final será refeito na VM).
+# # None = todas as amostras do raw
+# MAX_SAMPLES = None
+# 2000 primeiras amostras (ordem de índice) -> 63 chunks (62 × 32 + 1 × 16). Usado também
+# por scripts/build_elem_smooth_chunks.py e scripts/build_smooth_datasets.py. None = todas.
+MAX_SAMPLES = 2000
 
 RAW_DIR     = Path("data/raw") / RAW_DATASET
 CHUNKS_ROOT = Path("data/torch/data_chunks") / OUT_DATASET

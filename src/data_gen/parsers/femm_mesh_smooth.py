@@ -20,6 +20,9 @@ Diferenças em relação a parse_ans_gzip_sample_unified:
   y_hw [2,H,W]    -- (as 4 archs) point_b(smooth=True) no centro do pixel,
                      elemento via trifinder (= mo_getb com mo_smooth('on')).
                      Antes: interpolação baricêntrica do node_y antigo.
+
+  Referencial (2026-10-17): node_y e y_hw são POLARES (Br, Bθ), girados pelo
+  ângulo atan2(y, x) do nó / centro do pixel (_to_polar). Antes eram (Bx, By).
   node_x [S,6]    -- (FNO_GNN/GNN_PostBase) mu_r pela prioridade; M segue o
                      material escolhido (nó ímã -> +-1 pela polaridade dos
                      elementos de ímã incidentes; qualquer outro -> 0 --
@@ -43,7 +46,7 @@ from src.data_gen.parsers.ans_parsing import (
     _parse_label_materials, _build_edges, _element_areas, _node_material_stats,
     _node_magnet_polarity, _node_material_priority, _wrap_edge_pairs,
     _build_bidirectional_edge_attrs, _grid_polar_xy, _MU_BY_ID, _MAGNET_ID,
-    _node_current_density,
+    _node_current_density, _to_polar,
 )
 from src.data_gen.parsers.femm_mesh_v2 import (
     parse_ans_gzip_sample, _build_trifinder, _grid_barycentric,
@@ -113,7 +116,11 @@ def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
 
     # --- material do nó por prioridade + node_y ---
     node_material_id = _node_material_priority(elems, elem_material_id, n_nodes)
-    node_y = _node_b_by_material(elems, elem_material_id, node_material_id, b1, b2)
+    # [REMOVIDO 2026-10-17] gabarito cartesiano (Bx, By) -- o alvo passa a ser
+    # polar (Br, Bθ), girado pelo ângulo do próprio nó.
+    # node_y = _node_b_by_material(elems, elem_material_id, node_material_id, b1, b2)
+    node_bxy = _node_b_by_material(elems, elem_material_id, node_material_id, b1, b2)
+    node_y = np.stack(_to_polar(node_bxy[:, 0], node_bxy[:, 1], nodes[:, 0], nodes[:, 1]), axis=1)
 
     # --- grade H×W: B suavizado no centro do pixel ---
     ang_1_rad, ang_2_rad = np.deg2rad(ang_1), np.deg2rad(ang_2)
@@ -121,7 +128,10 @@ def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
     tri, trifinder = _build_trifinder(nodes, elems)
     centroids = nodes[elems[:, :3], :2].mean(axis=1)
     Bx_hw, By_hw = _grid_smooth_b(mesh, B1, B2, b1, b2, trifinder, centroids, Xg, Yg)
-    y_hw = np.stack([Bx_hw.reshape(n_r, n_a), By_hw.reshape(n_r, n_a)], axis=0)
+    # [REMOVIDO 2026-10-17] y_hw cartesiano -- agora (Br, Bθ) pelo ângulo do centro do pixel.
+    # y_hw = np.stack([Bx_hw.reshape(n_r, n_a), By_hw.reshape(n_r, n_a)], axis=0)
+    Br_hw, Bt_hw = _to_polar(Bx_hw, By_hw, Xg, Yg)
+    y_hw = np.stack([Br_hw.reshape(n_r, n_a), Bt_hw.reshape(n_r, n_a)], axis=0)
 
     bip['node_y'] = node_y
     bip['y_hw'] = y_hw

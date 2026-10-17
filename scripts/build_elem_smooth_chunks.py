@@ -128,7 +128,13 @@ def precheck(out_name=OUT_NAME, max_samples=MAX_SAMPLES) -> bool:
     mesh = load_ans(p)
     B1, B2 = element_b(mesh)
     b1, b2 = nodal_b(mesh, B1, B2)
-    ref = np.stack([b1.mean(axis=1), b2.mean(axis=1)], axis=1)
+    # [REMOVIDO 2026-10-17] referência cartesiana -- o node_y agora é (Br, Bθ) no centróide.
+    # ref = np.stack([b1.mean(axis=1), b2.mean(axis=1)], axis=1)
+    from src.data_gen.parsers.ans_parsing import _to_polar
+    from src.data_gen.parsers.femm_mesh_unified import _read_ans_gz
+    _, nodes, elems = _read_ans_gz(p, TMP_PARSE)
+    cen = nodes[elems[:, :3], :2].mean(axis=1)
+    ref = np.stack(_to_polar(b1.mean(axis=1), b2.mean(axis=1), cen[:, 0], cen[:, 1]), axis=1)
     err = np.abs(d['node_y'] - ref).max()
     same_struct = all(np.array_equal(d[k], e[k]) for k in
                       ('node_x', 'edge_index', 'edge_attr', 'elem_x', 'cross_edge_index',
@@ -136,7 +142,7 @@ def precheck(out_name=OUT_NAME, max_samples=MAX_SAMPLES) -> bool:
     checks = {
         'x_hw/y_hw idênticos ao layout smooth da bipartite':
             np.array_equal(d['x_hw'], sb['x_hw']) and np.array_equal(d['y_hw'], sb['y_hw']),
-        f'node_y == média dos 3 valores nodais suavizados (max |dif| {err:.1e} T)': err < 1e-5,
+        f'node_y == média dos 3 valores nodais suavizados, em (Br, Bθ) (max |dif| {err:.1e} T)': err < 1e-5,
         'estrutura idêntica ao protótipo sem smooth': same_struct,
         'node_y difere do curl(A) P0 do protótipo sem smooth':
             not np.array_equal(d['node_y'], e['node_y']),

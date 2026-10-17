@@ -464,6 +464,16 @@ def _grid_polar_xy(r_in: float, r_ext: float, ang_1_rad: float, ang_2_rad: float
     return (Rg * np.cos(Ag)).ravel(), (Rg * np.sin(Ag)).ravel()
 
 
+def _to_polar(bx: np.ndarray, by: np.ndarray, x: np.ndarray, y: np.ndarray):
+    """(Bx, By) -> (Br, Bθ) pelo ângulo θ = atan2(y, x) de cada ponto (nó,
+    centróide ou centro do pixel). Gabarito dos parsers smooth desde 2026-10-17
+    (antes cartesiano). Rotação em float64; retorna float32."""
+    th = np.arctan2(np.asarray(y, np.float64), np.asarray(x, np.float64))
+    c, s = np.cos(th), np.sin(th)
+    bx, by = np.asarray(bx, np.float64), np.asarray(by, np.float64)
+    return (bx * c + by * s).astype(np.float32), (-bx * s + by * c).astype(np.float32)
+
+
 def _assign_mesh_to_grid(nodes: np.ndarray, elems: np.ndarray,
                           elem_mu: np.ndarray, elem_M: np.ndarray,
                           node_mu: np.ndarray, node_M: np.ndarray,

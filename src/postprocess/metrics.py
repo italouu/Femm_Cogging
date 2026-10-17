@@ -19,11 +19,14 @@ ANG1_DEG, ANG2_DEG = 0.0, 120.0
 
 class Accum:
     """Acumula e = | |B|_pred - |B|_true | ponderado por área sobre amostras."""
-    FIELDS = ('num_l1', 'num_l2', 'den_area', 'num_ref', 'sum_abs', 'n_pts')
+    # [REMOVIDO 2026-10-15] sem sum_sq (L2 ponto a ponto) -- acrescentado
+    # FIELDS = ('num_l1', 'num_l2', 'den_area', 'num_ref', 'sum_abs', 'n_pts')
+    FIELDS = ('num_l1', 'num_l2', 'den_area', 'num_ref', 'sum_abs', 'sum_sq', 'n_pts')
 
     def __init__(self):
         self.num_l1 = self.num_l2 = self.den_area = self.num_ref = 0.0
         self.sum_abs = 0.0
+        self.sum_sq = 0.0          # Σe² sem peso -> L2 ponto a ponto (2026-10-15)
         self.n_pts = 0
 
     def add(self, mag_pred, mag_true, area):
@@ -35,6 +38,7 @@ class Accum:
         self.num_ref  += float((t ** 2 * a).sum())
         self.den_area += float(a.sum())
         self.sum_abs  += float(e.sum())
+        self.sum_sq   += float((e ** 2).sum())
         self.n_pts    += e.size
 
     def report(self):
@@ -42,9 +46,11 @@ class Accum:
         l1 = self.num_l1 / self.den_area
         l2 = math.sqrt(self.num_l2 / self.den_area)
         mae = self.sum_abs / self.n_pts
+        l2pt = math.sqrt(self.sum_sq / self.n_pts)
         return dict(B_ref=b_ref, MAE_pt=mae, MAE_pt_pct=100 * mae / b_ref,
                     L1_area=l1, L1_area_pct=100 * l1 / b_ref,
-                    L2_area=l2, L2_area_pct=100 * l2 / b_ref, n_pts=self.n_pts)
+                    L2_area=l2, L2_area_pct=100 * l2 / b_ref,
+                    L2_pt=l2pt, L2_pt_pct=100 * l2pt / b_ref, n_pts=self.n_pts)
 
 
 def merge(accs):

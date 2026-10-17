@@ -1,5 +1,9 @@
 """PROTÓTIPO (2026-10-16) — componentes de B treinadas em redes INDEPENDENTES (FNO_BipartiteGNN_Elem, mae).
 
+ATENÇÃO (2026-10-17): escrito para o dataset CARTESIANO (Bx, By). Desde 2026-10-17 os parsers
+smooth já geram o alvo polar (Br, Bθ) — com o dataset novo, 'br'/'bt' aqui girariam o alvo
+duas vezes; nele, use o canal direto (rotulado 'bx' = Br, 'by' = Bθ) ou adapte o script.
+
     bx / by : componentes cartesianas (canal 0 / 1 do dataset, sem rotação)
     br / bt : componentes polares Br / Bθ (alvo girado na hora pelo ângulo de cada ponto)
 

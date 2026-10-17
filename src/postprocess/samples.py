@@ -12,6 +12,10 @@ Subsets: os chunks fora do treino, reconstruídos com o mesmo split do treino
               test_split=None (teste = complemento do treino, ex.: 70/30 da bateria de 2000).
 O nº de chunks do dataset não é fixo: é o que reproduz o split.json da run (2026-10-13;
 antes N_CHUNKS=125 e subsets 'teste37'/'fora51', bateria de 4000 amostras com 30/30/40).
+
+Referencial (2026-10-17): o parse smooth entrega node_y/y_hw POLARES (Br, Bθ). Runs
+treinadas antes disso (alvo cartesiano Bx, By) só são comparáveis por |B|; por
+componente, girar a saída delas pelo ângulo do ponto (ans_parsing._to_polar).
 """
 import csv
 import json

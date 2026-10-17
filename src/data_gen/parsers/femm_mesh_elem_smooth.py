@@ -20,6 +20,10 @@ vértices, arestas cruzadas, contagens) e troca só o gabarito:
                    descartadas: curl(A) P0 exato, ou P1 completo [M,6], que
                    exigiria mudar a arch).
 
+Referencial (2026-10-17): node_y e y_hw são POLARES (Br, Bθ), girados pelo
+ângulo atan2(y, x) do centróide / centro do pixel (ans_parsing._to_polar).
+Antes eram (Bx, By).
+
 Layout/chaves idênticos ao de femm_mesh_elem.py -- loader/collate/
 Normalizer/step_fn/metric_fn/arch reaproveitados sem mudança.
 """
@@ -28,7 +32,7 @@ from pathlib import Path
 import numpy as np
 
 from src.data_gen.parsers.ans_b_smoothing import load_ans, element_b, nodal_b, point_b
-from src.data_gen.parsers.ans_parsing import _grid_polar_xy
+from src.data_gen.parsers.ans_parsing import _grid_polar_xy, _to_polar
 from src.data_gen.parsers.femm_mesh_elem import parse_ans_gzip_sample_elem
 from src.data_gen.parsers.femm_mesh_smooth import _grid_smooth_b
 from src.data_gen.parsers.femm_mesh_v2 import _build_trifinder
@@ -58,13 +62,18 @@ def parse_ans_gzip_sample_elem_smooth(ans_gz_path: Path, r_in: float, r_ext: flo
     centroids = nodes[elems[:, :3], :2].mean(axis=1)
     m_idx = np.arange(elems.shape[0])
     bx_c, by_c = point_b(mesh, B1, B2, b1, b2, m_idx, centroids[:, 0], centroids[:, 1], smooth=True)
-    node_y = np.stack([bx_c, by_c], axis=1).astype(np.float32)
+    # [REMOVIDO 2026-10-17] gabarito cartesiano -- agora (Br, Bθ) pelo ângulo do centróide.
+    # node_y = np.stack([bx_c, by_c], axis=1).astype(np.float32)
+    node_y = np.stack(_to_polar(bx_c, by_c, centroids[:, 0], centroids[:, 1]), axis=1)
 
     # --- grade H×W: B suavizado no centro do pixel (= femm_mesh_smooth) ---
     Xg, Yg = _grid_polar_xy(r_in, r_ext, np.deg2rad(ang_1), np.deg2rad(ang_2), n_r, n_a)
     _, trifinder = _build_trifinder(nodes, elems)
     Bx_hw, By_hw = _grid_smooth_b(mesh, B1, B2, b1, b2, trifinder, centroids, Xg, Yg)
-    y_hw = np.stack([Bx_hw.reshape(n_r, n_a), By_hw.reshape(n_r, n_a)], axis=0)
+    # [REMOVIDO 2026-10-17] y_hw cartesiano -- agora (Br, Bθ) pelo ângulo do centro do pixel.
+    # y_hw = np.stack([Bx_hw.reshape(n_r, n_a), By_hw.reshape(n_r, n_a)], axis=0)
+    Br_hw, Bt_hw = _to_polar(Bx_hw, By_hw, Xg, Yg)
+    y_hw = np.stack([Br_hw.reshape(n_r, n_a), Bt_hw.reshape(n_r, n_a)], axis=0)
 
     d['node_y'] = node_y
     d['y_hw'] = y_hw

@@ -31,10 +31,16 @@ Subcomandos:
       amostra: dados/surface_error/sample_XXXXXX_<loss>.{json,npz} + mapa da densidade do
       erro por triângulo em plots/surface_error/sample_XXXXXX_<loss>.png.
 
+  train-table [--out DIR] — tabela de treinamento dos 10 runs a partir dos logs (config.json,
+      run_summary.json, epochs.csv; nada recalculado): parâmetros, pico de memória da GPU,
+      tempo mediano por época (treino / avaliação / métricas) e total, melhor/última época,
+      motivo da parada, hardware registrado. Saída: dados/train_table.json.
+
 Execução (raiz do projeto):
   python -m scripts.postprocess eval [N_AMOSTRAS] [--out DIR]
   python -m scripts.postprocess figures [--data DIR] [--out DIR]
   python -m scripts.postprocess surface IDX [LOSS]
+  python -m scripts.postprocess train-table
 """
 import argparse
 import json
@@ -76,6 +82,7 @@ from src.postprocess.plots.errors import fig_bars, fig_surface_error
 from src.postprocess.plots.fields import fig_field
 from src.postprocess.plots.primitives import apply_style, save_fig
 from src.postprocess.plots.training import fig_training
+from src.postprocess.train_table import train_table
 # [REMOVIDO 2026-10-20] sem sample_path/TMP_ROOT (usados pelas figuras)
 # from src.postprocess.samples import SUBSETS, design_rows, parse_smooth, samples_with_subset
 from src.postprocess.samples import (SUBSETS, TMP_ROOT, design_rows, parse_smooth,
@@ -769,6 +776,30 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path):
     print(f'figura: {fig_dir / stem}.png')
 
 
+def run_train_table(out_dir: Path):
+    """Tabela de treinamento (P3): só leitura dos logs das runs de find_runs(ROOT_S)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    res = train_table(find_runs(ROOT_S))
+    (out_dir / 'train_table.json').write_text(json.dumps(res, indent=2))
+    f = lambda v, fmt: 'null' if v is None else format(v, fmt)
+    print(f"{'run':26s} {'params':>10s} {'trein.':>10s} {'GPU GiB':>7s} {'ép. s':>6s} "
+          f"{'trein s':>7s} {'aval s':>6s} {'métr s':>6s} {'total h':>7s} {'best':>5s} "
+          f"{'últ.':>5s}  parada  hardware")
+    for k, r in res['runs'].items():
+        print(f"{k:26s} {f(r['n_params_real'], ',d'):>10s} {f(r['n_params_trainable_real'], ',d'):>10s} "
+              f"{f(r['gpu_peak_mem_gib'], '.2f'):>7s} {f(r['median_epoch_time_s'], '.2f'):>6s} "
+              f"{f(r['median_train_time_s'], '.2f'):>7s} {f(r['median_eval_time_s'], '.2f'):>6s} "
+              f"{f(r['median_metric_time_s'], '.2f'):>6s} "
+              f"{f(None if r['wall_time_s'] is None else r['wall_time_s'] / 3600, '.2f'):>7s} "
+              f"{f(r['best_epoch'], 'd'):>5s} {f(r['last_epoch'], 'd'):>5s}  {r['stop_reason']}  "
+              f"{r['hardware']['device']}")
+    if res['missing']:
+        print('campos ausentes (null):')
+        for k, m in res['missing'].items():
+            print(f'  {k}: {", ".join(m)}')
+    print(f"salvo em {out_dir / 'train_table.json'}")
+
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[3])
     sp = ap.add_subparsers(dest='cmd', required=True)
@@ -783,6 +814,8 @@ if __name__ == '__main__':
     p_sur.add_argument('loss', nargs='?', default='mae', choices=('mse', 'mae'))
     p_sur.add_argument('--data', type=Path, default=OUT_ROOT / 'dados' / 'surface_error')
     p_sur.add_argument('--out', type=Path, default=OUT_ROOT / 'plots' / 'surface_error')
+    p_tt = sp.add_parser('train-table', help='tabela de treinamento a partir dos logs das runs')
+    p_tt.add_argument('--out', type=Path, default=OUT_ROOT / 'dados', help='diretório de saída')
     a = ap.parse_args()
     if a.cmd == 'eval':
         run_eval(a.out, a.n)
@@ -790,3 +823,5 @@ if __name__ == '__main__':
         run_figures(a.data, a.out)
     elif a.cmd == 'surface':
         run_surface(a.idx, a.loss, a.data, a.out)
+    elif a.cmd == 'train-table':
+        run_train_table(a.out)

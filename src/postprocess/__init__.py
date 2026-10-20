@@ -20,5 +20,6 @@ Módulos:
   train_table — tabela de treinamento a partir dos logs das runs (P3)
   regions    — fronteiras entre materiais na malha (contornos P4, estratificação P5)
   torque     — torque pelo tensor de Maxwell na faixa do entreferro × FEMM T22 (P6)
+  saturation — curva B-H do aço (interpolação do FEMM) e pontos de operação (P7)
   plots/     — figuras (primitivas, treino, erro, campo)
 """

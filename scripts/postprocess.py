@@ -52,6 +52,12 @@ Subcomandos:
       geraram dados/torque_*.json, para as 5 archs da loss escolhida. Soluções FEMM em
       data/temp/torque_theta_e{,_batch}/ (--femm resolve). Saída: dados/torque/.
 
+  saturation [N] [--knee-frac F ...] [--check-femm] — (P7) só o gabarito: curva B-H do aço
+      lida do .ans (conferida igual em todas as amostras; interpolação do FEMM), |B| suavizado
+      no centróide dos elementos de aço e μ_eff; figura A (curva + μ_eff + distribuição dos
+      pontos de operação) e B (|B| no aço, amostras P50 e de maior |B| médio, contornos no
+      joelho). Saída: dados/saturation.json + plots/saturacao_*.
+
 Execução (raiz do projeto):
   python -m scripts.postprocess eval [N_AMOSTRAS] [--out DIR]
   python -m scripts.postprocess figures [--data DIR] [--out DIR]
@@ -59,6 +65,7 @@ Execução (raiz do projeto):
   python -m scripts.postprocess surface --pct 50 [LOSS]
   python -m scripts.postprocess train-table
   python -m scripts.postprocess regions [N]
+  python -m scripts.postprocess saturation [N]
   python -m scripts.postprocess torque theta-e|batch|scatter [--loss mae]
 """
 import argparse
@@ -105,6 +112,9 @@ from src.postprocess.plots.fields import fig_field
 from src.postprocess.plots.primitives import apply_style, save_fig
 from src.postprocess.plots.training import fig_training
 from src.postprocess.regions import REGIONS, RegionAccum, classify_triangles, interface_edges
+from src.postprocess.saturation import (FemmBH, check_against_femm, steel_operating_points,
+                                        weighted_percentile)
+from src.postprocess.plots.saturation import MU_LABEL, fig_bh, fig_steel_map
 from src.postprocess.torque import (batch_summary, curve_row, femm_solve, gap, parse_torque_sample,
                                     sample_torques, scatter_ids, scatter_stats, select_batch_samples)
 from src.postprocess.torque import thetas as torque_thetas
@@ -1117,6 +1127,88 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
     print(f'salvo em {out_dir}')
 
 
+def run_saturation(out_dir: Path, fig_dir: Path, max_samples=None, knee_fracs=(0.5,),
+                   check_femm=False):
+    """Saturação do aço (P7), só sobre o gabarito: curva B-H do .ans (conferida igual em todas
+    as amostras), pontos de operação dos elementos de aço (|B| suavizado no centróide) e
+    μ_eff; figura A (curva + distribuição) e B (|B| no aço nas amostras P50 e de maior |B|
+    médio no aço, com contornos no joelho). Mesmo conjunto do eval."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    apply_style()
+    rows = design_rows()
+    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], max_samples, N_SAMPLES)
+    edges = np.linspace(0, 2.8, 141)
+    hist = np.zeros(len(edges) - 1)
+    all_b, all_w = [], []
+    ids, mean_b, n_above = [], [], 0
+    curve0, n_diff = None, 0
+    t0 = time.time()
+    with ProcessPoolExecutor(N_WORKERS) as ex:
+        futs = [ex.submit(steel_operating_points, p, rows[idx]) for _, _, idx, p in samples]
+        for (_, _, idx, p), f in zip(samples, futs):
+            d = f.result()
+            curves = d['curves']
+            if curve0 is None:
+                curve0 = curves[0]
+            n_diff += sum(not (np.array_equal(c[1], curve0[1]) and np.array_equal(c[2], curve0[2]))
+                          for c in curves)
+            hist += np.histogram(np.clip(d['bmag'], 0, edges[-1] - 1e-9), edges, weights=d['area'])[0]
+            all_b.append(d['bmag'].astype(np.float32)); all_w.append(d['area'].astype(np.float32))
+            ids.append(idx)
+            mean_b.append(float((d['bmag'] * d['area']).sum() / d['area'].sum()))
+            n_above += int((d['bmag'] > curve0[1][-1]).sum())
+    bh = FemmBH(curve0[1], curve0[2])
+    b, w = np.concatenate(all_b).astype(float), np.concatenate(all_w).astype(float)
+    knees = [bh.knee(fr) for fr in knee_fracs]
+    p5, p50, p95 = (weighted_percentile(b, w, q) for q in (5, 50, 95))
+    mean_b = np.array(mean_b)
+    i50 = int(np.flatnonzero(mean_b == np.percentile(mean_b, 50, method='lower'))[0])
+    imax = int(np.argmax(mean_b))
+    res = dict(n_samples=len(ids), bh_curve=dict(name=curve0[0], B_T=curve0[1].tolist(),
+                                                  H_A_m=curve0[2].tolist(), n_points=len(curve0[1])),
+               bh_identical_all_samples=n_diff == 0, n_bh_blocks_different=int(n_diff),
+               interpolation=('FEMM (xfemm CMMaterialProp::GetSlopes/GetH): inclinações por spline '
+                              'cúbica natural (sistema tridiagonal), reparo por média móvel de 3 pontos '
+                              'se algum trecho não for monótono, Hermite cúbico entre pontos, '
+                              'extrapolação linear com a inclinação do último ponto'),
+               n_repair=int(bh.n_repair), mu_label=MU_LABEL,
+               knee=knees, knee_definition='menor B acima do pico de μ_eff em que μ_eff = frac·máx',
+               operating_points=dict(n_elements=int(len(b)), area_mm2=float(w.sum()),
+                                     p5_T=p5, p50_T=p50, p95_T=p95,
+                                     mu_eff_at_p5=float(bh.mu_eff(np.array([p5]))[0]),
+                                     mu_eff_at_p50=float(bh.mu_eff(np.array([p50]))[0]),
+                                     mu_eff_at_p95=float(bh.mu_eff(np.array([p95]))[0])),
+               above_last_bh_point=dict(B_last_T=float(curve0[1][-1]), n_elements=int(n_above),
+                                        note='contagem apenas; o máximo de |B| não é usado como resultado'),
+               hist=dict(edges_T=edges.tolist(), area_mm2=hist.tolist()),
+               samples_fig_b=dict(P50_mean_B_steel=dict(sample_idx=ids[i50], mean_B_T=float(mean_b[i50])),
+                                  max_mean_B_steel=dict(sample_idx=ids[imax], mean_B_T=float(mean_b[imax]))))
+    if check_femm:
+        d = steel_operating_points(sample_path(ids[0]), rows[ids[0]])
+        res['femm_check'] = dict(sample_idx=ids[0], **check_against_femm(sample_path(ids[0]), bh,
+                                                                          d['cen'], d['bmag']))
+    (out_dir / 'saturation.json').write_text(json.dumps(res, indent=2))
+    save_fig(fig_bh(bh, edges, hist, p5, p95, knees[0], len(ids), n_above), fig_dir / 'saturacao_A_curva_BH')
+    panels = []
+    for tag, pos in (('P50 do |B| médio no aço', i50), ('maior |B| médio no aço', imax)):
+        idx = ids[pos]
+        d = steel_operating_points(sample_path(idx), rows[idx])
+        nodes, elems = _mesh(idx)
+        panels.append((f'Amostra {idx} ({tag}: {mean_b[pos]:.3f} T)', nodes[:, :2],
+                       elems[:, :3].astype(np.int64), d['elem'], d['bmag']))
+    levels = [k['B_knee_T'] for k in knees if k.get('B_knee_T')]
+    save_fig(fig_steel_map(panels, levels, vmax=max(2.2, max(levels) * 1.2)),
+             fig_dir / 'saturacao_B_mapa_aco', dpi=200)
+    print(f"{len(ids)} amostras ({(time.time() - t0) / 60:.1f} min) — curva B-H igual em todas: "
+          f"{n_diff == 0}; reparos {bh.n_repair}; joelho(s): "
+          + ', '.join(f"{100 * k['frac']:.0f}% -> {k['B_knee_T']:.4f} T" for k in knees))
+    print(f'aço: |B| p5/p50/p95 = {p5:.3f}/{p50:.3f}/{p95:.3f} T; acima do último ponto '
+          f'({curve0[1][-1]} T): {n_above} elementos')
+    if check_femm:
+        print('conferência × FEMM:', res['femm_check'])
+    print(f"salvo em {out_dir / 'saturation.json'}; figuras em {fig_dir}")
+
+
 def run_train_table(out_dir: Path):
     """Tabela de treinamento (P3): só leitura dos logs das runs de find_runs(ROOT_S)."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1184,6 +1276,14 @@ if __name__ == '__main__':
     p_tq.add_argument('--n-per-chunk', type=int, default=8, help='scatter: amostras por chunk de teste')
     p_tq.add_argument('--limit', type=int, default=None, help='smoke: ângulos/amostras limitados')
     p_tq.add_argument('--out', type=Path, default=OUT_ROOT / 'dados' / 'torque')
+    p_sat = sp.add_parser('saturation', help='saturação do aço × curva B-H (só gabarito)')
+    p_sat.add_argument('n', nargs='?', type=int, default=None, help='nº de amostras (default: todas)')
+    p_sat.add_argument('--knee-frac', type=float, nargs='+', default=[0.5],
+                       help='joelho: μ_eff = frac·máx (default 0.5; vários -> vários contornos)')
+    p_sat.add_argument('--check-femm', action='store_true',
+                       help='confere μ_eff × mo_getpointvalues do FEMM na 1ª amostra (Windows)')
+    p_sat.add_argument('--out', type=Path, default=OUT_ROOT / 'dados')
+    p_sat.add_argument('--fig', type=Path, default=OUT_ROOT / 'plots')
     p_tt = sp.add_parser('train-table', help='tabela de treinamento a partir dos logs das runs')
     p_tt.add_argument('--out', type=Path, default=OUT_ROOT / 'dados', help='diretório de saída')
     a = ap.parse_args()
@@ -1205,5 +1305,7 @@ if __name__ == '__main__':
     elif a.cmd == 'torque':
         run_torque(a.mode, a.out, a.loss, a.archs, a.frame, a.femm, a.idx, a.n_theta,
                    a.n_samples, a.n_per_chunk, a.limit)
+    elif a.cmd == 'saturation':
+        run_saturation(a.out, a.fig, a.n, tuple(a.knee_frac), a.check_femm)
     elif a.cmd == 'train-table':
         run_train_table(a.out)

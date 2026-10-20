@@ -30,6 +30,10 @@ Subcomandos:
   surface IDX [LOSS] — erro de superfície dos 5 modelos (loss LOSS, default mae) em 1
       amostra: dados/surface_error/sample_XXXXXX_<loss>.{json,npz} + mapa da densidade do
       erro por triângulo em plots/surface_error/sample_XXXXXX_<loss>.png.
+  surface --pct P [LOSS] [--eval-data DIR] — (P4) a amostra do percentil P do L1_A de
+      superfície da REF_RUN no .npz do eval (mesma regra de figures); sufixo _P<P>.
+      Mapa: mesma escala em todos os painéis, contornos dos materiais, painel extra com o
+      piso da representação em grade.
 
   train-table [--out DIR] — tabela de treinamento dos 10 runs a partir dos logs (config.json,
       run_summary.json, epochs.csv; nada recalculado): parâmetros, pico de memória da GPU,
@@ -40,6 +44,7 @@ Execução (raiz do projeto):
   python -m scripts.postprocess eval [N_AMOSTRAS] [--out DIR]
   python -m scripts.postprocess figures [--data DIR] [--out DIR]
   python -m scripts.postprocess surface IDX [LOSS]
+  python -m scripts.postprocess surface --pct 50 [LOSS]
   python -m scripts.postprocess train-table
 """
 import argparse
@@ -78,10 +83,13 @@ from src.postprocess.inference import (ARCHS, INTERP_MODE, RUN_ORDER, find_runs,
 #                                      pstats, surf_err, surface_values_p1)
 from src.postprocess.metrics import (Accum, merge, pstats, surface_error_per_triangle,
                                      surface_values_p1)
-from src.postprocess.plots.errors import fig_bars, fig_surface_error
+# [REMOVIDO 2026-10-20] fig_surface_error -- mapa novo com piso e contornos (P4)
+# from src.postprocess.plots.errors import fig_bars, fig_surface_error
+from src.postprocess.plots.errors import fig_bars, fig_surface_error_map
 from src.postprocess.plots.fields import fig_field
 from src.postprocess.plots.primitives import apply_style, save_fig
 from src.postprocess.plots.training import fig_training
+from src.postprocess.regions import interface_edges
 from src.postprocess.train_table import train_table
 # [REMOVIDO 2026-10-20] sem sample_path/TMP_ROOT (usados pelas figuras)
 # from src.postprocess.samples import SUBSETS, design_rows, parse_smooth, samples_with_subset
@@ -739,18 +747,87 @@ def run_figures(data_dir: Path, fig_dir: Path):
     print(f'figuras em {fig_dir}')
 
 
-def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path):
+# [REMOVIDO 2026-10-20] sem --pct, sem painel do piso e sem contornos dos materiais (P4)
+# def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path):
+#     """Erro de superfície oficial em 1 amostra: L1_A/L2_A de cada modelo e mapa da
+#     densidade do erro por triângulo do FEMM (surface_error_per_triangle)."""
+#     apply_style()
+#     data_dir.mkdir(parents=True, exist_ok=True)
+#     row = design_rows()[sample_idx]
+#     print(f'amostra {sample_idx}: {sample_path(sample_idx)}')
+#     lay = parse_smooth(sample_path(sample_idx), row, with_elem=True, with_overlay=True)
+#     ts = to_torch_sample(lay)
+#     n_tri = len(lay['tri'])
+#     runs = load_set(ROOT_S, losses=(loss,))
+#     res = dict(sample_idx=sample_idx, loss=loss, n_tri=int(n_tri), runs={}, erros={})
+#     E = {}
+#     for r in runs.values():
+#         a = r['arch']
+#         out_hw, yn = predict(a, r['model'], r['normalizer'], ts)
+#         mm, mf, w, t_idx = _surface_points(a, lay, out_hw, yn)
+#         acc = Accum()
+#         acc.add_surface(mm, mf, w)
+#         x = acc.report()
+#         E[a] = surface_error_per_triangle(n_tri, t_idx, mm, mf, w)
+#         res['erros'][a] = dict(surface_kind=_surface_kind(a), B_ref_T=x['B_ref'],
+#                                L1_A_T=x['L1_area'], L1_A_pct=x['L1_area_pct'],
+#                                L2_A_T=x['L2_area'], L2_A_pct=x['L2_area_pct'])
+#         res['runs'][a] = dict(run_dir=r['run_dir'], epoch=r['epoch'])
+#         print(f"  {a:22s} [{_surface_kind(a):7s}] L1_A={x['L1_area']:.4f} T ({x['L1_area_pct']:.2f}%)  "
+#               f"L2_A={x['L2_area']:.4f} T ({x['L2_area_pct']:.2f}%)")
+#     nodes, elems = _mesh(sample_idx)
+#     stem = f'sample_{sample_idx:06d}_{loss}'
+#     (data_dir / f'{stem}.json').write_text(json.dumps(res, indent=1))
+#     np.savez_compressed(data_dir / f'{stem}.npz', xy=nodes[:, :2], elems=elems[:, :3],
+#                         **{f'e_tri_{a}': E[a] for a in E})
+#     save_fig(fig_surface_error(res, nodes[:, :2], elems[:, :3], E, [a for a in ARCHS if a in E]),
+#              fig_dir / stem, pdf=False, dpi=150)
+#     print(f'figura: {fig_dir / stem}.png')
+
+
+def _floor_tri_idx(kind, lay):
+    """Triângulo do FEMM de cada ponto de _floor_points(kind, lay) (mesma ordem)."""
+    if kind == 'grade':
+        return lay['overlay']['tri']
+    M, K = lay['mesh_quad']['mag'].shape
+    return np.repeat(np.arange(M), K)
+
+
+def _pick_by_pct(per, q, ref_run=REF_RUN):
+    """Amostra do percentil q do L1_A de superfície de ref_run no .npz do eval (mesma regra
+    de run_figures: subset 'fora', ou 'teste' se vazio; method='lower') -> (idx, seleção)."""
+    sub_name = 'fora' if (per['subset'] == 'fora').any() else 'teste'
+    cand = np.flatnonzero(per['subset'] == sub_name)
+    l1 = per[ref_run][:, 0]
+    target = np.percentile(l1[cand], q, method='lower')
+    pos = cand[np.argmin(np.abs(l1[cand] - target))]
+    idx = int(per['sample_idx'][pos])
+    return idx, dict(pct=float(q), ref_run=ref_run, subset=sub_name, n_candidates=int(len(cand)),
+                     L1_A_surface_ref_T=float(l1[pos]))
+
+
+def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_dir=None):
     """Erro de superfície oficial em 1 amostra: L1_A/L2_A de cada modelo e mapa da
-    densidade do erro por triângulo do FEMM (surface_error_per_triangle)."""
+    densidade do erro por triângulo do FEMM (surface_error_per_triangle), com o piso da
+    representação em grade como painel extra e contornos dos materiais (P4, 2026-10-20).
+    pct: escolhe a amostra pelo percentil do L1_A de superfície da REF_RUN no .npz do eval
+    (eval_dir) -- sample_idx ignorado."""
     apply_style()
     data_dir.mkdir(parents=True, exist_ok=True)
+    selection = None
+    if pct is not None:
+        per = np.load((eval_dir or OUT_ROOT / 'dados') / 'eval_smooth_per_sample.npz')
+        sample_idx, selection = _pick_by_pct(per, pct)
+        print(f"P{pct:g} do L1_A de superfície de {REF_RUN} ({selection['subset']}, "
+              f"{selection['n_candidates']} amostras): amostra {sample_idx}")
     row = design_rows()[sample_idx]
     print(f'amostra {sample_idx}: {sample_path(sample_idx)}')
     lay = parse_smooth(sample_path(sample_idx), row, with_elem=True, with_overlay=True)
     ts = to_torch_sample(lay)
     n_tri = len(lay['tri'])
     runs = load_set(ROOT_S, losses=(loss,))
-    res = dict(sample_idx=sample_idx, loss=loss, n_tri=int(n_tri), runs={}, erros={})
+    res = dict(sample_idx=sample_idx, loss=loss, n_tri=int(n_tri), selection=selection,
+               runs={}, erros={})
     E = {}
     for r in runs.values():
         a = r['arch']
@@ -766,12 +843,26 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path):
         res['runs'][a] = dict(run_dir=r['run_dir'], epoch=r['epoch'])
         print(f"  {a:22s} [{_surface_kind(a):7s}] L1_A={x['L1_area']:.4f} T ({x['L1_area_pct']:.2f}%)  "
               f"L2_A={x['L2_area']:.4f} T ({x['L2_area_pct']:.2f}%)")
+    # piso da representação em grade, por triângulo
+    mm, mf, w = _floor_points('grade', lay)
+    acc = Accum()
+    acc.add_surface(mm, mf, w)
+    x = acc.report()
+    E_floor = surface_error_per_triangle(n_tri, _floor_tri_idx('grade', lay), mm, mf, w)
+    res['floor_grade'] = dict(surface_kind='grade', B_ref_T=x['B_ref'],
+                              L1_A_T=x['L1_area'], L1_A_pct=x['L1_area_pct'],
+                              L2_A_T=x['L2_area'], L2_A_pct=x['L2_area_pct'])
+    print(f"  {'piso grade':22s} [grade  ] L1_A={x['L1_area']:.4f} T ({x['L1_area_pct']:.2f}%)  "
+          f"L2_A={x['L2_area']:.4f} T ({x['L2_area_pct']:.2f}%)")
     nodes, elems = _mesh(sample_idx)
-    stem = f'sample_{sample_idx:06d}_{loss}'
+    iface = interface_edges(lay['tri'], lay['elem_mat'])
+    stem = f'sample_{sample_idx:06d}_{loss}' + (f'_P{pct:g}' if pct is not None else '')
     (data_dir / f'{stem}.json').write_text(json.dumps(res, indent=1))
     np.savez_compressed(data_dir / f'{stem}.npz', xy=nodes[:, :2], elems=elems[:, :3],
+                        iface_edges=iface, e_tri_floor_grade=E_floor,
                         **{f'e_tri_{a}': E[a] for a in E})
-    save_fig(fig_surface_error(res, nodes[:, :2], elems[:, :3], E, [a for a in ARCHS if a in E]),
+    save_fig(fig_surface_error_map(res, nodes[:, :2], elems[:, :3], E, [a for a in ARCHS if a in E],
+                                   iface, ('piso grade', E_floor, res['floor_grade'])),
              fig_dir / stem, pdf=False, dpi=150)
     print(f'figura: {fig_dir / stem}.png')
 
@@ -810,8 +901,16 @@ if __name__ == '__main__':
     p_fig.add_argument('--data', type=Path, default=OUT_ROOT / 'dados', help='saída do eval')
     p_fig.add_argument('--out', type=Path, default=OUT_ROOT / 'plots', help='diretório das figuras')
     p_sur = sp.add_parser('surface', help='mapa de erro de superfície dos 5 modelos em 1 amostra')
-    p_sur.add_argument('idx', type=int, help='índice da amostra no raw')
-    p_sur.add_argument('loss', nargs='?', default='mae', choices=('mse', 'mae'))
+    # [REMOVIDO 2026-10-20] IDX obrigatório -- opcional com --pct (P4)
+    # p_sur.add_argument('idx', type=int, help='índice da amostra no raw')
+    # p_sur.add_argument('loss', nargs='?', default='mae', choices=('mse', 'mae'))
+    p_sur.add_argument('idx', nargs='?', default=None,
+                       help='índice da amostra no raw (com --pct: omitir; pode receber a LOSS)')
+    p_sur.add_argument('loss', nargs='?', default=None, choices=('mse', 'mae'))
+    p_sur.add_argument('--pct', type=float, default=None,
+                       help='percentil P do L1_A de superfície da REF_RUN no .npz do eval')
+    p_sur.add_argument('--eval-data', type=Path, default=OUT_ROOT / 'dados',
+                       help='diretório com eval_smooth_per_sample.npz (para --pct)')
     p_sur.add_argument('--data', type=Path, default=OUT_ROOT / 'dados' / 'surface_error')
     p_sur.add_argument('--out', type=Path, default=OUT_ROOT / 'plots' / 'surface_error')
     p_tt = sp.add_parser('train-table', help='tabela de treinamento a partir dos logs das runs')
@@ -822,6 +921,13 @@ if __name__ == '__main__':
     elif a.cmd == 'figures':
         run_figures(a.data, a.out)
     elif a.cmd == 'surface':
-        run_surface(a.idx, a.loss, a.data, a.out)
+        # [REMOVIDO 2026-10-20] sem --pct (P4)
+        # run_surface(a.idx, a.loss, a.data, a.out)
+        if a.pct is not None and a.idx in ('mse', 'mae'):
+            a.idx, a.loss = None, a.idx
+        if a.pct is None and a.idx is None:
+            ap.error('surface: informe IDX ou --pct P')
+        run_surface(None if a.idx is None else int(a.idx), a.loss or 'mae', a.data, a.out,
+                    pct=a.pct, eval_dir=a.eval_data)
     elif a.cmd == 'train-table':
         run_train_table(a.out)

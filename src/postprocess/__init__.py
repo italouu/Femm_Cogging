@@ -18,5 +18,6 @@ Módulos:
   inference  — reconstrução da run a partir do log + predição
   samples    — amostras do raw (designs, subsets, parse smooth)
   train_table — tabela de treinamento a partir dos logs das runs (P3)
+  regions    — fronteiras entre materiais na malha (contornos P4, estratificação P5)
   plots/     — figuras (primitivas, treino, erro, campo)
 """

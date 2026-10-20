@@ -236,3 +236,34 @@ def fig_surface_error_map(res, xy, elems, E, archs, iface, floor):
     fig.suptitle(f'Erro de superfície de |B| — amostra {res["sample_idx"]}{how}, '
                  f'loss {res["loss"]}, best.pth', fontsize=11)
     return fig
+
+
+def fig_regions(xy, elems, region, iface, corners, names, title, zoom=None):
+    """Verificação da estratificação espacial (P5): triângulos coloridos pela região
+    (names[código]), fronteiras entre materiais e vértices de canto; zoom = (x, y, meia
+    largura) mm opcional (2º painel)."""
+    import matplotlib.pyplot as plt
+    import matplotlib.tri as mtri
+    from matplotlib.collections import LineCollection
+    from matplotlib.colors import ListedColormap
+    cols = ['#e4e3df', '#2a78d6', '#eb6834'][:len(names)]
+    tri = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems)
+    n = 2 if zoom else 1
+    fig, axs = plt.subplots(1, n, figsize=(7.5 * n, 7.5), squeeze=False)
+    for k, ax in enumerate(axs[0]):
+        ax.tripcolor(tri, facecolors=region.astype(float), cmap=ListedColormap(cols),
+                     vmin=-0.5, vmax=len(names) - 0.5, edgecolors='none', rasterized=True)
+        ax.add_collection(LineCollection(xy[iface], colors=INK2, linewidths=0.4 if k else 0.2))
+        ax.plot(xy[corners, 0], xy[corners, 1], '.', color='k', ms=3 if k else 1)
+        ax.set_aspect('equal')
+        ax.axis('off')
+        if k:
+            x, y, h = zoom
+            ax.set(xlim=(x - h, x + h), ylim=(y - h, y + h))
+    for c, nm in zip(cols, names):
+        axs[0, 0].plot([], [], 's', color=c, label=nm)
+    axs[0, 0].plot([], [], '.', color='k', label='vértice de canto')
+    axs[0, 0].legend(frameon=False, loc='lower left')
+    fig.suptitle(title, fontsize=10)
+    fig.tight_layout()
+    return fig

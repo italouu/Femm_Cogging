@@ -40,12 +40,20 @@ Subcomandos:
       tempo mediano por época (treino / avaliação / métricas) e total, melhor/última época,
       motivo da parada, hardware registrado. Saída: dados/train_table.json.
 
+  regions [N] [--d-int MM] [--d-canto MM] [--ang-canto GRAUS] — (P5) erro de superfície
+      por região do triângulo do FEMM: canto (a até d_canto de um vértice de fronteira com
+      mudança de direção > ang_canto, ramificação ou ≥ 3 materiais) > interface (a até d_int
+      de uma aresta entre materiais) > interior. Por run e por piso: L1_A/L2_A (% do B_ref
+      global), fração da área e da contribuição ao L1_A. Padrão: d_int = 1 passo radial da
+      grade, d_canto = 2 passos, 30°. Saída: dados/regions.json + plots/regions_sample_*.png.
+
 Execução (raiz do projeto):
   python -m scripts.postprocess eval [N_AMOSTRAS] [--out DIR]
   python -m scripts.postprocess figures [--data DIR] [--out DIR]
   python -m scripts.postprocess surface IDX [LOSS]
   python -m scripts.postprocess surface --pct 50 [LOSS]
   python -m scripts.postprocess train-table
+  python -m scripts.postprocess regions [N]
 """
 import argparse
 import json
@@ -81,19 +89,19 @@ from src.postprocess.inference import (ARCHS, INTERP_MODE, RUN_ORDER, find_runs,
 # [REMOVIDO 2026-10-20] níveis antigos (grid_area_weights, node_err, surf_err, add_mesh_surface)
 # from src.postprocess.metrics import (Accum, add_mesh_surface, grid_area_weights, merge, node_err,
 #                                      pstats, surf_err, surface_values_p1)
-from src.postprocess.metrics import (Accum, merge, pstats, surface_error_per_triangle,
-                                     surface_values_p1)
+from src.postprocess.metrics import (R_EXT_MM, R_IN_MM, Accum, merge, pstats,
+                                     surface_error_per_triangle, surface_values_p1)
 # [REMOVIDO 2026-10-20] fig_surface_error -- mapa novo com piso e contornos (P4)
 # from src.postprocess.plots.errors import fig_bars, fig_surface_error
-from src.postprocess.plots.errors import fig_bars, fig_surface_error_map
+from src.postprocess.plots.errors import fig_bars, fig_regions, fig_surface_error_map
 from src.postprocess.plots.fields import fig_field
 from src.postprocess.plots.primitives import apply_style, save_fig
 from src.postprocess.plots.training import fig_training
-from src.postprocess.regions import interface_edges
+from src.postprocess.regions import REGIONS, RegionAccum, classify_triangles, interface_edges
 from src.postprocess.train_table import train_table
 # [REMOVIDO 2026-10-20] sem sample_path/TMP_ROOT (usados pelas figuras)
 # from src.postprocess.samples import SUBSETS, design_rows, parse_smooth, samples_with_subset
-from src.postprocess.samples import (SUBSETS, TMP_ROOT, design_rows, parse_smooth,
+from src.postprocess.samples import (N_R, SUBSETS, TMP_ROOT, design_rows, parse_smooth,
                                      sample_path, samples_with_subset)
 
 # [REMOVIDO 2026-10-13] nomes com sufixo _smooth e run de referência do split fixa
@@ -867,6 +875,91 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
     print(f'figura: {fig_dir / stem}.png')
 
 
+def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_int=None, d_canto=None,
+                ang_canto=30.0):
+    """Estratificação espacial do erro de superfície (P5): cada triângulo do FEMM em
+    interior / interface / canto (regions.classify_triangles) e o erro de superfície de
+    cada run e de cada piso acumulado por região (pontos de quadratura -> triângulo).
+    Mesmo conjunto do eval. Padrão: d_int = 1 passo radial da grade, d_canto = 2 passos."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dr = (R_EXT_MM - R_IN_MM) / N_R
+    d_int = dr if d_int is None else d_int
+    d_canto = 2 * dr if d_canto is None else d_canto
+    params = dict(d_int_mm=d_int, d_canto_mm=d_canto, ang_canto_deg=ang_canto,
+                  grid_radial_step_mm=dr, prioridade='canto > interface > interior',
+                  material='por rótulo (lay[elem_mat])')
+    print('parâmetros:', params)
+    rows = design_rows()
+    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], max_samples, N_SAMPLES)
+    runs = load_set(ROOT_S)
+    acc = {k: RegionAccum() for k in runs}
+    acc_floor = {kd: RegionAccum() for kd in SURF_KINDS}
+    n_tri_region = np.zeros(len(REGIONS), np.int64)
+    fig_done = False
+    subs = []
+    groups = {}
+    for name, sub, idx, p in samples:
+        groups.setdefault(name, []).append((sub, idx, p))
+    t0 = time.time()
+    for gi, (name, items) in enumerate(groups.items()):
+        with ProcessPoolExecutor(max_workers=min(N_WORKERS, len(items))) as ex:
+            futs = [ex.submit(parse_smooth, p, rows[idx], with_elem=True, with_overlay=True)
+                    for _, idx, p in items]
+            for (sub, idx, p), f in zip(items, futs):
+                lay = f.result()
+                ts = to_torch_sample(lay)
+                subs.append(sub)
+                nodes, _ = _mesh(idx)
+                xy = nodes[:, :2]
+                region, iface, corners = classify_triangles(xy, lay['tri'], lay['elem_mat'],
+                                                            d_int, d_canto, ang_canto)
+                n_tri_region += np.bincount(region, minlength=len(REGIONS))
+                if not fig_done:
+                    apply_style()
+                    r_m, _ = gap_radius_mm(rows[idx])
+                    th0 = np.deg2rad(60.0)
+                    title = (f'Amostra {idx}: regiões (d_int = {d_int:.3f} mm, d_canto = '
+                             f'{d_canto:.3f} mm, ângulo de canto > {ang_canto:g}°)')
+                    save_fig(fig_regions(xy, lay['tri'], region, iface, corners, REGIONS, title,
+                                         zoom=(r_m * np.cos(th0), r_m * np.sin(th0), 3.0)),
+                             fig_dir / f'regions_sample_{idx:06d}', pdf=False, dpi=200)
+                    fig_done = True
+                for kd in SURF_KINDS:
+                    mm, mf, w = _floor_points(kd, lay)
+                    acc_floor[kd].add(mm, mf, w, region[_floor_tri_idx(kd, lay)])
+                for k, r in runs.items():
+                    out_hw, yn = predict(r['arch'], r['model'], r['normalizer'], ts)
+                    mm, mf, w, t_idx = _surface_points(r['arch'], lay, out_hw, yn)
+                    acc[k].add(mm, mf, w, region[t_idx])
+        print(f'  [{gi + 1}/{len(groups)}] {name}  (amostras {len(subs)}, '
+              f'{(time.time() - t0) / 60:.1f} min)', flush=True)
+
+    subs_arr = np.array(subs)
+    res = dict(n_samples=len(subs), n_by_subset={s: int((subs_arr == s).sum()) for s in SUBSETS},
+               params=params, regions=list(REGIONS),
+               n_triangles_by_region={n: int(c) for n, c in zip(REGIONS, n_tri_region)},
+               note='L1_A/L2_A de cada região normalizados pela área da região, em % do B_ref '
+                    'GLOBAL; area_frac = área da região / área total; L1_contrib_frac = '
+                    'fração de ∫e dA total vinda da região',
+               runs={k: dict(arch=r['arch'], loss=r['loss'], run=r['run'],
+                             surface_kind=_surface_kind(r['arch']), **acc[k].report())
+                     for k, r in runs.items()},
+               floor_surface={kd: acc_floor[kd].report() for kd in SURF_KINDS})
+    (out_dir / 'regions.json').write_text(json.dumps(res, indent=2))
+    print(f'\n{len(subs)} amostras — erro de superfície por região, % do B_ref global '
+          f'(L1_A / L2_A) [fração da área | fração do L1_A total]')
+    head = ''.join(f'{n:>34s}' for n in REGIONS)
+    print(f"  {'':26s}{head}")
+    items_ = [(k, v) for k, v in res['runs'].items()] + \
+             [('piso ' + kd, v) for kd, v in res['floor_surface'].items()]
+    for k, v in items_:
+        cells = ''.join(f"{v[n]['L1_area_pct']:6.2f} /{v[n]['L2_area_pct']:6.2f} "
+                        f"[{v[n]['area_frac']:.2f}|{v[n]['L1_contrib_frac']:.2f}]".rjust(34)
+                        for n in REGIONS)
+        print(f'  {k:26s}{cells}')
+    print(f"salvo em {out_dir / 'regions.json'}; figura em {fig_dir}")
+
+
 def run_train_table(out_dir: Path):
     """Tabela de treinamento (P3): só leitura dos logs das runs de find_runs(ROOT_S)."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -913,6 +1006,13 @@ if __name__ == '__main__':
                        help='diretório com eval_smooth_per_sample.npz (para --pct)')
     p_sur.add_argument('--data', type=Path, default=OUT_ROOT / 'dados' / 'surface_error')
     p_sur.add_argument('--out', type=Path, default=OUT_ROOT / 'plots' / 'surface_error')
+    p_rg = sp.add_parser('regions', help='erro de superfície por região (interior/interface/canto)')
+    p_rg.add_argument('n', nargs='?', type=int, default=None, help='nº de amostras (default: todas)')
+    p_rg.add_argument('--d-int', type=float, default=None, help='mm (default: 1 passo radial da grade)')
+    p_rg.add_argument('--d-canto', type=float, default=None, help='mm (default: 2 passos radiais)')
+    p_rg.add_argument('--ang-canto', type=float, default=30.0, help='graus (default: 30)')
+    p_rg.add_argument('--out', type=Path, default=OUT_ROOT / 'dados', help='diretório de saída')
+    p_rg.add_argument('--fig', type=Path, default=OUT_ROOT / 'plots', help='diretório da figura')
     p_tt = sp.add_parser('train-table', help='tabela de treinamento a partir dos logs das runs')
     p_tt.add_argument('--out', type=Path, default=OUT_ROOT / 'dados', help='diretório de saída')
     a = ap.parse_args()
@@ -929,5 +1029,7 @@ if __name__ == '__main__':
             ap.error('surface: informe IDX ou --pct P')
         run_surface(None if a.idx is None else int(a.idx), a.loss or 'mae', a.data, a.out,
                     pct=a.pct, eval_dir=a.eval_data)
+    elif a.cmd == 'regions':
+        run_regions(a.out, a.fig, a.n, a.d_int, a.d_canto, a.ang_canto)
     elif a.cmd == 'train-table':
         run_train_table(a.out)

@@ -17,6 +17,8 @@ Subcomandos:
       Pisos (o gabarito em cada representação): floor_surface (grade, P1_nos, P0_elem).
       Saída: dados/eval_smooth.json + eval_smooth_per_sample.npz
       [2026-10-20: níveis antigos mesh/grid/grid_inter/elem e pisos elem<->nó removidos.]
+      Secundário (P1, 2026-10-20): erro de |B| ponto a ponto nos nós (MAE_pt, L2_pt,
+      L1_A, L2_A com área dual) -> runs[k]['nodal'], floor_nodal, npz nodal_*.
 
   figures [--data DIR] [--out DIR] — depois do eval: 1_curvas_treino, 2_barras_erro
       (L1_A / L2_A de superfície dos 10 runs + piso da representação de cada um),
@@ -55,8 +57,11 @@ from src.postprocess.fields import elem_to_nodes, gap_radius_mm, mag
 # [REMOVIDO 2026-10-20] INTERP_MODE/floor_nodes (piso da grade nos nós, removido)
 # from src.postprocess.inference import (ARCHS, INTERP_MODE, RUN_ORDER, find_runs, floor_nodes,
 #                                        load_set, predict, to_torch_sample)
-from src.postprocess.inference import (ARCHS, RUN_ORDER, find_runs, load_set, predict,
-                                       to_torch_sample)
+# [REMOVIDO 2026-10-20] sem INTERP_MODE/floor_nodes -- voltam com o erro nodal secundário (P1)
+# from src.postprocess.inference import (ARCHS, RUN_ORDER, find_runs, load_set, predict,
+#                                        to_torch_sample)
+from src.postprocess.inference import (ARCHS, INTERP_MODE, RUN_ORDER, find_runs, floor_nodes,
+                                       load_set, predict, to_torch_sample)
 # [REMOVIDO 2026-10-20] sem surf_err
 # from src.postprocess.metrics import Accum, grid_area_weights, merge, node_err, pstats
 # [REMOVIDO 2026-10-20] sem a superfície malha × malha
@@ -432,22 +437,133 @@ def _surface_kind(arch):
     return 'grade' if arch in GRID_ARCHS else 'P0_elem' if arch == 'FNO_BipartiteGNN_Elem' else 'P1_nos'
 
 
+# [REMOVIDO 2026-10-20] versão sem o erro nodal secundário (P1) -- substituída abaixo
+# def run_eval(out_dir: Path, max_samples=None):
+#     """Erro de superfície oficial (CLAUDE.md, "Convenção de erro"): superfície discreta de
+#     cada modelo × superfície do FEMM (B suavizado P1 descontínuo); L1_A, L2_A, B_ref.
+#     Saída: eval_smooth.json (runs + floor_surface) e eval_smooth_per_sample.npz
+#     (por run e por piso: [n_amostras, 2] = L1_A, L2_A em T)."""
+#     out_dir.mkdir(parents=True, exist_ok=True)
+#     rows = design_rows()
+#     samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], max_samples, N_SAMPLES)
+#     runs = load_set(ROOT_S)
+#     for k, r in runs.items():
+#         print(f"  {k:26s} {r['run']} best ép.{r['epoch']}  superfície {_surface_kind(r['arch'])}")
+#
+#     acc = {(k, sub): Accum() for k in runs for sub in SUBSETS}
+#     acc_floor = {(kd, sub): Accum() for kd in SURF_KINDS for sub in SUBSETS}
+#     per = {k: [] for k in runs}
+#     per_floor = {kd: [] for kd in SURF_KINDS}
+#     ids, subs = [], []
+#
+#     groups = {}
+#     for name, sub, idx, p in samples:
+#         groups.setdefault(name, []).append((sub, idx, p))
+#
+#     t0 = time.time()
+#     done = 0
+#     for gi, (name, items) in enumerate(groups.items()):
+#         t = time.time()
+#         with ProcessPoolExecutor(max_workers=min(N_WORKERS, len(items))) as ex:
+#             futs = [ex.submit(parse_smooth, p, rows[idx], with_elem=True, with_overlay=True)
+#                     for _, idx, p in items]
+#             for (sub, idx, p), f in zip(items, futs):
+#                 lay = f.result()
+#                 ts = to_torch_sample(lay)
+#                 ids.append(idx)
+#                 subs.append(sub)
+#                 for kd in SURF_KINDS:
+#                     a = Accum()
+#                     a.add_surface(*_floor_points(kd, lay))
+#                     acc_floor[(kd, sub)] = merge([acc_floor[(kd, sub)], a])
+#                     r_ = a.report()
+#                     per_floor[kd].append((r_['L1_area'], r_['L2_area']))
+#                 for k, r in runs.items():
+#                     out_hw, yn = predict(r['arch'], r['model'], r['normalizer'], ts)
+#                     mm, mf, w, _ = _surface_points(r['arch'], lay, out_hw, yn)
+#                     a = Accum()
+#                     a.add_surface(mm, mf, w)
+#                     acc[(k, sub)] = merge([acc[(k, sub)], a])
+#                     r_ = a.report()
+#                     per[k].append((r_['L1_area'], r_['L2_area']))
+#                 done += 1
+#         print(f'  [{gi + 1}/{len(groups)}] {name} ({items[0][0]})  {time.time() - t:.0f}s  '
+#               f'(amostras {done}, {(time.time() - t0) / 60:.1f} min)', flush=True)
+#
+#     subs_arr = np.array(subs)
+#     present = [s for s in SUBSETS if (subs_arr == s).any()]
+#
+#     def reports(getter):
+#         r = {sub: getter([sub]).report() for sub in present}
+#         r['total'] = getter(list(SUBSETS)).report()
+#         return r
+#
+#     res = dict(n_samples=done, n_by_subset={s: int((subs_arr == s).sum()) for s in SUBSETS},
+#                metric='erro de superfície de |B| (superfície do modelo × FEMM P1 descontínuo)',
+#                runs={},
+#                floor_surface={kd: reports(lambda ss, kd=kd: merge([acc_floor[(kd, s)] for s in ss]))
+#                               for kd in SURF_KINDS})
+#     for k, r in runs.items():
+#         arr = np.array(per[k])
+#         res['runs'][k] = dict(
+#             arch=r['arch'], loss=r['loss'], run=r['run'], best_epoch=r['epoch'],
+#             surface_kind=_surface_kind(r['arch']),
+#             surface=reports(lambda ss, k=k: merge([acc[(k, s)] for s in ss])),
+#             per_sample_L1_A={sub: pstats(arr[subs_arr == sub, 0]) for sub in present})
+#
+#     np.savez_compressed(
+#         out_dir / 'eval_smooth_per_sample.npz', sample_idx=np.array(ids), subset=subs_arr,
+#         **{k: np.array(v) for k, v in per.items()},
+#         **{f'floor_{kd}': np.array(v) for kd, v in per_floor.items()})
+#     (out_dir / 'eval_smooth.json').write_text(json.dumps(res, indent=2))
+#     print(f'\nsalvo em {out_dir} ({(time.time() - t0) / 60:.1f} min)')
+#     print(f'{done} amostras — erro de superfície, % de B_ref (L1_A / L2_A)')
+#     for k, v in res['runs'].items():
+#         g = v['surface']['total']
+#         print(f"  {k:26s} [{v['surface_kind']:7s}] L1 {g['L1_area_pct']:5.2f}%  "
+#               f"L2 {g['L2_area_pct']:5.2f}%  (B_ref {g['B_ref']:.4f} T)")
+#     for kd in SURF_KINDS:
+#         g = res['floor_surface'][kd]['total']
+#         print(f"  {'piso ' + kd:26s} [{kd:7s}] L1 {g['L1_area_pct']:5.2f}%  L2 {g['L2_area_pct']:5.2f}%")
+
+
+NODAL_COLS = ('MAE_pt', 'L2_pt', 'L1_area', 'L2_area')   # colunas nodal_* do .npz (T)
+
+
+def _nodal_mag(arch, lay, yn):
+    """|B| da saída do modelo nos nós [S]: FNO2d já interpolado por predict (modo da
+    bateria), Elem levada aos nós por elem_to_nodes, demais = saída nodal."""
+    yp = yn.double().cpu().numpy()
+    if arch == 'FNO_BipartiteGNN_Elem':
+        yp = elem_to_nodes(lay, yp)
+    return _mag_np(yp)
+
+
 def run_eval(out_dir: Path, max_samples=None):
     """Erro de superfície oficial (CLAUDE.md, "Convenção de erro"): superfície discreta de
     cada modelo × superfície do FEMM (B suavizado P1 descontínuo); L1_A, L2_A, B_ref.
-    Saída: eval_smooth.json (runs + floor_surface) e eval_smooth_per_sample.npz
-    (por run e por piso: [n_amostras, 2] = L1_A, L2_A em T)."""
+    Secundário (P1, 2026-10-20): erro de |B| ponto a ponto nos nós (gabarito node_y do
+    layout v1, área dual) -> runs[k]['nodal'] e floor_nodal (piso da grade: y_hw
+    interpolado nos nós, floor_nodes); não substitui a superfície.
+    Saída: eval_smooth.json (runs + floor_surface + floor_nodal) e eval_smooth_per_sample.npz
+    (por run e por piso: [n_amostras, 2] = L1_A, L2_A em T; nodal_*: [n_amostras, 4] =
+    NODAL_COLS em T)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = design_rows()
     samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], max_samples, N_SAMPLES)
     runs = load_set(ROOT_S)
     for k, r in runs.items():
-        print(f"  {k:26s} {r['run']} best ép.{r['epoch']}  superfície {_surface_kind(r['arch'])}")
+        print(f"  {k:26s} {r['run']} best ép.{r['epoch']}  superfície {_surface_kind(r['arch'])}"
+              f"  interp {r['interp_mode']}")
 
     acc = {(k, sub): Accum() for k in runs for sub in SUBSETS}
     acc_floor = {(kd, sub): Accum() for kd in SURF_KINDS for sub in SUBSETS}
+    acc_nodal = {(k, sub): Accum() for k in runs for sub in SUBSETS}
+    acc_floor_nodal = {sub: Accum() for sub in SUBSETS}
     per = {k: [] for k in runs}
     per_floor = {kd: [] for kd in SURF_KINDS}
+    per_nodal = {k: [] for k in runs}
+    per_floor_nodal = []
     ids, subs = [], []
 
     groups = {}
@@ -472,6 +588,14 @@ def run_eval(out_dir: Path, max_samples=None):
                     acc_floor[(kd, sub)] = merge([acc_floor[(kd, sub)], a])
                     r_ = a.report()
                     per_floor[kd].append((r_['L1_area'], r_['L2_area']))
+                # nodal (secundário): gabarito e área dual do layout v1
+                area_n = lay['v1']['node_x'][:, 2].astype(np.float64)
+                mag_tn = _mag_np(lay['v1']['node_y'].astype(np.float64))
+                a = Accum()
+                a.add(mag(floor_nodes(ts)), mag_tn, area_n)
+                acc_floor_nodal[sub] = merge([acc_floor_nodal[sub], a])
+                r_ = a.report()
+                per_floor_nodal.append(tuple(r_[c] for c in NODAL_COLS))
                 for k, r in runs.items():
                     out_hw, yn = predict(r['arch'], r['model'], r['normalizer'], ts)
                     mm, mf, w, _ = _surface_points(r['arch'], lay, out_hw, yn)
@@ -480,6 +604,11 @@ def run_eval(out_dir: Path, max_samples=None):
                     acc[(k, sub)] = merge([acc[(k, sub)], a])
                     r_ = a.report()
                     per[k].append((r_['L1_area'], r_['L2_area']))
+                    a = Accum()
+                    a.add(_nodal_mag(r['arch'], lay, yn), mag_tn, area_n)
+                    acc_nodal[(k, sub)] = merge([acc_nodal[(k, sub)], a])
+                    r_ = a.report()
+                    per_nodal[k].append(tuple(r_[c] for c in NODAL_COLS))
                 done += 1
         print(f'  [{gi + 1}/{len(groups)}] {name} ({items[0][0]})  {time.time() - t:.0f}s  '
               f'(amostras {done}, {(time.time() - t0) / 60:.1f} min)', flush=True)
@@ -504,11 +633,21 @@ def run_eval(out_dir: Path, max_samples=None):
             surface_kind=_surface_kind(r['arch']),
             surface=reports(lambda ss, k=k: merge([acc[(k, s)] for s in ss])),
             per_sample_L1_A={sub: pstats(arr[subs_arr == sub, 0]) for sub in present})
+    # nível secundário (P1, 2026-10-20) -- chaves novas, as acima não mudam
+    for k in runs:
+        res['runs'][k]['nodal'] = reports(lambda ss, k=k: merge([acc_nodal[(k, s)] for s in ss]))
+    res['floor_nodal'] = reports(lambda ss: merge([acc_floor_nodal[s] for s in ss]))
+    res['nodal_metric'] = ('erro de |B| ponto a ponto nos nós (secundário): gabarito node_y do '
+                           'layout v1, área dual do nó; FNO2d interpolado nos nós (modo da '
+                           'bateria), Elem -> nós por elem_to_nodes; piso = y_hw do gabarito '
+                           f'interpolado nos nós ({INTERP_MODE})')
 
     np.savez_compressed(
         out_dir / 'eval_smooth_per_sample.npz', sample_idx=np.array(ids), subset=subs_arr,
         **{k: np.array(v) for k, v in per.items()},
-        **{f'floor_{kd}': np.array(v) for kd, v in per_floor.items()})
+        **{f'floor_{kd}': np.array(v) for kd, v in per_floor.items()},
+        **{f'nodal_{k}': np.array(v) for k, v in per_nodal.items()},
+        nodal_floor_grade=np.array(per_floor_nodal), nodal_columns=np.array(NODAL_COLS))
     (out_dir / 'eval_smooth.json').write_text(json.dumps(res, indent=2))
     print(f'\nsalvo em {out_dir} ({(time.time() - t0) / 60:.1f} min)')
     print(f'{done} amostras — erro de superfície, % de B_ref (L1_A / L2_A)')
@@ -519,6 +658,15 @@ def run_eval(out_dir: Path, max_samples=None):
     for kd in SURF_KINDS:
         g = res['floor_surface'][kd]['total']
         print(f"  {'piso ' + kd:26s} [{kd:7s}] L1 {g['L1_area_pct']:5.2f}%  L2 {g['L2_area_pct']:5.2f}%")
+    print(f'{done} amostras — [secundário] erro de |B| nos nós, % de B_ref nodal '
+          f'(pontual MAE / L2 / L1_A / L2_A)')
+    for k, v in res['runs'].items():
+        g = v['nodal']['total']
+        print(f"  {k:26s} pt {g['MAE_pt_pct']:5.2f}%  L2pt {g['L2_pt_pct']:5.2f}%  "
+              f"L1 {g['L1_area_pct']:5.2f}%  L2 {g['L2_area_pct']:5.2f}%  (B_ref {g['B_ref']:.4f} T)")
+    g = res['floor_nodal']['total']
+    print(f"  {'piso grade (nós)':26s} pt {g['MAE_pt_pct']:5.2f}%  L2pt {g['L2_pt_pct']:5.2f}%  "
+          f"L1 {g['L1_area_pct']:5.2f}%  L2 {g['L2_area_pct']:5.2f}%")
 
 
 def run_figures(data_dir: Path, fig_dir: Path):

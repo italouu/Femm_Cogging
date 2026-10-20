@@ -112,59 +112,71 @@ class FNO_BipartiteGNN(torch.nn.Module):
         return y_hw_fno, fno_at_nodes + delta
 
 
-def make_fno_bipartite_gnn_step(lambda_loss, loss_cfg=None):
-    """Retorna step_fn fechada sobre lambda_loss e loss_cfg -- mesmo padrão de
-    fno_gnn.py::make_fno_gnn_step, adaptado pros campos extras do grafo duplo
-    (elem_x, cross_edge_index, cross_edge_attr).
+# [REMOVIDO 2026-10-20] step_fn com lambda_loss (parcela de grade, sempre 0), subtract_fno
+# (resíduo) e graph_div_b_loss -- features sem uso; a loss é só a da saída final.
+# def make_fno_bipartite_gnn_step(lambda_loss, loss_cfg=None):
+#     """Retorna step_fn fechada sobre lambda_loss e loss_cfg -- mesmo padrão de
+#     fno_gnn.py::make_fno_gnn_step, adaptado pros campos extras do grafo duplo
+#     (elem_x, cross_edge_index, cross_edge_attr).
+#
+#     graph_div_b_loss (DivBLossCfg, src/configs/loss.py) é detectada via
+#     `lambda_div` (só essa config tem esse campo) e tratada à parte: ela tem
+#     assinatura estendida (precisa de node_x/cross_edge_index pra calcular o
+#     divergente) e funciona EXCLUSIVAMENTE na parcela de nós -- a parcela de
+#     grade (FNO/H×W) não tem malha real, usa `loss_cfg.base_loss` puro (sem
+#     termo de div) nesse caso, em vez de `loss_fn`."""
+#     subtract      = getattr(loss_cfg, 'subtract_fno', False)
+#     div_base_loss = getattr(loss_cfg, 'base_loss', None)
+#     div_lambda    = getattr(loss_cfg, 'lambda_div', None)
+#     is_div_loss   = div_lambda is not None   # só DivBLossCfg tem lambda_div
+#
+#     def step(batch, model, loss_fn, device):
+#         x_hw             = batch['x_hw'].to(device)
+#         node_x           = batch['node_x'].to(device)
+#         elem_x           = batch['elem_x'].to(device)
+#         edge_index       = batch['edge_index'].to(device)
+#         edge_attr        = batch['edge_attr'].to(device)
+#         cross_edge_index = batch['cross_edge_index'].to(device)
+#         cross_edge_attr  = batch['cross_edge_attr'].to(device)
+#         L                = batch['L'].to(device)
+#         y_hw             = batch['y_hw'].to(device)
+#         y_node           = batch['node_y'].to(device)
+#
+#         # return_components=True sempre -- mesmo custo de (y_hw_fno, y_nodes)
+#         # direto (o forward normal só soma fno_at_nodes+delta internamente),
+#         # e simplifica os 3 ramos abaixo pra um único caminho de inferência.
+#         y_hw_fno, fno_at_nodes, delta = model(
+#             x_hw, node_x, elem_x, edge_index, edge_attr,
+#             cross_edge_index, cross_edge_attr, L, return_components=True)
+#         y_nodes = fno_at_nodes + delta
+#
+#         grid_loss_fn = LOSS_REGISTRY[div_base_loss] if is_div_loss else loss_fn
+#         loss_grid = grid_loss_fn(y_hw_fno, y_hw)
+#
+#         if is_div_loss:
+#             loss_nodes = loss_fn(y_nodes, y_node, node_x, cross_edge_index,
+#                                   base_loss=div_base_loss, lambda_div=div_lambda,
+#                                   r_in_mm=loss_cfg.r_in_mm, r_ext_mm=loss_cfg.r_ext_mm,
+#                                   ang_1_deg=loss_cfg.ang_1_deg, ang_2_deg=loss_cfg.ang_2_deg)
+#         elif subtract:
+#             loss_nodes = loss_fn(delta, y_node - fno_at_nodes)
+#         else:
+#             loss_nodes = loss_fn(y_nodes, y_node)
+#
+#         return lambda_loss * loss_grid + (1.0 - lambda_loss) * loss_nodes
+#
+#     return step
 
-    graph_div_b_loss (DivBLossCfg, src/configs/loss.py) é detectada via
-    `lambda_div` (só essa config tem esse campo) e tratada à parte: ela tem
-    assinatura estendida (precisa de node_x/cross_edge_index pra calcular o
-    divergente) e funciona EXCLUSIVAMENTE na parcela de nós -- a parcela de
-    grade (FNO/H×W) não tem malha real, usa `loss_cfg.base_loss` puro (sem
-    termo de div) nesse caso, em vez de `loss_fn`."""
-    subtract      = getattr(loss_cfg, 'subtract_fno', False)
-    div_base_loss = getattr(loss_cfg, 'base_loss', None)
-    div_lambda    = getattr(loss_cfg, 'lambda_div', None)
-    is_div_loss   = div_lambda is not None   # só DivBLossCfg tem lambda_div
 
-    def step(batch, model, loss_fn, device):
-        x_hw             = batch['x_hw'].to(device)
-        node_x           = batch['node_x'].to(device)
-        elem_x           = batch['elem_x'].to(device)
-        edge_index       = batch['edge_index'].to(device)
-        edge_attr        = batch['edge_attr'].to(device)
-        cross_edge_index = batch['cross_edge_index'].to(device)
-        cross_edge_attr  = batch['cross_edge_attr'].to(device)
-        L                = batch['L'].to(device)
-        y_hw             = batch['y_hw'].to(device)
-        y_node           = batch['node_y'].to(device)
-
-        # return_components=True sempre -- mesmo custo de (y_hw_fno, y_nodes)
-        # direto (o forward normal só soma fno_at_nodes+delta internamente),
-        # e simplifica os 3 ramos abaixo pra um único caminho de inferência.
-        y_hw_fno, fno_at_nodes, delta = model(
-            x_hw, node_x, elem_x, edge_index, edge_attr,
-            cross_edge_index, cross_edge_attr, L, return_components=True)
-        y_nodes = fno_at_nodes + delta
-
-        grid_loss_fn = LOSS_REGISTRY[div_base_loss] if is_div_loss else loss_fn
-        loss_grid = grid_loss_fn(y_hw_fno, y_hw)
-
-        if is_div_loss:
-            loss_nodes = loss_fn(y_nodes, y_node, node_x, cross_edge_index,
-                                  base_loss=div_base_loss, lambda_div=div_lambda,
-                                  r_in_mm=loss_cfg.r_in_mm, r_ext_mm=loss_cfg.r_ext_mm,
-                                  ang_1_deg=loss_cfg.ang_1_deg, ang_2_deg=loss_cfg.ang_2_deg)
-        elif subtract:
-            loss_nodes = loss_fn(delta, y_node - fno_at_nodes)
-        else:
-            loss_nodes = loss_fn(y_nodes, y_node)
-
-        return lambda_loss * loss_grid + (1.0 - lambda_loss) * loss_nodes
-
-    return step
-
+def fno_bipartite_gnn_step(batch, model, loss_fn, device):
+    """Loss da saída final do grafo principal contra node_y -- nós (FNO_BipartiteGNN, v3)
+    ou elementos (FNO_BipartiteGNN_Elem, mesma assinatura)."""
+    _, y_nodes = model(
+        batch['x_hw'].to(device), batch['node_x'].to(device), batch['elem_x'].to(device),
+        batch['edge_index'].to(device), batch['edge_attr'].to(device),
+        batch['cross_edge_index'].to(device), batch['cross_edge_attr'].to(device),
+        batch['L'].to(device))
+    return loss_fn(y_nodes, batch['node_y'].to(device))
 
 def fno_bipartite_gnn_metric_fn(batch, model, device):
     """MAE bruto (sem máscara) -- mesmo padrão de fno_gnn.py::fno_gnn_metric_fn.
@@ -191,7 +203,10 @@ def fno_bipartite_gnn_metric_fn(batch, model, device):
             y_nodes  = normalizer.decode(y_nodes,  'node_y')
             y_hw     = normalizer.decode(y_hw,     'y_hw')
             y_node   = normalizer.decode(y_node,   'node_y')
-        mae_hw    = torch.mean(torch.abs(y_hw_fno - y_hw)).item()
+        # [REMOVIDO 2026-10-20] mae_hw da grade do estágio FNO/base -- sem loss desde a remoção
+        # do lambda_loss (grade intermediária não supervisionada); só a FNO2d reporta mae_hw.
+        # mae_hw    = torch.mean(torch.abs(y_hw_fno - y_hw)).item()
+        mae_hw    = None
         mae_graph = torch.mean(torch.abs(y_nodes  - y_node)).item()
     return mae_hw, mae_graph
 

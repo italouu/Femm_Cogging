@@ -17,7 +17,9 @@ from src.neural_op.normalization import Normalizer
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 INTERP_MODE = 'cell_centered_border'   # mesmo modo grade -> nós dos modelos da bateria smooth
 
-ARCHS     = ('FNO2d', 'FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN')
+# [REMOVIDO 2026-10-20] sem a Elem -- agora parte da bateria oficial (eval integrado)
+# ARCHS     = ('FNO2d', 'FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN')
+ARCHS     = ('FNO2d', 'FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN', 'FNO_BipartiteGNN_Elem')
 RUN_ORDER = [(a, l) for a in ARCHS for l in ('mse', 'mae')]
 
 
@@ -90,10 +92,19 @@ def _t(a, dtype=None):
     return t if dtype is None else t.to(dtype)
 
 
+def _bip_like(d):
+    """Layout bipartite ou Elem (mesmas chaves) -> tensores de 1 amostra."""
+    return dict(x_hw=_t(d['x_hw'])[None], node_x=_t(d['node_x']), elem_x=_t(d['elem_x']),
+                edge_index=_t(d['edge_index']), edge_attr=_t(d['edge_attr']),
+                cross_edge_index=_t(d['cross_edge_index']),
+                cross_edge_attr=_t(d['cross_edge_attr']), L=_t(d['L']))
+
+
 def to_torch_sample(s):
-    """Layouts numpy de parse_smooth -> tensores CPU no formato de 1 amostra do chunk."""
+    """Layouts numpy de parse_smooth -> tensores CPU no formato de 1 amostra do chunk
+    (+ 'elem' se parse_smooth(..., with_elem=True))."""
     v1, bp = s['v1'], s['bip']
-    return dict(
+    out = dict(
         v1=dict(x_hw=_t(v1['x_hw'])[None], y_hw=_t(v1['y_hw']), node_x=_t(v1['node_x']),
                 node_y=_t(v1['node_y']), edge_index=_t(v1['edge_index']),
                 edge_attr=_t(v1['edge_attr']), L=_t(v1['L'])),
@@ -102,13 +113,20 @@ def to_torch_sample(s):
                  cross_edge_index=_t(bp['cross_edge_index']),
                  cross_edge_attr=_t(bp['cross_edge_attr']), L=_t(bp['L'])),
     )
+    if 'elem' in s:
+        out['elem'] = _bip_like(s['elem'])
+    return out
 
 
 @torch.inference_mode()
 def predict(arch, model, normalizer, ts):
-    """Retorna (out_hw [2,H,W] em T no device, y_nodes [S,2] em T no device)."""
+    """Retorna (out_hw [2,H,W] em T no device, y_nodes [S,2] em T no device).
+    FNO_BipartiteGNN_Elem: usa ts['elem'] e y_nodes é POR ELEMENTO [M,2]
+    (levar aos nós com fields.elem_to_nodes)."""
     if arch in ('FNO_BipartiteGNN', 'FNO_BipartiteGNN_Elem'):
-        d = ts['bip']
+        # [REMOVIDO 2026-10-20] a Elem recebia o layout bipartite (grafo errado para ela)
+        # d = ts['bip']
+        d = ts['elem'] if arch == 'FNO_BipartiteGNN_Elem' else ts['bip']
         out_hw, y_nodes = model(
             _enc(normalizer, d['x_hw'], 'x_hw').to(DEVICE),
             _enc(normalizer, d['node_x'], 'node_x').to(DEVICE),

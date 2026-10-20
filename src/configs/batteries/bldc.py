@@ -19,6 +19,9 @@ data/logs/_batteries/bldc/ e as runs xy de data/logs/BLDC_138x276/ precisam sair
 
     python -m scripts.run_battery bldc [--dry-run]
 """
+# [REMOVIDO 2026-10-20] argumentos de features sem uso tirados de todas as runs:
+#   arch_cfg: lambda_loss=0   |   MseLossCfg(tail_alpha=0.0, tail_k_frac=0.0, subtract_fno=False)
+#   MaeLossCfg(subtract_fno=False)   -- valores idênticos aos efetivos (desligados).
 from src.configs.battery import BatteryCfg, BatteryRun
 from src.configs.training import (NnCfg, FNOConfig, FNO_GNNConfig, GNN_PostBaseConfig,
                                   FNO_BipartiteGNNConfig, FNO_BipartiteGNN_ElemConfig)
@@ -41,7 +44,7 @@ def fno2d_mse(runs):
             modes1=69, modes2=139, conv_width=8, conv_layers=4,
             lift_width=64, lift_layers=3, proj_width=64, proj_layers=3,
             data_res=(138, 276), interp_mode='cell_centered_border'),
-        loss_cfg=MseLossCfg(tail_alpha=0.0, tail_k_frac=0.0, subtract_fno=False),
+        loss_cfg=MseLossCfg(),
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
@@ -63,7 +66,7 @@ def fno2d_mae(runs):
             modes1=69, modes2=139, conv_width=8, conv_layers=4,
             lift_width=64, lift_layers=3, proj_width=64, proj_layers=3,
             data_res=(138, 276), interp_mode='cell_centered_border'),
-        loss_cfg=MaeLossCfg(subtract_fno=False),
+        loss_cfg=MaeLossCfg(),
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
@@ -85,9 +88,9 @@ def fno_gnn_mse(runs):
         arch_cfg=FNO_GNNConfig(
             fno_modes1=69, fno_modes2=139, fno_conv_width=6, fno_conv_layers=4,
             fno_lift_width=64, fno_lift_layers=3, fno_proj_width=64, fno_proj_layers=3,
-            data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3, lambda_loss=0,
+            data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3,
             interp_mode='cell_centered_border', fno_node_rescale=True),
-        loss_cfg=MseLossCfg(tail_alpha=0.0, tail_k_frac=0.0, subtract_fno=False),
+        loss_cfg=MseLossCfg(),
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
@@ -108,9 +111,9 @@ def fno_gnn_mae(runs):
         arch_cfg=FNO_GNNConfig(
             fno_modes1=69, fno_modes2=139, fno_conv_width=6, fno_conv_layers=4,
             fno_lift_width=64, fno_lift_layers=3, fno_proj_width=64, fno_proj_layers=3,
-            data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3, lambda_loss=0,
+            data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3,
             interp_mode='cell_centered_border', fno_node_rescale=True),
-        loss_cfg=MaeLossCfg(subtract_fno=False),
+        loss_cfg=MaeLossCfg(),
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
@@ -132,7 +135,7 @@ def postbase_mse(runs):
         arch_cfg=GNN_PostBaseConfig(
             base_run_dir=runs['fno2d_mse'], base_checkpoint='best',
             gnn_node_width=64, gnn_n_layers=6, interp_mode='cell_centered_border'),
-        loss_cfg=MseLossCfg(tail_alpha=0.0, tail_k_frac=0.0, subtract_fno=False),
+        loss_cfg=MseLossCfg(),
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
@@ -153,7 +156,7 @@ def postbase_mae(runs):
         arch_cfg=GNN_PostBaseConfig(
             base_run_dir=runs['fno2d_mae'], base_checkpoint='best',
             gnn_node_width=64, gnn_n_layers=6, interp_mode='cell_centered_border'),
-        loss_cfg=MaeLossCfg(subtract_fno=False),
+        loss_cfg=MaeLossCfg(),
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
@@ -175,9 +178,9 @@ def bipartite_mse(runs):
         arch_cfg=FNO_BipartiteGNNConfig(
             fno_modes1=69, fno_modes2=139, fno_conv_width=6, fno_conv_layers=4,
             fno_lift_width=64, fno_lift_layers=3, fno_proj_width=64, fno_proj_layers=3,
-            data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3, lambda_loss=0,
+            data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3,
             interp_mode='cell_centered_border', fno_node_rescale=True),
-        loss_cfg=MseLossCfg(tail_alpha=0.0, tail_k_frac=0.0, subtract_fno=False),
+        loss_cfg=MseLossCfg(),
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
@@ -198,9 +201,9 @@ def bipartite_mae(runs):
         arch_cfg=FNO_BipartiteGNNConfig(
             fno_modes1=69, fno_modes2=139, fno_conv_width=6, fno_conv_layers=4,
             fno_lift_width=64, fno_lift_layers=3, fno_proj_width=64, fno_proj_layers=3,
-            data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3, lambda_loss=0,
+            data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3,
             interp_mode='cell_centered_border', fno_node_rescale=True),
-        loss_cfg=MaeLossCfg(subtract_fno=False),
+        loss_cfg=MaeLossCfg(),
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
@@ -221,9 +224,9 @@ def elem_mse(runs):
         arch_cfg=FNO_BipartiteGNN_ElemConfig(
             fno_modes1=69, fno_modes2=139, fno_conv_width=6, fno_conv_layers=4,
             fno_lift_width=64, fno_lift_layers=3, fno_proj_width=64, fno_proj_layers=3,
-            data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3, lambda_loss=0,
+            data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3,
             interp_mode='cell_centered_border', fno_node_rescale=True, aux_fno=False),
-        loss_cfg=MseLossCfg(tail_alpha=0.0, tail_k_frac=0.0, subtract_fno=False),
+        loss_cfg=MseLossCfg(),
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
@@ -244,9 +247,9 @@ def elem_mae(runs):
         arch_cfg=FNO_BipartiteGNN_ElemConfig(
             fno_modes1=69, fno_modes2=139, fno_conv_width=6, fno_conv_layers=4,
             fno_lift_width=64, fno_lift_layers=3, fno_proj_width=64, fno_proj_layers=3,
-            data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3, lambda_loss=0,
+            data_res=(138, 276), gnn_node_width=32, gnn_n_layers=3,
             interp_mode='cell_centered_border', fno_node_rescale=True, aux_fno=False),
-        loss_cfg=MaeLossCfg(subtract_fno=False),
+        loss_cfg=MaeLossCfg(),
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,

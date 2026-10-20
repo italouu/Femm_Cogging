@@ -11,7 +11,9 @@ from src.neural_op.monitor import TrainingMonitor
 from src.training.model_manager import ModelManager
 
 # ── Configuração ───────────────────────────────────────────────────────────────
-from src.configs.training import FNOConfig, DivBLossCfg
+# [REMOVIDO 2026-10-20] DivBLossCfg (graph_div_b_loss removida -- feature sem uso)
+# from src.configs.training import FNOConfig, DivBLossCfg
+from src.configs.training import FNOConfig
 from src.configs.monitor import MonitorCfg
 
 # [REMOVIDO] _nn construído em nível de módulo — rodava (detecção de dims +
@@ -77,14 +79,15 @@ def run(_nn):
     # abaixo — não de loss_fn (que pode virar um partial).
     loss_obj = LOSS_REGISTRY[_nn.loss]
     loss_fn  = loss_obj
-    if getattr(_nn.loss_cfg, 'tail_alpha', 0.0) > 0:
-        # Só MseLossCfg tem tail_alpha/tail_k_frac — getattr evita AttributeError
-        # em outras configs de loss.
-        loss_fn = functools.partial(
-            loss_fn,
-            tail_alpha=_nn.loss_cfg.tail_alpha,
-            tail_k_frac=_nn.loss_cfg.tail_k_frac,
-        )
+    # [REMOVIDO 2026-10-20] termo de cauda top-k (tail_alpha/tail_k_frac) -- feature sem uso
+    # if getattr(_nn.loss_cfg, 'tail_alpha', 0.0) > 0:
+    #     # Só MseLossCfg tem tail_alpha/tail_k_frac — getattr evita AttributeError
+    #     # em outras configs de loss.
+    #     loss_fn = functools.partial(
+    #         loss_fn,
+    #         tail_alpha=_nn.loss_cfg.tail_alpha,
+    #         tail_k_frac=_nn.loss_cfg.tail_k_frac,
+    #     )
 
     # ── Modelo, optimizer, scheduler ───────────────────────────────────────
     if _nn.resume_run:

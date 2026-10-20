@@ -114,12 +114,30 @@ class Normalizer:
         self.stats   = stats or {}
         self.exclude = exclude or {}
 
+    # [REMOVIDO 2026-10-20] stats sobre TODOS os chunks do dataset (inclusive os de teste),
+    # embora a docstring dissesse "chunks de treino" -- agora só os chunks de treino do split.
+    # @classmethod
+    # def fit(cls, dataset: str, arch: str, force_recompute: bool = False) -> 'Normalizer':
+    #     chunk_dir   = Path(f'data/torch/data_chunks/{dataset}')
+    #     chunk_paths = sorted(str(p) for p in chunk_dir.glob('data_chunk_*.pt'))
+    #     ...
+    #     cache_path = chunk_dir / 'norm_stats.json'
     @classmethod
-    def fit(cls, dataset: str, arch: str, force_recompute: bool = False) -> 'Normalizer':
-        chunk_dir   = Path(f'data/torch/data_chunks/{dataset}')
-        chunk_paths = sorted(str(p) for p in chunk_dir.glob('data_chunk_*.pt'))
-        if not chunk_paths:
+    def fit(cls, dataset: str, arch: str, train_split: float, split_seed=None, test_split=None,
+            force_recompute: bool = False) -> 'Normalizer':
+        """Stats só dos chunks de TREINO -- mesmo split de build_loaders
+        (split_chunk_paths sobre sorted(glob), como scripts/train.py). Cache por split:
+        norm_stats_train_<hash dos nomes dos chunks de treino>.json."""
+        import glob
+        import hashlib
+        from src.neural_op.dataloaders.grid_loader import split_chunk_paths
+        chunk_dir = Path(f'data/torch/data_chunks/{dataset}')
+        all_paths = sorted(glob.glob(f'data/torch/data_chunks/{dataset}/data_chunk_*.pt'))
+        if not all_paths:
             raise FileNotFoundError(f"Normalizer.fit: nenhum chunk encontrado em '{chunk_dir}'.")
+        chunk_paths, _ = split_chunk_paths(all_paths, train_split, split_seed, test_split)
+        names = sorted(Path(p).name for p in chunk_paths)
+        tag = hashlib.sha1('\n'.join(names).encode()).hexdigest()[:10]
 
         sample    = torch.load(chunk_paths[0], map_location='cpu', weights_only=False)
         has_graph = 'node_x' in sample
@@ -130,11 +148,11 @@ class Normalizer:
                 + (['node_x', 'node_y'] if has_graph else [])
                 + (['elem_x'] if has_elem else []))
 
-        cache_path = chunk_dir / 'norm_stats.json'
+        cache_path = chunk_dir / f'norm_stats_train_{tag}.json'
         if cache_path.exists() and not force_recompute:
             stats = json.loads(cache_path.read_text())
         else:
-            print(f"  [Normalizer] calculando mean/std de {len(chunk_paths)} chunk(s) "
+            print(f"  [Normalizer] calculando mean/std de {len(chunk_paths)} chunk(s) de treino "
                   f"em '{dataset}' (1x, cacheado em {cache_path.name})...", flush=True)
             stats = _fit_stats_from_chunks(chunk_paths, keys)
             cache_path.write_text(json.dumps(stats))

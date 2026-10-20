@@ -2,9 +2,15 @@ from dataclasses import dataclass, field, fields, MISSING
 from typing import Any, Optional
 
 from src.configs.monitor import MonitorCfg   # noqa: F401  re-exportado daqui por retrocompatibilidade
+# [REMOVIDO 2026-10-20] RelativeL2LossCfg e DivBLossCfg (features sem uso)
+# from src.configs.loss    import (            # noqa: F401  re-exportado daqui por retrocompatibilidade
+#     LossCfg, MseLossCfg, MaeLossCfg, RelativeL2LossCfg,
+#     MaskedFNOLossCfg, SingleMaterialFNOLossCfg, MaskedFNOGNNLossCfg, DivBLossCfg,
+#     LOSS_CFG_REGISTRY,
+# )
 from src.configs.loss    import (            # noqa: F401  re-exportado daqui por retrocompatibilidade
-    LossCfg, MseLossCfg, MaeLossCfg, RelativeL2LossCfg,
-    MaskedFNOLossCfg, SingleMaterialFNOLossCfg, MaskedFNOGNNLossCfg, DivBLossCfg,
+    LossCfg, MseLossCfg, MaeLossCfg,
+    MaskedFNOLossCfg, SingleMaterialFNOLossCfg, MaskedFNOGNNLossCfg,
     LOSS_CFG_REGISTRY,
 )
 
@@ -189,7 +195,9 @@ class FNO_GNNConfig:
     data_res: tuple = (138, 276)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
-    lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
+    # [REMOVIDO 2026-10-20] lambda_loss (parcela de grade da loss, sempre 0) -- feature sem uso;
+    # a loss é só a da saída final. Runs antigas: from_dict ignora o campo.
+    # lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
     interp_mode: str = 'cell_centered_border'   # B1 — ver FNOConfig.interp_mode
     # B2 (2026-10-03) — True: saída do FNO interpolada nos nós é recodificada de
     # stats de y_hw para stats de node_y antes de somar o resíduo da GNN
@@ -254,7 +262,9 @@ class FNO_BipartiteGNNConfig:
     data_res: tuple = (138, 276)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
-    lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
+    # [REMOVIDO 2026-10-20] lambda_loss (parcela de grade da loss, sempre 0) -- feature sem uso;
+    # a loss é só a da saída final. Runs antigas: from_dict ignora o campo.
+    # lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
     interp_mode: str = 'cell_centered_border'   # B1 — ver FNOConfig.interp_mode
     fno_node_rescale: bool = True   # B2 — ver FNO_GNNConfig.fno_node_rescale
 
@@ -301,7 +311,9 @@ class FNO_BipartiteGNN_v3Config:
     data_res: tuple = (138, 276)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
-    lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
+    # [REMOVIDO 2026-10-20] lambda_loss (parcela de grade da loss, sempre 0) -- feature sem uso;
+    # a loss é só a da saída final. Runs antigas: from_dict ignora o campo.
+    # lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
 
     # edge_dim/grid_in_ch/grid_out_ch/node_in_ch/elem_in_ch/cross_edge_dim --
     # todos auto-detectados em NnCfg.__post_init__ (helper _detect_chunk_dims),
@@ -348,7 +360,9 @@ class FNO_BipartiteGNN_ElemConfig:
     data_res: tuple = (138, 276)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
-    lambda_loss: float = 0   # peso da loss de grade; loss_elementos = 1 - lambda_loss
+    # [REMOVIDO 2026-10-20] lambda_loss (parcela de grade da loss, sempre 0) -- feature sem uso;
+    # a loss é só a da saída final. Runs antigas: from_dict ignora o campo.
+    # lambda_loss: float = 0   # peso da loss de grade; loss_elementos = 1 - lambda_loss
     interp_mode: str = 'cell_centered_border'
     fno_node_rescale: bool = True
     # [REMOVIDO 2026-10-07] default True — decisão do usuário: auxiliar (vértices) só com posição
@@ -479,6 +493,9 @@ class MaskedFNO_GNNConfig:
 # ── Config principal ──────────────────────────────────────────────────────────
 #
 # Referência rápida — arch e loss disponíveis
+# [2026-10-20] removidos (features sem uso): relative_l2, graph_div_b_loss, tail_alpha/
+# tail_k_frac, subtract_fno e lambda_loss (exceto MaskedFNO_GNN, legado). As menções abaixo
+# a essas entradas são históricas; losses ativas: mse e mae (só a saída final do modelo).
 # ┌─────────────────┬──────────────────────┬──────────────────┬──────────────────────────┐
 # │ arch            │ loss recomendada      │ loader_mode      │ arch_cfg                 │
 # ├─────────────────┼──────────────────────┼──────────────────┼──────────────────────────┤
@@ -687,7 +704,10 @@ class NnCfg:
                     f"{dims['grid_hw']} de '{self.dataset}'", stacklevel=2)
         if self.normalize:
             from src.neural_op.normalization import Normalizer
-            self.norm_stats = Normalizer.fit(self.dataset, self.arch).to_dict()
+            # [REMOVIDO 2026-10-20] stats de todos os chunks (inclusive teste)
+            # self.norm_stats = Normalizer.fit(self.dataset, self.arch).to_dict()
+            self.norm_stats = Normalizer.fit(self.dataset, self.arch, self.train_split,
+                                             self.split_seed, self.test_split).to_dict()
         # [REMOVIDO 2026-10-13] loss_cfg instanciado a partir da string loss — agora o
         # tipo de loss_cfg define a loss (validado no início do __post_init__)
         # if self.loss_cfg is None:

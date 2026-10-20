@@ -113,11 +113,16 @@ def compute_mae_metrics(model, loader, device, metric_fn):
     model.eval()
     total_hw, total_graph = 0.0, 0.0
     has_graph = False
+    has_hw = False      # 2026-10-20: archs com GNN devolvem mae_hw=None
     n_batches = 0
     with torch.no_grad():
         for batch in loader:
             mae_hw, mae_graph = metric_fn(batch, model, device)
-            total_hw += mae_hw
+            # [REMOVIDO 2026-10-20] mae_hw sempre presente
+            # total_hw += mae_hw
+            if mae_hw is not None:
+                total_hw += mae_hw
+                has_hw = True
             if mae_graph is not None:
                 total_graph += mae_graph
                 has_graph = True
@@ -125,7 +130,8 @@ def compute_mae_metrics(model, loader, device, metric_fn):
     if n_batches == 0:
         return 0.0, None
     mae_graph_avg = (total_graph / n_batches) if has_graph else None
-    return total_hw / n_batches, mae_graph_avg
+    # [REMOVIDO 2026-10-20] return total_hw / n_batches, mae_graph_avg
+    return (total_hw / n_batches) if has_hw else None, mae_graph_avg
 
 
 def _default_log_epoch(ep, train_loss, test_loss, train_time_s, eval_time_s, samples_per_s):

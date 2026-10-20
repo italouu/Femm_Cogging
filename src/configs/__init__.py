@@ -4,6 +4,10 @@ from src.configs.training import NnCfg, FNOConfig, MaskedFNO2dConfig, FNO_GNNCon
 from src.configs.monitor  import MonitorCfg
 from src.configs.eval     import EvalCfg
 from src.configs.bench    import BenchCfg
-from src.configs.loss     import (LossCfg, MseLossCfg, MaeLossCfg, RelativeL2LossCfg,
+# [REMOVIDO 2026-10-20] RelativeL2LossCfg (feature sem uso)
+# from src.configs.loss     import (LossCfg, MseLossCfg, MaeLossCfg, RelativeL2LossCfg,
+#                                   MaskedFNOLossCfg, SingleMaterialFNOLossCfg,
+#                                   MaskedFNOGNNLossCfg, LOSS_CFG_REGISTRY)
+from src.configs.loss     import (LossCfg, MseLossCfg, MaeLossCfg,
                                   MaskedFNOLossCfg, SingleMaterialFNOLossCfg,
                                   MaskedFNOGNNLossCfg, LOSS_CFG_REGISTRY)

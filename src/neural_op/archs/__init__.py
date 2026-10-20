@@ -1,7 +1,9 @@
 from dataclasses import dataclass, asdict
 
 from src.neural_op.archs.fno            import FNO2d,          fno_step_fn, fno_metric_fn
-from src.neural_op.archs.fno_gnn        import FNO_GNN,        make_fno_gnn_step, fno_gnn_metric_fn
+# [REMOVIDO 2026-10-20] make_fno_gnn_step -> fno_gnn_step (sem lambda_loss/subtract_fno)
+# from src.neural_op.archs.fno_gnn        import FNO_GNN,        make_fno_gnn_step, fno_gnn_metric_fn
+from src.neural_op.archs.fno_gnn        import FNO_GNN,        fno_gnn_step, fno_gnn_metric_fn
 from src.neural_op.archs.fno_gnn_v2     import FNO_GNN_v2
 # [REMOVIDO 2026-10-13] FNO_GNN_Field fora do ARCH_REGISTRY (arch obsoleta)
 # from src.neural_op.archs.fno_gnn_field  import FNO_GNN_Field
@@ -12,13 +14,14 @@ from src.neural_op.archs.masked_fno_gnn import (MaskedFNO_GNN, make_masked_fno_g
                                                 masked_fno_gnn_metric_fn)
 from src.neural_op.archs.gnn_post_base  import (GNN_PostBase,
                                                 gnn_post_base_step_fn,
-                                                make_gnn_post_base_step_fn,
+                                                # [REMOVIDO 2026-10-20] make_gnn_post_base_step_fn,
                                                 gnn_post_base_metric_fn)
 from src.neural_op.archs.eval           import (fno_eval_fn, fno_gnn_eval_fn,
                                                 masked_fno_eval_fn, masked_fno_gnn_eval_fn,
                                                 single_mat_fno_eval_fn)
 from src.neural_op.archs.femm_mesh_v2_gnn import (FNO_BipartiteGNN,
-                                                  make_fno_bipartite_gnn_step,
+                                                  # [REMOVIDO 2026-10-20] make_fno_bipartite_gnn_step,
+                                                  fno_bipartite_gnn_step,
                                                   fno_bipartite_gnn_metric_fn,
                                                   femm_mesh_v2_eval_fn)
 from src.neural_op.archs.femm_mesh_v3_gnn import FNO_BipartiteGNN_v3
@@ -58,6 +61,7 @@ def _fno_kwargs(cfg):
 
 def _fno_gnn_kwargs(cfg):
     # lambda_loss não é parâmetro do construtor do modelo — usado apenas na step_fn
+    # (2026-10-20: removido das configs; o filtro fica para configs antigas)
     return {k: v for k, v in asdict(cfg).items() if k != 'lambda_loss'}
 
 
@@ -109,7 +113,9 @@ ARCH_REGISTRY: dict = {
         cfg_cls=FNO_GNNConfig,
         loader_mode='qtree',
         model_kwargs=_fno_gnn_kwargs,
-        make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
+        # [REMOVIDO 2026-10-20] lambda_loss/loss_cfg na step_fn (features sem uso)
+        # make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
+        make_step_fn=lambda cfg, lcfg: fno_gnn_step,
         eval_fn=fno_gnn_eval_fn,
         metric_fn=lambda cfg: fno_gnn_metric_fn,
     ),
@@ -133,7 +139,8 @@ ARCH_REGISTRY: dict = {
         cfg_cls=FNO_GNN_v2Config,
         loader_mode='qtree',
         model_kwargs=_fno_gnn_kwargs,
-        make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
+        # [REMOVIDO 2026-10-20] make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
+        make_step_fn=lambda cfg, lcfg: fno_gnn_step,
         eval_fn=fno_gnn_eval_fn,
         metric_fn=lambda cfg: fno_gnn_metric_fn,
     ),
@@ -169,7 +176,9 @@ ARCH_REGISTRY: dict = {
         cfg_cls=GNN_PostBaseConfig,
         loader_mode='qtree',
         model_kwargs=_gnn_post_base_kwargs,
-        make_step_fn=lambda cfg, lcfg: make_gnn_post_base_step_fn(lcfg),
+        # [REMOVIDO 2026-10-20] subtract_fno via loss_cfg
+        # make_step_fn=lambda cfg, lcfg: make_gnn_post_base_step_fn(lcfg),
+        make_step_fn=lambda cfg, lcfg: gnn_post_base_step_fn,
         eval_fn=fno_gnn_eval_fn,   # mesma assinatura de forward que FNO_GNN
         metric_fn=lambda cfg: gnn_post_base_metric_fn,
     ),
@@ -182,7 +191,8 @@ ARCH_REGISTRY: dict = {
         cfg_cls=FNO_BipartiteGNNConfig,
         loader_mode='femm_mesh_v2',
         model_kwargs=_fno_gnn_kwargs,   # só descarta lambda_loss, igual FNO_GNN
-        make_step_fn=lambda cfg, lcfg: make_fno_bipartite_gnn_step(cfg.lambda_loss, lcfg),
+        # [REMOVIDO 2026-10-20] make_step_fn=lambda cfg, lcfg: make_fno_bipartite_gnn_step(cfg.lambda_loss, lcfg),
+        make_step_fn=lambda cfg, lcfg: fno_bipartite_gnn_step,
         eval_fn=femm_mesh_v2_eval_fn,
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),
@@ -198,7 +208,8 @@ ARCH_REGISTRY: dict = {
         cfg_cls=FNO_BipartiteGNN_v3Config,
         loader_mode='femm_mesh_v2',
         model_kwargs=_fno_gnn_kwargs,
-        make_step_fn=lambda cfg, lcfg: make_fno_bipartite_gnn_step(cfg.lambda_loss, lcfg),
+        # [REMOVIDO 2026-10-20] make_step_fn=lambda cfg, lcfg: make_fno_bipartite_gnn_step(cfg.lambda_loss, lcfg),
+        make_step_fn=lambda cfg, lcfg: fno_bipartite_gnn_step,
         eval_fn=femm_mesh_v2_eval_fn,
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),
@@ -212,7 +223,8 @@ ARCH_REGISTRY: dict = {
         cfg_cls=FNO_BipartiteGNN_ElemConfig,
         loader_mode='femm_mesh_v2',
         model_kwargs=_fno_gnn_kwargs,
-        make_step_fn=lambda cfg, lcfg: make_fno_bipartite_gnn_step(cfg.lambda_loss, lcfg),
+        # [REMOVIDO 2026-10-20] make_step_fn=lambda cfg, lcfg: make_fno_bipartite_gnn_step(cfg.lambda_loss, lcfg),
+        make_step_fn=lambda cfg, lcfg: fno_bipartite_gnn_step,
         eval_fn=femm_mesh_elem_eval_fn,
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),

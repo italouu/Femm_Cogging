@@ -138,39 +138,48 @@ class FNO_GNN(torch.nn.Module):
         return y_hw_fno, fno_at_nodes + delta
 
 
-def make_fno_gnn_step(lambda_loss, loss_cfg=None):
-    """Retorna step_fn fechada sobre lambda_loss e loss_cfg."""
-    subtract = getattr(loss_cfg, 'subtract_fno', False)
+# [REMOVIDO 2026-10-20] step_fn com lambda_loss (parcela de grade, sempre 0) e subtract_fno
+# (resíduo) -- features sem uso; a loss é só a da saída final.
+# def make_fno_gnn_step(lambda_loss, loss_cfg=None):
+#     """Retorna step_fn fechada sobre lambda_loss e loss_cfg."""
+#     subtract = getattr(loss_cfg, 'subtract_fno', False)
+#
+#     def fno_gnn_step(batch, model, loss_fn, device):
+#         x_hw       = batch['x_hw'].to(device)
+#         node_x     = batch['node_x'].to(device)
+#         edge_index = batch['edge_index'].to(device)
+#         edge_attr  = batch['edge_attr'].to(device)
+#         L          = batch['L'].to(device)
+#         y_hw       = batch['y_hw'].to(device)
+#         # [REMOVIDO] batch['node_y'][:, :2] — fatiava 2 colunas fixas (Bx,By);
+#         # node_y já vem do parser só com as colunas-alvo (2 pra B, 1 pra A), o
+#         # slice era redundante e presumia B. grid_out_ch (auto-detectado) já
+#         # garante que a saída do modelo bate com node_y.shape[1] sem slicing.
+#         y_node     = batch['node_y'].to(device)
+#         if subtract:
+#             y_hw_fno, fno_at_nodes, delta = model(x_hw, node_x, edge_index, edge_attr, L,
+#                                                    return_components=True)
+#             loss_grid  = loss_fn(y_hw_fno, y_hw)
+#             # [REMOVIDO] loss_nodes = loss_fn(delta, y_node) — comparava a correção
+#             # bruta do GNN contra o alvo inteiro, não contra o resíduo real da
+#             # baseline FNO. Corrigido para residual learning de fato: delta deve
+#             # aprender (y_node - fno_at_nodes), não y_node diretamente.
+#             loss_nodes = loss_fn(delta, y_node - fno_at_nodes)
+#         else:
+#             y_hw_fno, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
+#             loss_grid  = loss_fn(y_hw_fno, y_hw)
+#             loss_nodes = loss_fn(y_nodes,  y_node)
+#         return lambda_loss * loss_grid + (1.0 - lambda_loss) * loss_nodes
+#
+#     return fno_gnn_step
 
-    def fno_gnn_step(batch, model, loss_fn, device):
-        x_hw       = batch['x_hw'].to(device)
-        node_x     = batch['node_x'].to(device)
-        edge_index = batch['edge_index'].to(device)
-        edge_attr  = batch['edge_attr'].to(device)
-        L          = batch['L'].to(device)
-        y_hw       = batch['y_hw'].to(device)
-        # [REMOVIDO] batch['node_y'][:, :2] — fatiava 2 colunas fixas (Bx,By);
-        # node_y já vem do parser só com as colunas-alvo (2 pra B, 1 pra A), o
-        # slice era redundante e presumia B. grid_out_ch (auto-detectado) já
-        # garante que a saída do modelo bate com node_y.shape[1] sem slicing.
-        y_node     = batch['node_y'].to(device)
-        if subtract:
-            y_hw_fno, fno_at_nodes, delta = model(x_hw, node_x, edge_index, edge_attr, L,
-                                                   return_components=True)
-            loss_grid  = loss_fn(y_hw_fno, y_hw)
-            # [REMOVIDO] loss_nodes = loss_fn(delta, y_node) — comparava a correção
-            # bruta do GNN contra o alvo inteiro, não contra o resíduo real da
-            # baseline FNO. Corrigido para residual learning de fato: delta deve
-            # aprender (y_node - fno_at_nodes), não y_node diretamente.
-            loss_nodes = loss_fn(delta, y_node - fno_at_nodes)
-        else:
-            y_hw_fno, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
-            loss_grid  = loss_fn(y_hw_fno, y_hw)
-            loss_nodes = loss_fn(y_nodes,  y_node)
-        return lambda_loss * loss_grid + (1.0 - lambda_loss) * loss_nodes
 
-    return fno_gnn_step
-
+def fno_gnn_step(batch, model, loss_fn, device):
+    """Loss da saída final nos nós (estágio FNO interpolado + GNN) contra node_y."""
+    _, y_nodes = model(batch['x_hw'].to(device), batch['node_x'].to(device),
+                       batch['edge_index'].to(device), batch['edge_attr'].to(device),
+                       batch['L'].to(device))
+    return loss_fn(y_nodes, batch['node_y'].to(device))
 
 def fno_gnn_metric_fn(batch, model, device):
     """
@@ -196,6 +205,9 @@ def fno_gnn_metric_fn(batch, model, device):
             y_nodes  = normalizer.decode(y_nodes,  'node_y')
             y_hw     = normalizer.decode(y_hw,     'y_hw')
             y_node   = normalizer.decode(y_node,   'node_y')
-        mae_hw    = torch.mean(torch.abs(y_hw_fno - y_hw)).item()
+        # [REMOVIDO 2026-10-20] mae_hw da grade do estágio FNO/base -- sem loss desde a remoção
+        # do lambda_loss (grade intermediária não supervisionada); só a FNO2d reporta mae_hw.
+        # mae_hw    = torch.mean(torch.abs(y_hw_fno - y_hw)).item()
+        mae_hw    = None
         mae_graph = torch.mean(torch.abs(y_nodes  - y_node)).item()
     return mae_hw, mae_graph

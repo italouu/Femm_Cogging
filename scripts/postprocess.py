@@ -47,6 +47,11 @@ Subcomandos:
       global), fração da área e da contribuição ao L1_A. Padrão: d_int = 1 passo radial da
       grade, d_canto = 2 passos, 30°. Saída: dados/regions.json + plots/regions_sample_*.png.
 
+  torque {theta-e,batch,scatter} [--loss L] [--archs ...] [--femm] — (P6) torque pelo tensor
+      de Maxwell na faixa do entreferro (B por elemento) × FEMM T22, migrado dos scripts que
+      geraram dados/torque_*.json, para as 5 archs da loss escolhida. Soluções FEMM em
+      data/temp/torque_theta_e{,_batch}/ (--femm resolve). Saída: dados/torque/.
+
 Execução (raiz do projeto):
   python -m scripts.postprocess eval [N_AMOSTRAS] [--out DIR]
   python -m scripts.postprocess figures [--data DIR] [--out DIR]
@@ -54,9 +59,11 @@ Execução (raiz do projeto):
   python -m scripts.postprocess surface --pct 50 [LOSS]
   python -m scripts.postprocess train-table
   python -m scripts.postprocess regions [N]
+  python -m scripts.postprocess torque theta-e|batch|scatter [--loss mae]
 """
 import argparse
 import json
+import shutil
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -98,6 +105,9 @@ from src.postprocess.plots.fields import fig_field
 from src.postprocess.plots.primitives import apply_style, save_fig
 from src.postprocess.plots.training import fig_training
 from src.postprocess.regions import REGIONS, RegionAccum, classify_triangles, interface_edges
+from src.postprocess.torque import (batch_summary, curve_row, femm_solve, gap, parse_torque_sample,
+                                    sample_torques, scatter_ids, scatter_stats, select_batch_samples)
+from src.postprocess.torque import thetas as torque_thetas
 from src.postprocess.train_table import train_table
 # [REMOVIDO 2026-10-20] sem sample_path/TMP_ROOT (usados pelas figuras)
 # from src.postprocess.samples import SUBSETS, design_rows, parse_smooth, samples_with_subset
@@ -960,6 +970,153 @@ def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_int=None, d_ca
     print(f"salvo em {out_dir / 'regions.json'}; figura em {fig_dir}")
 
 
+TORQUE_TMP = Path('data/temp')     # soluções FEMM das varreduras (as mesmas dos JSONs antigos)
+TORQUE_WORKERS, TORQUE_FEMM_WORKERS = 6, 8
+
+
+def _torque_runs(loss, archs):
+    runs = load_set(ROOT_S, losses=(loss,))
+    return {k: r for k, r in runs.items() if archs is None or r['arch'] in archs}
+
+
+def _torque_sweep_dir(idx):
+    """Pasta da varredura θe de 1 amostra (amostra 15 na raiz, como nos JSONs antigos)."""
+    root = TORQUE_TMP / 'torque_theta_e'
+    return root if idx == 15 else root / f'sample_{idx:06d}'
+
+
+def _femm_batch_one(idx, k, th, row):
+    d = TORQUE_TMP / 'torque_theta_e_batch' / f'sample_{idx:06d}'
+    gz, js = d / f'theta_{k:02d}.ans.gz', d / f'theta_{k:02d}.json'
+    if gz.exists() and js.exists():
+        return
+    tmp = TORQUE_TMP / 'torque_theta_e_batch' / 'tmp' / f'{idx}_{k}'
+    try:
+        t22 = femm_solve(row, th, tmp, gz)
+        js.write_text(json.dumps(dict(theta_e_deg=float(th), T22_sector=t22)))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=False,
+               idxs=(15,), n_theta=None, n_samples=80, n_per_chunk=8, limit=None):
+    """Torque (P6): theta-e (varredura θe de amostras), batch (n_samples amostras de teste
+    estratificadas por corrente × n_theta ângulos, resumo da fundamental) ou scatter (torque
+    de cada amostra de teste do raw). FEMM T22 × gt × smooth × modelos da loss escolhida.
+    limit: só os primeiros `limit` ângulos (theta-e/batch) ou amostras (scatter) -- smoke."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows = design_rows()
+    runs = _torque_runs(loss, archs)
+    split_run = find_runs(ROOT_S)[('FNO_BipartiteGNN_Elem', loss)]   # mesmo split em todas
+    meta = dict(loss=loss, frame=frame, split_run=str(split_run),
+                runs={r['arch']: dict(run_dir=r['run_dir'], best_epoch=r['epoch']) for r in runs.values()})
+    pk = [f"pred_{r['arch']}" for r in runs.values()]
+    mNm = lambda v: np.asarray(v) * 1e3
+    if mode == 'theta-e':
+        n_theta = n_theta or 24
+        for idx in idxs:
+            row, sw = rows[idx], _torque_sweep_dir(idx)
+            th_all = torque_thetas(n_theta)
+            if femm:
+                ref = [dict(theta_e_deg=float(th), T22_sector=femm_solve(
+                    row, th, sw / 'tmp', sw / 'raw' / f'theta_{k:03d}.ans.gz'))
+                    for k, th in enumerate(th_all)]
+                (sw / 'femm_ref.json').write_text(json.dumps(ref, indent=1))
+            ref = json.loads((sw / 'femm_ref.json').read_text())[:limit]
+            T = {'femm_T22': [3 * r['T22_sector'] for r in ref], 'gt': [], 'gt_smooth': [],
+                 **{k: [] for k in pk}}
+            with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
+                futs = [ex.submit(parse_torque_sample, sw / 'raw' / f'theta_{k:03d}.ans.gz', row,
+                                  sw / 'tmp' / f'parse_{k}') for k in range(len(ref))]
+                for k, f in enumerate(futs):
+                    t = sample_torques(f.result(), row, runs, frame)
+                    T['gt'].append(t['gt']); T['gt_smooth'].append(t['smooth'])
+                    for kk in pk:
+                        T[kk].append(t[kk])
+                    print(f"  s{idx} θe={ref[k]['theta_e_deg']:5.1f}°  FEMM {T['femm_T22'][k] * 1e3:8.1f}  "
+                          f"gt {t['gt'] * 1e3:8.1f}  " + '  '.join(f'{kk[5:]} {t[kk] * 1e3:7.1f}' for kk in pk)
+                          + ' mNm', flush=True)
+            T = {k: np.array(v) for k, v in T.items()}
+            rms = lambda x: float(np.sqrt(np.mean(np.square(x))) * 1e3)
+            res = dict(sample_idx=idx, **meta, current_amplitude_A=float(row['current_amplitude [A]']),
+                       rotor_phase_deg=float(row['rotor_phase [deg]']), gap_mm=list(gap(row)),
+                       theta_e_deg=[r['theta_e_deg'] for r in ref], T_Nm={k: v.tolist() for k, v in T.items()},
+                       rms_mNm={k: rms(v) for k, v in T.items()},
+                       max_mNm={k: float(v.max() * 1e3) for k, v in T.items()},
+                       min_mNm={k: float(v.min() * 1e3) for k, v in T.items()},
+                       rms_err_vs_femm_mNm={k: rms(T[k] - T['femm_T22']) for k in ['gt', 'gt_smooth'] + pk},
+                       rms_err_pred_vs_gt_mNm={k: rms(T[k] - T['gt']) for k in pk})
+            (out_dir / f'theta_e_s{idx}_{loss}.json').write_text(json.dumps(res, indent=2))
+            print(json.dumps(res['rms_err_vs_femm_mNm'], indent=1))
+    elif mode == 'batch':
+        n_theta = n_theta or 16
+        ids = select_batch_samples(split_run, rows, n_samples)
+        root = TORQUE_TMP / 'torque_theta_e_batch'
+        if femm:
+            tasks = [(i, k, th) for i in ids for k, th in enumerate(torque_thetas(n_theta))]
+            with ProcessPoolExecutor(TORQUE_FEMM_WORKERS) as ex:
+                for f in [ex.submit(_femm_batch_one, i, k, th, rows[i]) for i, k, th in tasks]:
+                    f.result()
+        res, rows_ = {}, {kk: [] for kk in pk}
+        with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
+            for n, i in enumerate(ids, 1):
+                d = root / f'sample_{i:06d}'
+                ks = [k for k in range(n_theta) if (d / f'theta_{k:02d}.json').exists()][:limit]
+                futs = [ex.submit(parse_torque_sample, d / f'theta_{k:02d}.ans.gz', rows[i],
+                                  root / 'parse_tmp' / f'{i}_{k}') for k in ks]
+                cur = dict(theta_e_deg=[], femm=[], gt=[], smooth=[], **{kk: [] for kk in pk})
+                for k, f in zip(ks, futs):
+                    ref = json.loads((d / f'theta_{k:02d}.json').read_text())
+                    t = sample_torques(f.result(), rows[i], runs, frame)
+                    cur['theta_e_deg'].append(ref['theta_e_deg'])
+                    cur['femm'].append(3 * ref['T22_sector'])
+                    for kk in ['gt', 'smooth'] + pk:
+                        cur[kk].append(t[kk])
+                row = rows[i]
+                geom = {k: float(row[k]) for k in ('stator_outer_diameter [mm]', 'pole_thickness [mm]',
+                                                   'pole_embrance', 'slot_Bs0 [mm]', 'slot_Bs1 [mm]',
+                                                   'slot_Bs2 [mm]', 'rotor_inner_diameter [mm]')}
+                res[i] = dict(curves=cur, I=float(row['current_amplitude [A]']),
+                              rotor_phase=float(row['rotor_phase [deg]']), geom=geom)
+                if len(ks) >= 3:
+                    th = np.array(cur['theta_e_deg'])
+                    for kk in pk:
+                        rows_[kk].append(dict(idx=int(i), I=res[i]['I'],
+                                              **curve_row(th, mNm(cur['femm']), mNm(cur[kk]), mNm(cur['gt'])),
+                                              **{g.split(' [')[0]: v for g, v in geom.items()}))
+                print(f'  [{n}/{len(ids)}] amostra {i}  {len(ks)} ângulos', flush=True)
+                if limit and n >= limit:
+                    break
+        (out_dir / f'theta_e_batch_{loss}.json').write_text(json.dumps(dict(**meta, samples=res)))
+        summ = {kk[5:]: batch_summary(v) for kk, v in rows_.items() if v}
+        (out_dir / f'theta_e_batch_{loss}_summary.json').write_text(
+            json.dumps(dict(**meta, summary=summ, per_sample={kk[5:]: v for kk, v in rows_.items()}), indent=1))
+        print(json.dumps(summ, indent=1))
+    elif mode == 'scatter':
+        ids = scatter_ids(split_run, n_per_chunk)[:limit]
+        out = dict(idx=[], T_gt=[], T_smooth=[], I=[], theta_e=[], rotor_phase=[], **{f'T_{kk}': [] for kk in pk})
+        with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
+            for b in range(0, len(ids), 32):
+                batch = ids[b:b + 32]
+                futs = [ex.submit(parse_torque_sample, sample_path(i), rows[i],
+                                  TMP_ROOT / 'torque_scatter' / str(i)) for i in batch]
+                for i, f in zip(batch, futs):
+                    t = sample_torques(f.result(), rows[i], runs, frame)
+                    r = rows[i]
+                    out['idx'].append(i); out['T_gt'].append(t['gt']); out['T_smooth'].append(t['smooth'])
+                    for kk in pk:
+                        out[f'T_{kk}'].append(t[kk])
+                    out['I'].append(float(r['current_amplitude [A]']))
+                    out['theta_e'].append(float(r['current_angle [deg]']))
+                    out['rotor_phase'].append(float(r['rotor_phase [deg]']))
+                print(f"  {len(out['idx'])}/{len(ids)}", flush=True)
+        stats = {kk[5:]: scatter_stats(mNm(out['T_gt']), mNm(out[f'T_{kk}']), mNm(out['T_smooth']))
+                 for kk in pk}
+        (out_dir / f'scatter_{loss}.json').write_text(json.dumps(dict(**meta, stats=stats, **out), indent=1))
+        print(json.dumps(stats, indent=1))
+    print(f'salvo em {out_dir}')
+
+
 def run_train_table(out_dir: Path):
     """Tabela de treinamento (P3): só leitura dos logs das runs de find_runs(ROOT_S)."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1013,6 +1170,20 @@ if __name__ == '__main__':
     p_rg.add_argument('--ang-canto', type=float, default=30.0, help='graus (default: 30)')
     p_rg.add_argument('--out', type=Path, default=OUT_ROOT / 'dados', help='diretório de saída')
     p_rg.add_argument('--fig', type=Path, default=OUT_ROOT / 'plots', help='diretório da figura')
+    p_tq = sp.add_parser('torque', help='torque FEMM × gabarito × modelos (theta-e/batch/scatter)')
+    p_tq.add_argument('mode', choices=('theta-e', 'batch', 'scatter'))
+    p_tq.add_argument('--idx', type=int, nargs='+', default=[15, 128, 130, 142, 151],
+                      help='theta-e: amostras (default: as dos JSONs antigos)')
+    p_tq.add_argument('--loss', default='mae', choices=('mse', 'mae'))
+    p_tq.add_argument('--archs', nargs='+', default=None, help='default: as 5 archs')
+    p_tq.add_argument('--frame', default='polar', choices=('polar', 'xy'),
+                      help='referencial da saída das runs (polar desde 2026-10-17)')
+    p_tq.add_argument('--femm', action='store_true', help='resolve as varreduras no FEMM antes')
+    p_tq.add_argument('--n-theta', type=int, default=None, help='default: 24 (theta-e) / 16 (batch)')
+    p_tq.add_argument('--n-samples', type=int, default=80, help='batch: nº de amostras')
+    p_tq.add_argument('--n-per-chunk', type=int, default=8, help='scatter: amostras por chunk de teste')
+    p_tq.add_argument('--limit', type=int, default=None, help='smoke: ângulos/amostras limitados')
+    p_tq.add_argument('--out', type=Path, default=OUT_ROOT / 'dados' / 'torque')
     p_tt = sp.add_parser('train-table', help='tabela de treinamento a partir dos logs das runs')
     p_tt.add_argument('--out', type=Path, default=OUT_ROOT / 'dados', help='diretório de saída')
     a = ap.parse_args()
@@ -1031,5 +1202,8 @@ if __name__ == '__main__':
                     pct=a.pct, eval_dir=a.eval_data)
     elif a.cmd == 'regions':
         run_regions(a.out, a.fig, a.n, a.d_int, a.d_canto, a.ang_canto)
+    elif a.cmd == 'torque':
+        run_torque(a.mode, a.out, a.loss, a.archs, a.frame, a.femm, a.idx, a.n_theta,
+                   a.n_samples, a.n_per_chunk, a.limit)
     elif a.cmd == 'train-table':
         run_train_table(a.out)

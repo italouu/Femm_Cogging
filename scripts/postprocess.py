@@ -19,6 +19,7 @@ Subcomandos:
       [2026-10-20: níveis antigos mesh/grid/grid_inter/elem e pisos elem<->nó removidos.]
       Secundário (P1, 2026-10-20): erro de |B| ponto a ponto nos nós (MAE_pt, L2_pt,
       L1_A, L2_A com área dual) -> runs[k]['nodal'], floor_nodal, npz nodal_*.
+      Malha (P2): n_nodes / n_elems por amostra no .npz; mesh_stats no JSON.
 
   figures [--data DIR] [--out DIR] — depois do eval: 1_curvas_treino, 2_barras_erro
       (L1_A / L2_A de superfície dos 10 runs + piso da representação de cada um),
@@ -530,6 +531,13 @@ def _surface_kind(arch):
 NODAL_COLS = ('MAE_pt', 'L2_pt', 'L1_area', 'L2_area')   # colunas nodal_* do .npz (T)
 
 
+def _count_stats(v):
+    """Mediana, mínimo, p5, p95 e máximo de uma contagem por amostra (P2)."""
+    v = np.asarray(v)
+    return dict(median=float(np.median(v)), min=int(v.min()), p5=float(np.percentile(v, 5)),
+                p95=float(np.percentile(v, 95)), max=int(v.max()), n=int(v.size))
+
+
 def _nodal_mag(arch, lay, yn):
     """|B| da saída do modelo nos nós [S]: FNO2d já interpolado por predict (modo da
     bateria), Elem levada aos nós por elem_to_nodes, demais = saída nodal."""
@@ -565,6 +573,7 @@ def run_eval(out_dir: Path, max_samples=None):
     per_nodal = {k: [] for k in runs}
     per_floor_nodal = []
     ids, subs = [], []
+    n_nodes, n_elems = [], []          # estatística da malha (P2)
 
     groups = {}
     for name, sub, idx, p in samples:
@@ -582,6 +591,8 @@ def run_eval(out_dir: Path, max_samples=None):
                 ts = to_torch_sample(lay)
                 ids.append(idx)
                 subs.append(sub)
+                n_nodes.append(int(lay['v1']['node_x'].shape[0]))
+                n_elems.append(int(len(lay['tri'])))
                 for kd in SURF_KINDS:
                     a = Accum()
                     a.add_surface(*_floor_points(kd, lay))
@@ -641,13 +652,17 @@ def run_eval(out_dir: Path, max_samples=None):
                            'layout v1, área dual do nó; FNO2d interpolado nos nós (modo da '
                            'bateria), Elem -> nós por elem_to_nodes; piso = y_hw do gabarito '
                            f'interpolado nos nós ({INTERP_MODE})')
+    # estatística da malha (P2, 2026-10-20)
+    res['mesh_stats'] = {name: _count_stats(v) for name, v in (('n_nodes', n_nodes),
+                                                               ('n_elems', n_elems))}
 
     np.savez_compressed(
         out_dir / 'eval_smooth_per_sample.npz', sample_idx=np.array(ids), subset=subs_arr,
         **{k: np.array(v) for k, v in per.items()},
         **{f'floor_{kd}': np.array(v) for kd, v in per_floor.items()},
         **{f'nodal_{k}': np.array(v) for k, v in per_nodal.items()},
-        nodal_floor_grade=np.array(per_floor_nodal), nodal_columns=np.array(NODAL_COLS))
+        nodal_floor_grade=np.array(per_floor_nodal), nodal_columns=np.array(NODAL_COLS),
+        n_nodes=np.array(n_nodes), n_elems=np.array(n_elems))
     (out_dir / 'eval_smooth.json').write_text(json.dumps(res, indent=2))
     print(f'\nsalvo em {out_dir} ({(time.time() - t0) / 60:.1f} min)')
     print(f'{done} amostras — erro de superfície, % de B_ref (L1_A / L2_A)')
@@ -667,6 +682,9 @@ def run_eval(out_dir: Path, max_samples=None):
     g = res['floor_nodal']['total']
     print(f"  {'piso grade (nós)':26s} pt {g['MAE_pt_pct']:5.2f}%  L2pt {g['L2_pt_pct']:5.2f}%  "
           f"L1 {g['L1_area_pct']:5.2f}%  L2 {g['L2_area_pct']:5.2f}%")
+    print('malha (mediana / mín / p5 / p95 / máx):')
+    for name, g in res['mesh_stats'].items():
+        print(f"  {name:8s} {g['median']:.0f} / {g['min']} / {g['p5']:.0f} / {g['p95']:.0f} / {g['max']}")
 
 
 def run_figures(data_dir: Path, fig_dir: Path):

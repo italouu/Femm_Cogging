@@ -94,10 +94,11 @@ src/postprocess/       pós-processamento oficial (só gabarito smooth)
 
 docs/
     claude/             contratos_e_formatos.md, pipelines_e_archs.md, estrutura_arquivos.md
-    resultados_baterias.md
-    figures/            figuras de geometria/grade
+    figures/            motor_geometry.{pdf,png} (figura do artigo)
     _arquivo/           histórico (backups do CLAUDE.md, pendências e reestruturação antigas,
-                        malha FEMM v1, panorama de treinos, bateria wrap circular)
+                        malha FEMM v1, panorama de treinos, bateria wrap circular,
+                        resultados_baterias.md [bateria smooth sem corrente, 2026-10-10],
+                        figures/ [quadtree e grade antiga])
 
 resultados/<dataset>/dados/   saída versionada do postprocess (plots/ fora do git)
 

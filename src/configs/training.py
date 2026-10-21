@@ -406,8 +406,11 @@ class GNN_PostBaseConfig:
     # [REMOVIDO 2026-10-21] base = FNO2d mae da bateria smooth (x_hw sem J, 2 canais)
     # base_run_dir   : str = 'data/logs/mesh_ans_138x276_smooth_battery/FNO2d/run_0002'
     # 2026-10-21: defaults = run postbase_mae da bateria bldc; nela a base é runs['fno2d_mae']
+    # [REMOVIDO 2026-10-21] descrição errada da run (é polar, 2026-10-19, não xy):
     # (resolvida pelo runner) — aqui, o FNO2d mae local de BLDC_138x276 (run xy, anterior ao alvo
     # polar; trocar pela run nova depois que a bateria for refeita).
+    # (resolvida pelo runner) — aqui, o FNO2d mae local de BLDC_138x276 (alvo polar Br, Bθ, run de
+    # 2026-10-19; trocar pela run nova depois que a bateria for refeita).
     base_run_dir   : str = 'data/logs/BLDC_138x276/FNO2d/run_0002'
     base_checkpoint: str = 'best'   # 'best', 'latest' ou 'final'
     gnn_node_width : int = 64

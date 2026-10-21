@@ -14,8 +14,10 @@ Logs: data/logs/BLDC_138x276/<arch>/run_XXXX/.
 Alvo POLAR (2026-10-17): os chunks foram regerados com node_y/y_hw = (Br, Bθ) (parsers smooth,
 ans_parsing._to_polar); hiperparâmetros inalterados, ordem nova: Elem → Bipartite → FNO_GNN →
 FNO2d → GNN_PostBase (por último; depende do FNO2d). Substitui a bateria xy: o manifesto
-data/logs/_batteries/bldc/ e as runs xy de data/logs/BLDC_138x276/ precisam sair do caminho antes
+data/logs/_batteries/bldc/ e as runs xy de data/logs/BLDC_138x276/ precisavam sair do caminho antes
 (configs idênticas -> mesmo hash -> o runner pularia as runs como já concluídas).
+[2026-10-21] As runs atuais de data/logs/BLDC_138x276/ (run_0001/0002 de cada arch, 2026-10-19) já
+são desta bateria polar (alvo Br, Bθ; conferido no torque: frame='polar' bate com o FEMM).
 
     python -m scripts.run_battery bldc [--dry-run]
 """

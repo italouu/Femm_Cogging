@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from src.data_gen.parsers.femm_mesh_elem import check_elem_layout
 from src.neural_op.archs import ARCH_REGISTRY
 from src.neural_op.archs.interp import interpolate_grid_to_nodes
 from src.neural_op.normalization import Normalizer
@@ -122,11 +123,13 @@ def to_torch_sample(s):
 def predict(arch, model, normalizer, ts):
     """Retorna (out_hw [2,H,W] em T no device, y_nodes [S,2] em T no device).
     FNO_BipartiteGNN_Elem: usa ts['elem'] e y_nodes é POR ELEMENTO [M,2]
-    (levar aos nós com fields.elem_to_nodes)."""
+    (levar aos nós com fields.elem_to_nodes; contrato do layout Elem: docstring de src/data_gen/parsers/femm_mesh_elem.py)."""
     if arch in ('FNO_BipartiteGNN', 'FNO_BipartiteGNN_Elem'):
         # [REMOVIDO 2026-10-20] a Elem recebia o layout bipartite (grafo errado para ela)
         # d = ts['bip']
         d = ts['elem'] if arch == 'FNO_BipartiteGNN_Elem' else ts['bip']
+        if arch == 'FNO_BipartiteGNN_Elem':
+            check_elem_layout(d)
         # [REMOVIDO 2026-10-21] arestas cruas no modelo (R2: edge_attr/cross_edge_attr
         # normalizados; runs antigas sem stats de aresta -> _enc é identidade)
         #     d['edge_index'].to(DEVICE), d['edge_attr'].to(DEVICE),

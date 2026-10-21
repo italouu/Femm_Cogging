@@ -25,7 +25,8 @@ Referencial (2026-10-17): node_y e y_hw são POLARES (Br, Bθ), girados pelo
 Antes eram (Bx, By).
 
 Layout/chaves idênticos ao de femm_mesh_elem.py -- loader/collate/
-Normalizer/step_fn/metric_fn/arch reaproveitados sem mudança.
+Normalizer/step_fn/metric_fn/arch reaproveitados sem mudança (contrato do
+layout Elem: docstring de femm_mesh_elem.py).
 """
 from pathlib import Path
 

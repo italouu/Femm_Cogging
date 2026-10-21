@@ -4,9 +4,9 @@ femm_mesh_elem_gnn.py
 PROTÓTIPO (2026-10-07) -- FNO_BipartiteGNN com os papéis dos grafos
 TROCADOS: o grafo de ELEMENTOS é o principal (iterado n_layers, saída Bx,By
 por elemento) e o de VÉRTICES é o auxiliar (estático, injetado a cada camada
-por arestas cruzadas vértice -> elemento). Contrato de dados:
-src/data_gen/parsers/femm_mesh_elem.py (chaves node_* = elementos,
-elem_* = vértices).
+por arestas cruzadas vértice -> elemento). Contrato de dados: bloco
+"CONTRATO DO LAYOUT Elem" da docstring de src/data_gen/parsers/femm_mesh_elem.py
+(chaves node_* = elementos, elem_* = vértices).
 
 Mesmo BipartiteGNN (_blocks.py) da bipartite, sem mudança -- só o que entra
 em cada papel muda:

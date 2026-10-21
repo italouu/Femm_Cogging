@@ -15,34 +15,48 @@ muda: B = curl(A) EXATO por elemento P1 (_element_b_from_A -- a mesma
 função que gera o gabarito da bateria, que é a média simples desses valores
 nos nós), sem média nodal.
 
-Layout -- as CHAVES do chunk são as do femm_mesh_v2 (loader/collate/
-Normalizer/_detect_chunk_dims/step_fn/metric_fn da bipartite reaproveitados
-sem mudança), mas com o significado trocado:
+=============================================================================
+CONTRATO DO LAYOUT Elem (FNO_BipartiteGNN_Elem) -- fonte única (2026-10-21).
+Citado por: neural_op/archs/femm_mesh_elem_gnn.py, neural_op/normalization.py
+(_LAYOUTS['FNO_BipartiteGNN_Elem']), postprocess/inference.predict,
+postprocess/fields.elem_to_nodes, parsers/femm_mesh_elem_smooth.py.
 
-  grafo PRINCIPAL = elementos (chaves node_*):
-    node_x     [M,6]  r_base_c, c_base_c (centróide, CRUS -- interpolação do
-                      FNO), mu_r, M, area, J [A/mm²] (2026-10-14)
-    node_y     [M,2]  Bx, By por elemento (T)
-    edge_index [2,F]  dual bidirecional: elementos que compartilham uma aresta
-                      da malha + wrap periódico θ=0/120° (elementos cuja aresta
-                      está no corte, casados pelo pareamento de vértices de
-                      _wrap_edge_pairs)
-    edge_attr  [F,3]  delta_r, delta_c, center_dist entre centróides (mesma
-                      convenção do grafo de vértices: j−i, em células da grade;
-                      no wrap, centróide j girado de −120° -- distância real
-                      através do corte, não zero como no wrap de vértices,
-                      porque aqui os dois lados NÃO são o mesmo grau de
-                      liberdade)
-  grafo AUXILIAR = vértices (chaves elem_*):
-    elem_x     [S,2]  r_base, c_base dos vértices (CRUS)
-  arestas cruzadas (vértice -> elemento):
-    cross_edge_index [2,C]  linha 0 = vértice (auxiliar), linha 1 = elemento
-                            (principal) -- mesma convenção "linha 0 = auxiliar,
-                            linha 1 = principal" do v2, então os offsets de
-                            build_unified_ans_chunks_direct._bufs_v2 e de
-                            femm_mesh_v2_collate continuam corretos
-    cross_edge_attr  [C,1]  distância centróide↔vértice (mm)
-  contagens: L = nº de elementos, elem_L = nº de vértices, E_L, C_L.
+As CHAVES do chunk são as do femm_mesh_v2 (loader/collate/Normalizer/
+_detect_chunk_dims/step_fn/metric_fn da bipartite reaproveitados sem mudança),
+mas com o SIGNIFICADO TROCADO -- node_* = elementos, elem_* = vértices:
+
+  chave             shape  significado
+  ----------------  -----  ----------------------------------------------------
+  node_x            [M,6]  ELEMENTOS (grafo principal): r_base_c, c_base_c
+                           (centróide, CRUS -- lidos pela interpolação grade ->
+                           pontos), mu_r, M, area [mm²], J [A/mm²] (2026-10-14)
+  node_y            [M,2]  B por ELEMENTO [T]: no dataset (femm_mesh_elem_smooth)
+                           = (Br, Bθ) do B suavizado no centróide; com
+                           target_field='B' (torque) = (Bx, By) do curl(A) exato
+  edge_index        [2,F]  dual bidirecional: elementos que compartilham uma
+                           aresta da malha + wrap periódico θ=0/120° (elementos
+                           cuja aresta está no corte, casados pelo pareamento de
+                           vértices de _wrap_edge_pairs)
+  edge_attr         [F,3]  delta_r, delta_c, center_dist entre centróides (j−i,
+                           em células da grade; no wrap, centróide j girado de
+                           −120° -- distância real através do corte, não zero
+                           como no wrap de vértices, porque aqui os dois lados
+                           NÃO são o mesmo grau de liberdade)
+  elem_x            [S,2]  VÉRTICES (grafo auxiliar): r_base, c_base (CRUS)
+  cross_edge_index  [2,C]  vértice -> elemento: linha 0 = vértice (auxiliar),
+                           linha 1 = elemento (principal); C = 3M (cada
+                           elemento liga seus 3 vértices). Mesma convenção
+                           "linha 0 = auxiliar, linha 1 = principal" do v2, então
+                           os offsets de src/data_gen/chunks.py ('bipartite') e
+                           de femm_mesh_v2_collate continuam corretos
+  cross_edge_attr   [C,1]  distância centróide↔vértice (mm)
+  x_hw / y_hw    [3|2,H,W] grade, idêntica à das demais archs do mesmo gabarito
+  L / elem_L / E_L / C_L   M (nº de elementos) / S (nº de vértices) / F / C
+
+Saída do modelo: y_nodes [M,2] POR ELEMENTO (levar aos nós com
+postprocess/fields.elem_to_nodes). Checagem barata do contrato:
+check_elem_layout (chamada no parser e em inference.predict).
+=============================================================================
 """
 from pathlib import Path
 
@@ -51,6 +65,22 @@ import numpy as np
 from src.data_gen.parsers.ans_parsing import _element_b_from_A, _wrap_edge_pairs
 from src.data_gen.parsers.femm_mesh_v2 import parse_ans_gzip_sample
 from src.data_gen.parsers.femm_mesh_unified import _read_ans_gz
+
+
+def check_elem_layout(d: dict, n_elems: int = None):
+    """Falha alto se `d` (dict de arrays numpy ou de tensores de 1 amostra) não seguir o
+    contrato Elem (docstring do módulo): node_x com uma linha por ELEMENTO. n_elems = nº de
+    elementos da malha, se conhecido; senão, deduzido das arestas cruzadas (C = 3M)."""
+    n_rows = d['node_x'].shape[0]
+    n_cross = d['cross_edge_index'].shape[1]
+    if n_elems is None:
+        if n_cross % 3:
+            raise ValueError(f"layout Elem: {n_cross} arestas cruzadas, não múltiplo de 3")
+        n_elems = n_cross // 3
+    if n_rows != n_elems or n_cross != 3 * n_rows:
+        raise ValueError(f"layout Elem: node_x tem {n_rows} linhas, esperado 1 por elemento "
+                         f"({n_elems}; {n_cross} arestas cruzadas) -- layout bipartite no "
+                         f"lugar do Elem?")
 
 
 def _build_dual_edges(nodes: np.ndarray, elems: np.ndarray, ang_1: float, ang_2: float):
@@ -169,7 +199,9 @@ def parse_ans_gzip_sample_elem(ans_gz_path: Path, r_in: float, r_ext: float,
     # --- auxiliar: vértices; arestas cruzadas invertidas (vértice -> elemento) ---
     cross_edge_index = bip['cross_edge_index'][[1, 0]].copy()
 
-    return {
+    # [REMOVIDO 2026-10-21] return direto, sem checar o contrato
+    # return {
+    out = {
         'node_x': node_x, 'node_y': node_y,
         'edge_index': edge_index, 'edge_attr': edge_attr,
         'elem_x': bip['node_x'],
@@ -181,3 +213,5 @@ def parse_ans_gzip_sample_elem(ans_gz_path: Path, r_in: float, r_ext: float,
         'C_L': np.array([cross_edge_index.shape[1]], dtype=np.int64),
         'dim_H': bip['dim_H'], 'dim_W': bip['dim_W'],
     }
+    check_elem_layout(out, n_elems=elems.shape[0])
+    return out

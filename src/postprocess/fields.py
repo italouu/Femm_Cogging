@@ -37,7 +37,8 @@ def gap_radius_mm(row):
 # --------------------------------------------------------------------------- #
 def elem_to_nodes(lay, B_elem):
     """[M,2] por elemento -> [S,2] por nó (média dos incidentes do material do nó).
-    lay: saída de samples.parse_smooth(..., with_elem=True)."""
+    lay: saída de samples.parse_smooth(..., with_elem=True). B_elem: saída da Elem, na
+    ordem dos elementos (contrato do layout Elem: docstring de src/data_gen/parsers/femm_mesh_elem.py)."""
     b1 = np.repeat(B_elem[:, :1], 3, axis=1)
     b2 = np.repeat(B_elem[:, 1:], 3, axis=1)
     return _node_b_by_material(lay['tri'], lay['elem_mat'], lay['node_mat'], b1, b2)

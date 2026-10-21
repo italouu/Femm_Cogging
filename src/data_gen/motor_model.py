@@ -488,14 +488,19 @@ class BLDC_Process:
             return rng.triangular(left=lo, right=hi, mode=md)
 
         for _ in range(num_samples):
-            # [REMOVIDO 2026-10-21] stack length sorteado em [5, 10] mm -- agora fixo
-            # (motor_constants.STACK_LENGTH_MM). Tirar este sorteio muda a sequência do gerador:
-            # com a mesma semente, todas as geometrias mudam (raw precisa ser refeito).
-            # # length
-            # min = 5
-            # max = 10
-            # mode = min + 0.85 * (max - min)/2
+            # [REMOVIDO 2026-10-21] stack length sorteado em [5, 10] mm e usado -- agora fixo
+            # (motor_constants.STACK_LENGTH_MM).
             # stack_length = _sample(min, max, mode)
+            # [REMOVIDO 2026-10-21] sorteio retirado (mudava a sequência do gerador e todas as
+            # geometrias) -- restaurado abaixo (R7a), com o valor descartado.
+            # stack_length = _MOTOR_STACK_LENGTH_MM
+            # length -- sorteio MANTIDO só para preservar a sequência do gerador (e, com a
+            # mesma semente, as geometrias do raw já gerado); o valor é descartado e o stack
+            # length usado é o fixo STACK_LENGTH_MM.
+            min = 5
+            max = 10
+            mode = min + 0.85 * (max - min)/2
+            _ = _sample(min, max, mode)
             stack_length = _MOTOR_STACK_LENGTH_MM
 
             # stator outer diameter

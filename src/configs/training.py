@@ -114,6 +114,8 @@ class FNOConfig:
     out_channels: int = field(default=2, init=False)
     # [REMOVIDO 2026-10-13] defaults antigos — agora = config do FNO2d da bateria smooth
     # (data/logs/mesh_ans_138x276_smooth_battery/FNO2d/run_0002, mae)
+    # 2026-10-21: defaults = run fno2d_mae da bateria bldc (src/configs/batteries/bldc.py) —
+    # conferidos campo a campo (os mesmos valores da bateria smooth acima).
     # modes1: int = 270
     # modes2: int = 270
     # conv_width: int = 6
@@ -179,6 +181,8 @@ class MaskedFNO2dConfig:
 class FNO_GNNConfig:
     # [REMOVIDO 2026-10-13] defaults antigos — agora = config do FNO_GNN da bateria smooth
     # (data/logs/mesh_ans_138x276_smooth_battery/FNO_GNN/run_0002, mae)
+    # 2026-10-21: defaults = run fno_gnn_mae da bateria bldc (src/configs/batteries/bldc.py) —
+    # conferidos campo a campo (os mesmos valores da bateria smooth acima).
     # fno_modes1: int = 270
     # fno_modes2: int = 270
     # data_res: tuple = (135, 270)
@@ -247,6 +251,8 @@ class FNO_BipartiteGNNConfig:
     e CLAUDE.md/conversa 2026-08-10 sobre a arquitetura)."""
     # [REMOVIDO 2026-10-13] defaults antigos — agora = config do FNO_BipartiteGNN da bateria
     # smooth (data/logs/mesh_ans_138x276_smooth_battery/FNO_BipartiteGNN/run_0002, mae)
+    # 2026-10-21: defaults = run bipartite_mae da bateria bldc (src/configs/batteries/bldc.py) —
+    # conferidos campo a campo (os mesmos valores da bateria smooth acima).
     # fno_modes1: int = 270
     # fno_modes2: int = 270
     # interp_mode: str = 'legacy'
@@ -345,6 +351,8 @@ class FNO_BipartiteGNN_ElemConfig:
     FNO_BipartiteGNNConfig + aux_fno."""
     # [REMOVIDO 2026-10-13] defaults antigos — agora = config do FNO_BipartiteGNN_Elem da
     # bateria smooth (data/logs/mesh_ans_138x276_smooth_elem_proto/FNO_BipartiteGNN_Elem/run_0002, mae)
+    # 2026-10-21: defaults = run elem_mae da bateria bldc (src/configs/batteries/bldc.py) —
+    # conferidos campo a campo (os mesmos valores da bateria smooth acima).
     # fno_modes1: int = 270
     # fno_modes2: int = 270
     # interp_mode: str = 'legacy'
@@ -395,7 +403,12 @@ class GNN_PostBaseConfig:
     # gnn_node_width : int = 32
     # gnn_n_layers   : int = 3
     # interp_mode    : str = 'legacy'
-    base_run_dir   : str = 'data/logs/mesh_ans_138x276_smooth_battery/FNO2d/run_0002'
+    # [REMOVIDO 2026-10-21] base = FNO2d mae da bateria smooth (x_hw sem J, 2 canais)
+    # base_run_dir   : str = 'data/logs/mesh_ans_138x276_smooth_battery/FNO2d/run_0002'
+    # 2026-10-21: defaults = run postbase_mae da bateria bldc; nela a base é runs['fno2d_mae']
+    # (resolvida pelo runner) — aqui, o FNO2d mae local de BLDC_138x276 (run xy, anterior ao alvo
+    # polar; trocar pela run nova depois que a bateria for refeita).
+    base_run_dir   : str = 'data/logs/BLDC_138x276/FNO2d/run_0002'
     base_checkpoint: str = 'best'   # 'best', 'latest' ou 'final'
     gnn_node_width : int = 64
     gnn_n_layers   : int = 6
@@ -572,23 +585,33 @@ class NnCfg:
     # [REMOVIDO 2026-10-13] dataset/problem com sufixo _smooth — renomeados para o nome oficial
     # dataset: str = 'mesh_ans_138x276_smooth/FNO_BipartiteGNN_Elem'
     # problem: str = 'mesh_ans_138x276_smooth'
-    dataset: str = 'mesh_ans_138x276/FNO_BipartiteGNN_Elem'
+    # [REMOVIDO 2026-10-21] defaults = run Elem mae da bateria smooth (dataset sem J, 350 épocas,
+    # split 30/30) — agora = run elem_mae da bateria bldc (src/configs/batteries/bldc.py), campo a
+    # campo: dataset, problem, lr, épocas, scheduler, split 70/30 (test_split=None), loader,
+    # normalize, arch_cfg (FNO_BipartiteGNN_ElemConfig()), loss_cfg (MaeLossCfg()), monitor_cfg.
+    # dataset: str = 'mesh_ans_138x276/FNO_BipartiteGNN_Elem'
+    dataset: str = 'BLDC_138x276/FNO_BipartiteGNN_Elem'
     arch: str = field(default='', init=False)   # derivado de type(arch_cfg) — ARCH_REGISTRY
     loss: str = field(default='', init=False)   # derivado de type(loss_cfg) — LOSS_CFG_REGISTRY
 
-    problem: str = 'mesh_ans_138x276'
+    # [REMOVIDO 2026-10-21] problem: str = 'mesh_ans_138x276'
+    problem: str = 'BLDC_138x276'
 
     # Treino
     lr: float = 0.01
-    n_epochs: int = 350
+    # [REMOVIDO 2026-10-21] n_epochs: int = 350
+    n_epochs: int = 500
     scheduler: str = 'step'   # só 'step' (StepLR) é implementado em scripts/train.py::run
     scheduler_step: int = 100
     scheduler_gamma: float = 0.6
 
     # Dataloader
     batch_size: int = 32
-    train_split: float = 0.30
-    test_split: Optional[float] = 0.30  # None → complemento de train_split (1 - train_split);
+    # [REMOVIDO 2026-10-21] split 30/30 da bateria smooth
+    # train_split: float = 0.30
+    # test_split: Optional[float] = 0.30
+    train_split: float = 0.70
+    test_split: Optional[float] = None  # None → complemento de train_split (1 - train_split);
                                          # valor explícito → fração fixa de chunks para teste,
                                          # útil para agilizar épocas com train_split pequeno
     buffer_size: int = 64

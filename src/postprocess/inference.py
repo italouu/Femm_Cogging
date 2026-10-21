@@ -70,14 +70,15 @@ def load_set(root: Path, losses=('mse', 'mae')):
 
 
 def _enc(normalizer, t, key):
-    """Normaliza; antes, descarta os canais de entrada a mais (dim 1) que a run não
-    conhece — canais novos entram sempre no fim (ex.: J, 2026-10-14), então os
-    primeiros são os mesmos do treino. Nº de canais da run = len(stats[key]['mean'])."""
+    """Normaliza. O nº de canais (dim 1) precisa bater com as stats da run
+    (len(stats[key]['mean'])) -- senão ValueError (ex.: run treinada sem o canal J)."""
     if normalizer is None:
         return t
     st = normalizer.stats.get(key)
-    if st is not None and t.shape[1] > len(st['mean']):
-        t = t[:, :len(st['mean'])]
+    if st is not None and t.shape[1] != len(st['mean']):
+        raise ValueError(
+            f"{key}: entrada com {t.shape[1]} canal(is), stats da run com {len(st['mean'])} "
+            f"-- a run não foi treinada neste layout de dados")
     return normalizer.encode(t, key)
 
 

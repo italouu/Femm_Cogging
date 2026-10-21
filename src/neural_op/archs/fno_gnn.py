@@ -5,18 +5,16 @@ from src.neural_op.archs.fno import FNO2d
 from src.neural_op.archs.interp import interpolate_grid_to_nodes
 
 
-def _interpolate_fno_to_nodes(fno_out, node_x, L, mode='legacy'):
+def _interpolate_fno_to_nodes(fno_out, node_x, L):
     """
     Interpolação bilinear da saída do FNO (grade regular) nas posições dos nós quadtree.
 
     fno_out : [B, C, H, W]
     node_x  : [S_tot, 5]   colunas 3,4 = r_base, c_base ∈ [0,1]
     L       : [B]           nós por amostra
-    mode    : 'legacy' (align_corners=True, comportamento antigo) |
-              'cell_centered' (B1 — ver src/neural_op/archs/interp.py)
-    Retorna : [S_tot, C]
+    Retorna : [S_tot, C]    (interpolação: src/neural_op/archs/interp.py)
     """
-    return interpolate_grid_to_nodes(fno_out, node_x[:, 3], node_x[:, 4], L, mode=mode)
+    return interpolate_grid_to_nodes(fno_out, node_x[:, 3], node_x[:, 4], L)
 
 
 def _rescale_fno_to_node_space(fno_at_nodes, normalizer):
@@ -62,14 +60,10 @@ class FNO_GNN(torch.nn.Module):
                  edge_dim,
                  grid_in_ch,
                  grid_out_ch,
-                 node_in_ch,
-                 interp_mode='legacy',
-                 fno_node_rescale=False):
+                 node_in_ch):
         super().__init__()
-        self.interp_mode = interp_mode   # B1 — ver src/neural_op/archs/interp.py
-        # B2 — True: FNO@nós recodificado de stats y_hw -> node_y antes do
-        # resíduo (_rescale_fno_to_node_space); False: comportamento antigo.
-        self.fno_node_rescale = fno_node_rescale
+        # B2 — FNO@nós recodificado de stats y_hw -> node_y antes do resíduo
+        # (_rescale_fno_to_node_space), sempre (fno_node_rescale fixo desde 2026-10-21)
         self.normalizer = None   # atribuído externamente (scripts/train.py/eval.py)
 
         self.fno = FNO2d(
@@ -91,9 +85,8 @@ class FNO_GNN(torch.nn.Module):
 
     def forward(self, x_hw, node_x, edge_index, edge_attr, L, return_components=False):
         y_hw_fno     = self.fno(x_hw)
-        fno_at_nodes = _interpolate_fno_to_nodes(y_hw_fno, node_x, L, mode=self.interp_mode)
-        if self.fno_node_rescale:
-            fno_at_nodes = _rescale_fno_to_node_space(fno_at_nodes, self.normalizer)
+        fno_at_nodes = _interpolate_fno_to_nodes(y_hw_fno, node_x, L)
+        fno_at_nodes = _rescale_fno_to_node_space(fno_at_nodes, self.normalizer)
         gnn_input    = torch.cat([node_x, fno_at_nodes], dim=-1)
         delta        = self.gnn(gnn_input, edge_index, edge_attr)
         if return_components:

@@ -94,11 +94,6 @@ class FNOConfig:
     proj_width: int = 64
     proj_layers: int = 3
     data_res: tuple = (138, 276)
-    # B1 (2026-10-03) — interpolação grade→nós usada ao avaliar a saída do FNO2d
-    # na malha (src/neural_op/archs/interp.py): 'legacy' (align_corners=True,
-    # comportamento antigo) | 'cell_centered' (obsoleto: wrap circular) |
-    # 'cell_centered_border' (atual)
-    interp_mode: str = 'cell_centered_border'
 
     @classmethod
     def from_dict(cls, d: dict):
@@ -123,11 +118,6 @@ class FNO_GNNConfig:
     data_res: tuple = (138, 276)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
-    interp_mode: str = 'cell_centered_border'   # B1 — ver FNOConfig.interp_mode
-    # B2 (2026-10-03) — True: saída do FNO interpolada nos nós é recodificada de
-    # stats de y_hw para stats de node_y antes de somar o resíduo da GNN
-    # (fno_gnn.py::_rescale_fno_to_node_space); False: comportamento antigo.
-    fno_node_rescale: bool = True
 
     # edge_dim / grid_in_ch / grid_out_ch / node_in_ch — todos detectados
     # automaticamente em NnCfg.__post_init__ (helper _detect_chunk_dims) a
@@ -168,8 +158,6 @@ class FNO_BipartiteGNNConfig:
     data_res: tuple = (138, 276)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
-    interp_mode: str = 'cell_centered_border'   # B1 — ver FNOConfig.interp_mode
-    fno_node_rescale: bool = True   # B2 — ver FNO_GNNConfig.fno_node_rescale
 
     # edge_dim/grid_in_ch/grid_out_ch/node_in_ch/elem_in_ch/cross_edge_dim --
     # todos auto-detectados em NnCfg.__post_init__ (helper _detect_chunk_dims)
@@ -197,7 +185,7 @@ class FNO_BipartiteGNN_ElemConfig:
     papéis trocados: elementos = grafo principal (saída Bx,By por elemento),
     vértices = auxiliar estático. Dataset: BLDC_138x276/FNO_BipartiteGNN_Elem
     (scripts/build_elem_smooth_chunks.py). Mesmos campos de
-    FNO_BipartiteGNNConfig + aux_fno."""
+    FNO_BipartiteGNNConfig."""
     # Defaults = run elem_mae da bateria bldc (src/configs/batteries/bldc.py), conferidos campo a campo.
     fno_modes1: int = 69
     fno_modes2: int = 139
@@ -210,10 +198,6 @@ class FNO_BipartiteGNN_ElemConfig:
     data_res: tuple = (138, 276)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
-    interp_mode: str = 'cell_centered_border'
-    fno_node_rescale: bool = True
-    # aux_fno=False: decisão do usuário (2026-10-07) -- auxiliar (vértices) só com posição
-    aux_fno: bool = False    # True = auxiliar (vértices) recebe também o FNO interpolado no vértice
 
     # auto-detectados em NnCfg.__post_init__; defaults = layout de
     # src/data_gen/parsers/femm_mesh_elem.py (node_x de elemento com 5 colunas,
@@ -241,7 +225,6 @@ class GNN_PostBaseConfig:
     base_checkpoint: str = 'best'   # 'best', 'latest' ou 'final'
     gnn_node_width : int = 64
     gnn_n_layers   : int = 6
-    interp_mode    : str = 'cell_centered_border'   # B1 — interpolação da saída do FNO2d base nos nós
 
     # Snapshot de arch/arch_cfg/epoch de base_run_dir, capturado em __post_init__ e
     # gravado em config.json desta run (via NnCfg → ModelManager.open). Garante que os

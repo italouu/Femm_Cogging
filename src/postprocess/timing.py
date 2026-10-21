@@ -374,8 +374,7 @@ def _forward(arch, model, nrm, inp):
     """Forward + desnormalização (+ grade -> nós no FNO2d, como inference.predict)."""
     if arch == 'FNO2d':
         out_hw = _dec(nrm, model(inp['x']), 'y_hw')
-        return interpolate_grid_to_nodes(out_hw, inp['r'], inp['c'], inp['L'],
-                                         mode=getattr(model, 'interp_mode', 'legacy'))
+        return interpolate_grid_to_nodes(out_hw, inp['r'], inp['c'], inp['L'])
     if LAYOUT[arch] == 'v1':
         _, yn = model(inp['x'], inp['nx'], inp['ei'], inp['ea'], inp['L'])
     else:

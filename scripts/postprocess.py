@@ -218,7 +218,7 @@ def run_eval(out_dir: Path, max_samples=None):
     runs = load_set(ROOT_S)
     for k, r in runs.items():
         print(f"  {k:26s} {r['run']} best ép.{r['epoch']}  superfície {_surface_kind(r['arch'])}"
-              f"  interp {r['interp_mode']}")
+              f"  interp {INTERP_MODE}")
 
     acc = {(k, sub): Accum() for k in runs for sub in SUBSETS}
     acc_floor = {(kd, sub): Accum() for kd in SURF_KINDS for sub in SUBSETS}

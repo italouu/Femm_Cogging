@@ -16,7 +16,7 @@ from src.neural_op.archs.interp import interpolate_grid_to_nodes
 from src.neural_op.normalization import Normalizer
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-INTERP_MODE = 'cell_centered_border'   # mesmo modo grade -> nós dos modelos da bateria smooth
+INTERP_MODE = 'cell_centered_border'   # rótulo da interpolação grade -> nós (única, archs/interp.py)
 
 ARCHS     = ('FNO2d', 'FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN', 'FNO_BipartiteGNN_Elem')
 RUN_ORDER = [(a, l) for a in ARCHS for l in ('mse', 'mae')]
@@ -58,15 +58,14 @@ def find_runs(root: Path):
 
 
 def load_set(root: Path, losses=('mse', 'mae')):
-    """{run_key: dict(arch, loss, run, run_dir, model, normalizer, epoch, interp_mode)}."""
+    """{run_key: dict(arch, loss, run, run_dir, model, normalizer, epoch)}."""
     out = {}
     for (arch, loss), d in find_runs(root).items():
         if loss not in losses:
             continue
         model, normalizer, cfg, epoch = load_model(d)
         out[run_key(arch, loss)] = dict(arch=arch, loss=loss, run=d.name, run_dir=str(d),
-                                         model=model, normalizer=normalizer, epoch=int(epoch),
-                                         interp_mode=getattr(model, 'interp_mode', None))
+                                         model=model, normalizer=normalizer, epoch=int(epoch))
     return out
 
 
@@ -140,8 +139,7 @@ def predict(arch, model, normalizer, ts):
     if arch == 'FNO2d':
         out_hw = _dec(normalizer, model(x_in), 'y_hw')
         nx = d['node_x'].to(DEVICE)
-        y_nodes = interpolate_grid_to_nodes(out_hw, nx[:, 3], nx[:, 4], d['L'].to(DEVICE),
-                                            mode=getattr(model, 'interp_mode', 'legacy'))
+        y_nodes = interpolate_grid_to_nodes(out_hw, nx[:, 3], nx[:, 4], d['L'].to(DEVICE))
         return out_hw[0], y_nodes
     out_hw, y_nodes = model(x_in, _enc(normalizer, d['node_x'], 'node_x').to(DEVICE),
                             d['edge_index'].to(DEVICE),
@@ -154,5 +152,4 @@ def floor_nodes(ts):
     """Piso da grade: y_hw do gabarito interpolado nos nós (INTERP_MODE)."""
     yh = ts['v1']['y_hw'][None].to(DEVICE)
     nx = ts['v1']['node_x'].to(DEVICE)
-    return interpolate_grid_to_nodes(yh, nx[:, 3], nx[:, 4], ts['v1']['L'].to(DEVICE),
-                                     mode=INTERP_MODE).cpu()
+    return interpolate_grid_to_nodes(yh, nx[:, 3], nx[:, 4], ts['v1']['L'].to(DEVICE)).cpu()

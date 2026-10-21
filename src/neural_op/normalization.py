@@ -37,7 +37,7 @@ _LAYOUTS = {
         'cross_edge_attr': (('dist_centroid_vertex',), ()),
     },
     # FNO_BipartiteGNN_Elem._fno_at: node_x = elementos (centróide, colunas 0, 1) e
-    # elem_x = vértices (colunas 0, 1; interpolado só com aux_fno=True)
+    # elem_x = vértices (colunas 0, 1; posição, não interpolada)
     # (contrato do layout Elem: docstring de src/data_gen/parsers/femm_mesh_elem.py)
     'FNO_BipartiteGNN_Elem': {
         'x_hw':            (_GRID_X, ()),

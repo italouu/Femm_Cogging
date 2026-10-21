@@ -1,8 +1,5 @@
 from src.configs.datagen  import DatagenConfig
-from src.configs.training import NnCfg, FNOConfig, MaskedFNO2dConfig, FNO_GNNConfig, FNO_GNN_v2Config, MaskedFNO_GNNConfig, SingleMatFNOConfig, GNN_PostBaseConfig
+from src.configs.training import (NnCfg, FNOConfig, FNO_GNNConfig, GNN_PostBaseConfig,
+                                  FNO_BipartiteGNNConfig, FNO_BipartiteGNN_ElemConfig)
 from src.configs.monitor  import MonitorCfg
-from src.configs.eval     import EvalCfg
-from src.configs.bench    import BenchCfg
-from src.configs.loss     import (LossCfg, MseLossCfg, MaeLossCfg,
-                                  MaskedFNOLossCfg, SingleMaterialFNOLossCfg,
-                                  MaskedFNOGNNLossCfg, LOSS_CFG_REGISTRY)
+from src.configs.loss     import MseLossCfg, MaeLossCfg, LOSS_CFG_REGISTRY

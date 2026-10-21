@@ -3,7 +3,6 @@ Campo previsto × FEMM (ex.: amostras P50/P95), em malha e em grade.
 
 Origem: tests/resultados/figures_smooth.fig_field (2026-10-20), separado em
 cálculo (no executável) e figura (aqui); N archs.
-A migrar, se usados: os _plot_* de src/neural_op/archs/eval.py.
 """
 import numpy as np
 

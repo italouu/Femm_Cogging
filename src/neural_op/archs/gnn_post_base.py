@@ -6,12 +6,12 @@ import torch
 from src.neural_op.archs._blocks import GNN
 from src.neural_op.archs.fno_gnn import _interpolate_fno_to_nodes
 
-_SUPPORTED_BASE_ARCHS = ('FNO2d', 'FNO_GNN', 'FNO_GNN_v2')
+_SUPPORTED_BASE_ARCHS = ('FNO2d',)
 
 
 def _load_frozen_base(base_run_dir, base_checkpoint, fallback_arch=None, fallback_arch_cfg=None):
     """
-    Reconstrói e congela um modelo já treinado (FNO2d ou FNO_GNN) a partir de seu run_dir.
+    Reconstrói e congela um FNO2d já treinado a partir de seu run_dir.
 
     Se base_run_dir/config.json não existir mais (run movida/apagada), usa
     fallback_arch/fallback_arch_cfg — snapshot gravado em GNN_PostBaseConfig — para
@@ -69,23 +69,16 @@ def _load_frozen_base(base_run_dir, base_checkpoint, fallback_arch=None, fallbac
 
 class GNN_PostBase(torch.nn.Module):
     """
-    GNN treinado isoladamente sobre a saída de um FNO2d ou FNO_GNN já treinado e congelado.
+    GNN treinado isoladamente sobre a saída de um FNO2d já treinado e congelado.
 
     Stage 2 de um pipeline não end-to-end: o modelo base não recebe gradiente;
     apenas o GNN novo é treinado.
 
     Pipeline
     --------
-    base_arch == 'FNO2d':
         x_hw → FNO2d (frozen) → y_hw_base
                     ↓ _interpolate_fno_to_nodes
         base_at_nodes
-
-    base_arch == 'FNO_GNN':
-        (x_hw, node_x, edge_index, edge_attr, L) → FNO_GNN (frozen) → y_hw_base, base_at_nodes
-        (base_at_nodes já é a saída pós-correção do GNN interno do FNO_GNN)
-
-    Em ambos os casos:
         [node_x | base_at_nodes] → GNN (treinável) → Δ
         y_nodes = base_at_nodes + Δ
     """
@@ -95,8 +88,7 @@ class GNN_PostBase(torch.nn.Module):
                  base_normalize=False, base_norm_stats=None, interp_mode='legacy'):
         super().__init__()
         # B1 — interpolação da saída do FNO2d base nos nós (src/neural_op/archs/
-        # interp.py). Só age com base FNO2d; base FNO_GNN interpola internamente
-        # com o interp_mode dele próprio.
+        # interp.py).
         self.interp_mode = interp_mode
         self.base_arch, self.base_model = _load_frozen_base(
             base_run_dir, base_checkpoint,
@@ -104,7 +96,7 @@ class GNN_PostBase(torch.nn.Module):
         )
         # Normalização (src/neural_op/normalization.py) usada no TREINO do
         # modelo base — pode diferir da normalização desta run (self.normalizer,
-        # atribuído externamente após a construção — ver scripts/train.py/eval.py).
+        # atribuído externamente após a construção — ver scripts/train.py, postprocess/inference.py).
         # _base_pred_at_nodes faz o round-trip decode(normalizer)/encode(base
         # normalizer) só ao redor da chamada a self.base_model, pra ele sempre
         # receber x_hw na escala exata que aprendeu.
@@ -112,10 +104,7 @@ class GNN_PostBase(torch.nn.Module):
         self._base_normalizer = (
             Normalizer.from_dict(base_norm_stats) if base_normalize and base_norm_stats else None
         )
-        self.normalizer = None   # atribuído externamente (ver scripts/train.py/eval.py)
-        # B2 — base FNO_GNN/FNO_BipartiteGNN treinada com fno_node_rescale=True
-        # precisa das stats DELA no forward interno (no-op para FNO2d/rescale off)
-        self.base_model.normalizer = self._base_normalizer
+        self.normalizer = None   # atribuído externamente (ver scripts/train.py, postprocess/inference.py)
         self.gnn = GNN(
             in_node_features=node_in_ch + base_out_ch,
             out_node_features=base_out_ch,
@@ -140,18 +129,13 @@ class GNN_PostBase(torch.nn.Module):
             x_hw_base = base_norm.encode(x_hw_base, 'x_hw')
 
         with torch.no_grad():
-            if self.base_arch == 'FNO2d':
-                y_hw_base     = self.base_model(x_hw_base)
-                base_at_nodes = _interpolate_fno_to_nodes(y_hw_base, node_x, L,
-                                                          mode=self.interp_mode)
-                base_key      = 'y_hw'
-            else:  # 'FNO_GNN' / 'FNO_GNN_v2'
-                y_hw_base, base_at_nodes = self.base_model(x_hw_base, node_x, edge_index, edge_attr, L)
-                base_key      = 'node_y'
+            y_hw_base     = self.base_model(x_hw_base)
+            base_at_nodes = _interpolate_fno_to_nodes(y_hw_base, node_x, L,
+                                                      mode=self.interp_mode)
 
         if base_norm is not None:
             y_hw_base     = base_norm.decode(y_hw_base, 'y_hw')
-            base_at_nodes = base_norm.decode(base_at_nodes, base_key)
+            base_at_nodes = base_norm.decode(base_at_nodes, 'y_hw')
         if normalizer is not None:
             y_hw_base     = normalizer.encode(y_hw_base, 'y_hw')
             base_at_nodes = normalizer.encode(base_at_nodes, 'node_y')
@@ -175,8 +159,8 @@ def gnn_post_base_step_fn(batch, model, loss_fn, device):
 
 def gnn_post_base_metric_fn(batch, model, device):
     """
-    MAE bruto: mae_hw compara a saída em grade H×W do modelo base congelado
-    (FNO2d ou estágio FNO do FNO_GNN) contra y_hw; mae_graph compara a saída
+    MAE bruto: mae_hw = None (grade do FNO2d base congelado, não supervisionada);
+    mae_graph compara a saída
     final do GNN_PostBase (base + delta) nos nós contra node_y.
 
     batch já chega normalizado (CUDAPrefetcher.encode_batch, se normalize=True)

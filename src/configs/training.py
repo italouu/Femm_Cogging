@@ -3,9 +3,7 @@ from typing import Any, Optional
 
 from src.configs.monitor import MonitorCfg   # noqa: F401  re-exportado daqui por retrocompatibilidade
 from src.configs.loss    import (            # noqa: F401  re-exportado daqui por retrocompatibilidade
-    LossCfg, MseLossCfg, MaeLossCfg,
-    MaskedFNOLossCfg, SingleMaterialFNOLossCfg, MaskedFNOGNNLossCfg,
-    LOSS_CFG_REGISTRY,
+    MseLossCfg, MaeLossCfg, LOSS_CFG_REGISTRY,
 )
 
 
@@ -15,11 +13,9 @@ def _detect_chunk_dims(dataset: str) -> dict:
 
     Fonte de verdade para in/out channels (x_hw/y_hw), features de nó
     (node_x/node_y) e de aresta (edge_attr) de todos os arch_cfgs com
-    dimensões dependentes do dataset (FNOConfig, FNO_GNNConfig,
-    FNO_GNN_v2Config, GNN_PostBaseConfig) — evita hardcode quando parsers
-    diferentes mudam esses números (ex: FEMM_MESH_A_PARSER: y_hw/node_y de
-    2→1 canal; FNO_GNN_V2_PARSER: edge_attr de 4→5 colunas). Chamado por
-    NnCfg.__post_init__.
+    dimensões dependentes do dataset (FNOConfig, FNO_GNNConfig, GNN_PostBaseConfig,
+    FNO_BipartiteGNN*Config) — evita hardcode quando o layout do chunk muda
+    (ex: canal J em 2026-10-14). Chamado por NnCfg.__post_init__.
     """
     import glob
     import torch
@@ -59,7 +55,7 @@ def _from_dict_generic(cls, d: dict):
     """
     Reconstrói uma dataclass com campos init=False (ex: edge_dim, base_arch) a
     partir de um dict já salvo (config.json), sem passar por __init__/__post_init__
-    — usado por scripts/eval.py (via hasattr(cfg_cls, 'from_dict')) para reconstruir
+    — usado por postprocess/inference.load_model (via hasattr(cfg_cls, 'from_dict')) para reconstruir
     arch_cfg sem depender de recursos externos (dataset, base_run_dir) ainda
     existirem no mesmo estado do treino.
 
@@ -84,7 +80,7 @@ class FNOConfig:
     # in_channels/out_channels: auto-detectados a partir de x_hw/y_hw do dataset
     # em NnCfg.__post_init__ (helper _detect_chunk_dims) — igual edge_dim em
     # FNO_GNNConfig. init=False pra impedir mismatch manual (ex: setar
-    # out_channels=2 num dataset FEMM_MESH_A, que tem y_hw de 1 canal).
+    # out_channels diferente do nº de canais de y_hw do dataset).
     in_channels: int = field(default=2, init=False)
     out_channels: int = field(default=2, init=False)
     # Defaults = run fno2d_mae da bateria bldc (src/configs/batteries/bldc.py), conferidos campo a campo.
@@ -106,42 +102,11 @@ class FNOConfig:
 
     @classmethod
     def from_dict(cls, d: dict):
-        # in_channels/out_channels são init=False — scripts/eval.py detecta este
+        # in_channels/out_channels são init=False — postprocess/inference.load_model detecta este
         # método (hasattr) e o usa em vez de cfg_cls(**arch_cfg_dict), que quebraria
         # por esses campos não serem kwargs do construtor. Mesmo padrão de
         # FNO_GNNConfig.from_dict (edge_dim).
         return _from_dict_generic(cls, d)
-
-
-@dataclass
-class SingleMatFNOConfig:
-    material_id : int   = 0        # 0=ferro, 1=ar, 2=ima, 3=cobre
-    in_channels : int   = 2
-    out_channels: int   = 2        # sempre 2: Bx, By — não alterar
-    modes1      : int   = 240
-    modes2      : int   = 240
-    conv_width  : int   = 6
-    conv_layers : int   = 4
-    lift_width  : int   = 64
-    lift_layers : int   = 3
-    proj_width  : int   = 64
-    proj_layers : int   = 3
-    data_res    : tuple = (80, 240)
-
-
-@dataclass
-class MaskedFNO2dConfig:
-    in_channels : int   = 2
-    out_channels: int   = 8      # 4 materiais × 2 campos (Bx, By) — ferro=0, ar=1, ima=2, cobre=3
-    modes1      : int   = 240
-    modes2      : int   = 240
-    conv_width  : int   = 6
-    conv_layers : int   = 4
-    lift_width  : int   = 64
-    lift_layers : int   = 3
-    proj_width  : int   = 64
-    proj_layers : int   = 3
-    data_res    : tuple = (80, 240)
 
 
 @dataclass
@@ -169,7 +134,7 @@ class FNO_GNNConfig:
     # partir dos chunks reais do dataset de treino (self.dataset): edge_dim de
     # edge_attr, grid_in_ch de x_hw, grid_out_ch de y_hw, node_in_ch de node_x.
     # Defaults abaixo (4/2/2/5) só são usados se este arch_cfg for reconstruído
-    # fora de NnCfg (ex: scripts/eval.py faz cfg_cls.from_dict(arch_cfg_dict)
+    # fora de NnCfg (ex: postprocess/inference.load_model faz cfg_cls.from_dict(arch_cfg_dict)
     # direto do config.json salvo — nesse caso os valores gravados na própria
     # run são usados, não o default).
     edge_dim:     int = field(default=4, init=False)
@@ -179,24 +144,10 @@ class FNO_GNNConfig:
 
     @classmethod
     def from_dict(cls, d: dict):
-        # edge_dim é init=False — scripts/eval.py detecta este método (hasattr) e o usa
+        # edge_dim é init=False — postprocess/inference.load_model detecta este método (hasattr) e o usa
         # em vez de cfg_cls(**arch_cfg_dict), que quebraria por edge_dim não ser kwarg
-        # do construtor. FNO_GNN_v2Config herda este método sem precisar redefinir.
+        # do construtor.
         return _from_dict_generic(cls, d)
-
-
-@dataclass
-class FNO_GNN_v2Config(FNO_GNNConfig):
-    """Mesmos campos de FNO_GNNConfig. FNO_GNN_v2 (src/neural_op/archs/fno_gnn_v2.py)
-    é hoje um alias de FNO_GNN — edge_dim vem do construtor (não mais de uma
-    constante de classe _EDGE_DIM), auto-detectado a partir do dataset. Classe e
-    arch próprios mantidos só por compatibilidade: reconstruir/avaliar runs já
-    treinadas antes dessa mudança depende de 'arch'=='FNO_GNN_v2' existir no
-    ARCH_REGISTRY. Default de edge_dim=5 (em vez de 4, herdado de FNO_GNNConfig)
-    porque configs salvos dessas runs antigas não têm a chave 'edge_dim' — sem
-    esse default específico, cfg_cls(**arch_cfg_dict) em scripts/eval.py
-    reconstruiria com edge_dim=4, incompatível com os pesos salvos (5 colunas)."""
-    edge_dim: int = field(default=5, init=False)
 
 
 @dataclass
@@ -226,7 +177,7 @@ class FNO_BipartiteGNNConfig:
     # padrão. Defaults abaixo batem com o layout fixo de
     # src/data_gen/femm_mesh_v2.py (node_x=[r,c], edge_attr=3 colunas,
     # elem_x=5 colunas, cross_edge_attr=1 coluna) — só usados se este
-    # arch_cfg for reconstruído fora de NnCfg (ex: scripts/eval.py).
+    # arch_cfg for reconstruído fora de NnCfg (ex: postprocess/inference.load_model).
     edge_dim:       int = field(default=3, init=False)
     grid_in_ch:     int = field(default=2, init=False)
     grid_out_ch:    int = field(default=1, init=False)
@@ -240,57 +191,12 @@ class FNO_BipartiteGNNConfig:
 
 
 @dataclass
-class FNO_BipartiteGNN_v3Config:
-    """Config de FNO_BipartiteGNN_v3 (src/neural_op/archs/femm_mesh_v3_gnn.py,
-    renomeado de FNO_BipartiteGNN_v2 em 2026-08-20 pra alinhar com o nome do
-    parser FEMM_MESH_V3) -- mesma arquitetura de FNO_BipartiteGNN (grafo duplo
-    vértices+elementos), sobre o parser src/data_gen/parsers/femm_mesh_v3.py:
-    node_x ganha uma 3ª coluna (node_cell_count) e a GNN recebe também a
-    projeção das 8 células vizinhas do FNO (indexação direta, wrap angular /
-    zero radial fora da grade -- ver _interpolate_fno_to_nodes_v3).
-    loader_mode continua 'femm_mesh_v2' (mesmo layout de chunk do
-    FNO_BipartiteGNN, só node_x muda de largura); dataset gerado com
-    npz_parser='FEMM_MESH_V3' ou 'FEMM_MESH_V3_A' (ver PARSER_REGISTRY).
-    Decisão de arquitetura: conversa 2026-08-20 (ver CLAUDE.md)."""
-    fno_modes1: int = 270
-    fno_modes2: int = 270
-    fno_conv_width: int = 6
-    fno_conv_layers: int = 4
-    fno_lift_width: int = 64
-    fno_lift_layers: int = 3
-    fno_proj_width: int = 64
-    fno_proj_layers: int = 3
-    data_res: tuple = (138, 276)
-    gnn_node_width: int = 32
-    gnn_n_layers: int = 3
-
-    # edge_dim/grid_in_ch/grid_out_ch/node_in_ch/elem_in_ch/cross_edge_dim --
-    # todos auto-detectados em NnCfg.__post_init__ (helper _detect_chunk_dims),
-    # ver FNO_BipartiteGNNConfig para o mesmo padrão. Defaults abaixo batem
-    # com o layout fixo de src/data_gen/parsers/femm_mesh_v3.py (node_x=
-    # [r,c,node_cell_count], 3 colunas -- diferente do default=2 de
-    # FNO_BipartiteGNNConfig); só usados se este arch_cfg for reconstruído
-    # fora de NnCfg (ex: scripts/eval.py).
-    edge_dim:       int = field(default=3, init=False)
-    grid_in_ch:     int = field(default=2, init=False)
-    grid_out_ch:    int = field(default=1, init=False)
-    node_in_ch:     int = field(default=3, init=False)
-    elem_in_ch:     int = field(default=5, init=False)
-    cross_edge_dim: int = field(default=1, init=False)
-
-    @classmethod
-    def from_dict(cls, d: dict):
-        return _from_dict_generic(cls, d)
-
-
-@dataclass
 class FNO_BipartiteGNN_ElemConfig:
     """Config de FNO_BipartiteGNN_Elem (PROTÓTIPO 2026-10-07,
     src/neural_op/archs/femm_mesh_elem_gnn.py) -- FNO_BipartiteGNN com os
     papéis trocados: elementos = grafo principal (saída Bx,By por elemento),
-    vértices = auxiliar estático. Dataset:
-    mesh_ans_138x276_unified/FNO_BipartiteGNN_Elem
-    (scripts/build_elem_proto_chunks.py). Mesmos campos de
+    vértices = auxiliar estático. Dataset: BLDC_138x276/FNO_BipartiteGNN_Elem
+    (scripts/build_elem_smooth_chunks.py). Mesmos campos de
     FNO_BipartiteGNNConfig + aux_fno."""
     # Defaults = run elem_mae da bateria bldc (src/configs/batteries/bldc.py), conferidos campo a campo.
     fno_modes1: int = 69
@@ -326,8 +232,8 @@ class FNO_BipartiteGNN_ElemConfig:
 
 @dataclass
 class GNN_PostBaseConfig:
-    # Treino em duas etapas (não end-to-end): base_run_dir aponta para um run já treinado
-    # (FNO2d ou FNO_GNN), congelado; só o GNN novo é treinado.
+    # Treino em duas etapas (não end-to-end): base_run_dir aponta para um run FNO2d já
+    # treinado, congelado; só o GNN novo é treinado.
     # Defaults = run postbase_mae da bateria bldc; nela a base é runs['fno2d_mae'] (resolvida
     # pelo runner) -- aqui, o FNO2d mae local de BLDC_138x276 (alvo polar Br, Bθ, run de
     # 2026-10-19; trocar pela run nova depois que a bateria for refeita).
@@ -351,12 +257,10 @@ class GNN_PostBaseConfig:
     edge_dim:   int = field(default=4, init=False)
     node_in_ch: int = field(default=5, init=False)
 
-    # base_out_ch: número de canais de saída do modelo base congelado (2 para
-    # Bx,By; 1 para A) — lido do PRÓPRIO base_run_dir/config.json (não do
-    # dataset desta run nova), já que é uma propriedade fixa da arquitetura já
-    # treinada, não algo a redetectar. 'FNO2d' grava em 'out_channels';
-    # 'FNO_GNN'/'FNO_GNN_v2'/'FNO_GNN_Field' gravam em 'grid_out_ch'. Default 2
-    # cobre configs salvos antes desse campo existir (runs antigas, sempre B).
+    # base_out_ch: número de canais de saída do modelo base congelado (Br, Bθ)
+    # — lido do PRÓPRIO base_run_dir/config.json (FNO2d grava em 'out_channels'),
+    # não do dataset desta run nova. Default 2 cobre configs salvos antes desse
+    # campo existir.
     base_out_ch: int = field(default=2, init=False)
 
     # base_normalize/base_norm_stats: snapshot da normalização (ver
@@ -379,11 +283,7 @@ class GNN_PostBaseConfig:
         cfg_dict = json.loads((run_dir / 'config.json').read_text())
         self.base_arch     = cfg_dict['arch']
         self.base_arch_cfg = cfg_dict['arch_cfg']
-        self.base_out_ch   = (
-            self.base_arch_cfg.get('out_channels')
-            if self.base_arch == 'FNO2d'
-            else self.base_arch_cfg.get('grid_out_ch')
-        ) or 2
+        self.base_out_ch   = self.base_arch_cfg.get('out_channels') or 2
         self.base_normalize  = cfg_dict.get('normalize', False)
         self.base_norm_stats = cfg_dict.get('norm_stats', {})
 
@@ -401,95 +301,21 @@ class GNN_PostBaseConfig:
         return _from_dict_generic(cls, d)
 
 
-@dataclass
-class MaskedFNO_GNNConfig:
-    # FNO com 8 canais de saída (4 materiais × Bx, By); GNN corrige nos 8 canais
-    fno_modes1     : int   = 240
-    fno_modes2     : int   = 240
-    fno_conv_width : int   = 8
-    fno_conv_layers: int   = 4
-    fno_lift_width : int   = 64
-    fno_lift_layers: int   = 3
-    fno_proj_width : int   = 64
-    fno_proj_layers: int   = 3
-    data_res       : tuple = (80, 240)
-    gnn_node_width : int   = 32
-    gnn_n_layers   : int   = 3
-    lambda_loss    : float = 0.5   # peso da loss de grade; loss_nós = 1 - lambda_loss
-
-    # edge_dim do GNN interno — auto-detectado em NnCfg.__post_init__, ver FNO_GNNConfig
-    edge_dim: int = field(default=4, init=False)
-
-    @classmethod
-    def from_dict(cls, d: dict):
-        # edge_dim é init=False — ver FNO_GNNConfig.from_dict para o motivo.
-        return _from_dict_generic(cls, d)
-
-
 # ── Config principal ──────────────────────────────────────────────────────────
 #
 # Referência rápida — arch e loss disponíveis
-# [2026-10-20] removidos (features sem uso): relative_l2, graph_div_b_loss, tail_alpha/
-# tail_k_frac, subtract_fno e lambda_loss (exceto MaskedFNO_GNN, legado). As menções abaixo
-# a essas entradas são históricas; losses ativas: mse e mae (só a saída final do modelo).
-# ┌─────────────────┬──────────────────────┬──────────────────┬──────────────────────────┐
-# │ arch            │ loss recomendada      │ loader_mode      │ arch_cfg                 │
-# ├─────────────────┼──────────────────────┼──────────────────┼──────────────────────────┤
-# │ FNO2d           │ mse / mae /          │ grid             │ FNOConfig                │
-# │                 │   relative_l2        │                  │                          │
-# │ MaskedFNO2d     │ masked_fno_loss      │ grid             │ MaskedFNO2dConfig        │
-# │ FNO2d_SingleMat │ single_material_     │ grid             │ SingleMatFNOConfig       │
-# │                 │   fno_loss           │                  │   (material_id=0..3)     │
-# │ FNO_GNN         │ mse / mae /          │ mesh_v1          │ FNO_GNNConfig            │
-# │                 │   relative_l2        │                  │                          │
-# │ FNO_GNN_v2      │ mse / mae /          │ mesh_v1          │ FNO_GNN_v2Config         │
-# │                 │   relative_l2        │                  │   (edge_attr c/ delta_mu │
-# │                 │                      │                  │    direcional; parser    │
-# │                 │                      │                  │    FNO_GNN_v2 no npz)    │
-# │ MaskedFNO_GNN   │ masked_fno_gnn_loss  │ mesh_v1          │ MaskedFNO_GNNConfig      │
-# │ FNO_GNN_Field   │ mse / mae /          │ mesh_v1          │ FNO_GNNConfig            │
-# │                 │   relative_l2        │                  │   (campo direto nos nós) │
-# │ GNN_PostBase    │ mse / mae /          │ mesh_v1          │ GNN_PostBaseConfig       │
-# │                 │   relative_l2        │                  │   (base FNO2d/FNO_GNN    │
-# │                 │                      │                  │    congelada)            │
-# │ FNO_BipartiteGNN│ mse / mae /          │ femm_mesh_v2     │ FNO_BipartiteGNNConfig   │
-# │                 │   relative_l2        │                  │   (grafo duplo vértices  │
-# │                 │                      │                  │    +elementos; parser    │
-# │                 │                      │                  │    próprio, parsers/     │
-# │                 │                      │                  │    femm_mesh_v2.py)      │
-# │ FNO_Bipartite   │ mse / mae /          │ femm_mesh_v2     │ FNO_BipartiteGNN_v3Config│
-# │  GNN_v3         │   relative_l2        │                  │   (idem + node_cell_count│
-# │                 │                      │                  │    em node_x + projeção  │
-# │                 │                      │                  │    das 8 células vizinhas│
-# │                 │                      │                  │    do FNO; parser        │
-# │                 │                      │                  │    femm_mesh_v3.py)      │
-# └─────────────────┴──────────────────────┴──────────────────┴──────────────────────────┘
-#
-# Chaves de loss — LOSS_REGISTRY (src/neural_op/losses.py)
-# Config correspondente — LOSS_CFG_REGISTRY (src/configs/loss.py)
-# ┌──────────────────────┬─────────────────────────┬────────────────────────────────────┐
-# │ chave                │ cfg_cls                 │ campos configuráveis               │
-# ├──────────────────────┼─────────────────────────┼────────────────────────────────────┤
-# │ 'mse'                │ MseLossCfg              │ tail_alpha, tail_k_frac,           │
-# │                      │                         │ subtract_fno (FNO_GNN/PostBase)    │
-# │ 'mae'                │ MaeLossCfg              │ subtract_fno (FNO_GNN/PostBase)    │
-# │ 'relative_l2'        │ RelativeL2LossCfg       │ subtract_fno (FNO_GNN/PostBase)    │
-# │ 'masked_fno_loss'    │ MaskedFNOLossCfg        │ —                                  │
-# │ 'single_material_    │ SingleMaterialFNOLossCfg│ —                                  │
-# │   fno_loss'          │                         │                                    │
-# │ 'masked_fno_gnn_loss'│ MaskedFNOGNNLossCfg     │ — (lambda_loss vem de arch_cfg)    │
-# │ 'graph_div_b_loss'   │ DivBLossCfg             │ base_loss, lambda_div, r_in_mm,    │
-# │                      │                         │ r_ext_mm, ang_1_deg, ang_2_deg     │
-# │                      │                         │ (só FNO_BipartiteGNN — penaliza    │
-# │                      │                         │ div(B) nos nós, ver src/configs/   │
-# │                      │                         │ loss.py::DivBLossCfg)              │
-# └──────────────────────┴─────────────────────────┴────────────────────────────────────┘
-#
-# subtract_fno (MseLossCfg / MaeLossCfg / RelativeL2LossCfg):
-#   False (padrão) → loss_nós = loss_fn(fno_at_nodes + delta, y_node)
-#   True           → loss_nós = loss_fn(delta, y_node)
-#                    delta = output bruto do GNN (sem soma da baseline FNO)
-#                    inference permanece inalterada: retorna fno + delta
+# ┌───────────────────────┬──────────────┬─────────────────────────────┐
+# │ arch                  │ loader_mode  │ arch_cfg                    │
+# ├───────────────────────┼──────────────┼─────────────────────────────┤
+# │ FNO2d                 │ grid         │ FNOConfig                   │
+# │ FNO_GNN               │ mesh_v1      │ FNO_GNNConfig               │
+# │ GNN_PostBase          │ mesh_v1      │ GNN_PostBaseConfig          │
+# │                       │              │   (base FNO2d congelada)    │
+# │ FNO_BipartiteGNN      │ femm_mesh_v2 │ FNO_BipartiteGNNConfig      │
+# │ FNO_BipartiteGNN_Elem │ femm_mesh_v2 │ FNO_BipartiteGNN_ElemConfig │
+# └───────────────────────┴──────────────┴─────────────────────────────┘
+# Losses — LOSS_REGISTRY (src/neural_op/losses.py) / LOSS_CFG_REGISTRY (src/configs/loss.py):
+# 'mse' (MseLossCfg) e 'mae' (MaeLossCfg), sem campos, sobre a saída final do modelo.
 
 @dataclass
 class NnCfg:
@@ -554,7 +380,7 @@ class NnCfg:
         from pathlib import Path
         from src.neural_op.archs import ARCH_REGISTRY
         from src.neural_op.losses import LOSS_REGISTRY
-        # Tipo EXATO (não isinstance): FNO_GNN_v2Config herda de FNO_GNNConfig.
+        # Tipo EXATO (não isinstance) -- cada arch tem a sua dataclass de config.
         archs = [n for n, e in ARCH_REGISTRY.items() if e.cfg_cls is type(self.arch_cfg)]
         if len(archs) != 1:
             raise TypeError(

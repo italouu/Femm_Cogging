@@ -1,8 +1,8 @@
 """
 Bateria BLDC_138x276 (2026-10-14) — gabarito B suavizado do FEMM COM correntes de fase
 (1 canal de entrada a mais, J [A/mm²], último canal de x_hw/elem_x/node_x; ver CLAUDE.md
-"Correntes nas bobinas"). Mesmas 10 runs e hiperparâmetros da bateria smooth
-(src/configs/batteries/smooth.py: 5 archs × mse/mae, 500 épocas, 70/30), só trocando
+"Correntes nas bobinas"). Mesmas 10 runs e hiperparâmetros da antiga bateria smooth
+(5 archs × mse/mae, 500 épocas, 70/30; removida em 2026-10-21), só trocando
 dataset/problem. Cada run escrita por inteiro.
 
 Raw: data/raw/BLDC_138x276/ (6000 amostras, I_pico = 10 A) — scripts.generate_data_femm_mesh_v2.

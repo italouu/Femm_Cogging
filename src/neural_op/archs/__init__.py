@@ -2,25 +2,15 @@ from dataclasses import dataclass, asdict
 
 from src.neural_op.archs.fno            import FNO2d,          fno_step_fn, fno_metric_fn
 from src.neural_op.archs.fno_gnn        import FNO_GNN,        fno_gnn_step, fno_gnn_metric_fn
-from src.neural_op.archs.fno_gnn_v2     import FNO_GNN_v2
-from src.neural_op.archs.fno_mat        import (MaskedFNO2d,    masked_fno_step_fn, masked_fno_metric_fn,
-                                                FNO2d_SingleMat, make_single_mat_step_fn,
-                                                make_single_mat_metric_fn)
-from src.neural_op.archs.masked_fno_gnn import (MaskedFNO_GNN, make_masked_fno_gnn_step,
-                                                masked_fno_gnn_metric_fn)
 from src.neural_op.archs.gnn_post_base  import (GNN_PostBase,
                                                 gnn_post_base_step_fn,
                                                 gnn_post_base_metric_fn)
 from src.neural_op.archs.femm_mesh_v2_gnn import (FNO_BipartiteGNN,
                                                   fno_bipartite_gnn_step,
                                                   fno_bipartite_gnn_metric_fn)
-from src.neural_op.archs.femm_mesh_v3_gnn import FNO_BipartiteGNN_v3
 from src.neural_op.archs.femm_mesh_elem_gnn import FNO_BipartiteGNN_Elem
-from src.configs.training               import (FNOConfig, FNO_GNNConfig, FNO_GNN_v2Config,
-                                                MaskedFNO2dConfig, MaskedFNO_GNNConfig,
-                                                SingleMatFNOConfig, GNN_PostBaseConfig,
-                                                FNO_BipartiteGNNConfig, FNO_BipartiteGNN_v3Config,
-                                                FNO_BipartiteGNN_ElemConfig)
+from src.configs.training               import (FNOConfig, FNO_GNNConfig, GNN_PostBaseConfig,
+                                                FNO_BipartiteGNNConfig, FNO_BipartiteGNN_ElemConfig)
 
 
 @dataclass
@@ -34,7 +24,7 @@ class ArchEntry:
                             # MAE bruto (sem máscara) para monitoramento em metrics.jsonl;
                             # mae_hw sempre compara a saída em grade H×W do estágio FNO;
                             # mae_graph compara a saída final nos nós/grafo (None se o
-                            # arch não produz saída em grafo — ex: FNO2d, MaskedFNO2d)
+                            # arch não produz saída em grafo — ex: FNO2d)
 
     def make_model(self, arch_cfg):
         return self.cls(**self.model_kwargs(arch_cfg))
@@ -88,42 +78,6 @@ ARCH_REGISTRY: dict = {
         make_step_fn=lambda cfg, lcfg: fno_gnn_step,
         metric_fn=lambda cfg: fno_gnn_metric_fn,
     ),
-    # FNO_GNN_v2 (2026-07-17): edge_attr [E,5] com delta_mu direcional
-    # (mu_origem - mu_destino). Requer dataset gerado com npz_parser='FNO_GNN_v2'
-    # (src/data_gen/parsers/fno_gnn_v2.py) — incompatível com chunks de FNO_GNN
-    # (edge_attr [E,4]). Forward/step_fn/eval_fn herdados de FNO_GNN sem alteração.
-    'FNO_GNN_v2': ArchEntry(
-        cls=FNO_GNN_v2,
-        cfg_cls=FNO_GNN_v2Config,
-        loader_mode='mesh_v1',
-        model_kwargs=_fno_gnn_kwargs,
-        make_step_fn=lambda cfg, lcfg: fno_gnn_step,
-        metric_fn=lambda cfg: fno_gnn_metric_fn,
-    ),
-    'MaskedFNO2d': ArchEntry(
-        cls=MaskedFNO2d,
-        cfg_cls=MaskedFNO2dConfig,
-        loader_mode='grid',
-        model_kwargs=lambda cfg: asdict(cfg),
-        make_step_fn=lambda cfg, lcfg: masked_fno_step_fn,
-        metric_fn=lambda cfg: masked_fno_metric_fn,
-    ),
-    'FNO2d_SingleMat': ArchEntry(
-        cls=FNO2d_SingleMat,
-        cfg_cls=SingleMatFNOConfig,
-        loader_mode='grid',
-        model_kwargs=lambda cfg: asdict(cfg),   # material_id é parâmetro do construtor
-        make_step_fn=lambda cfg, lcfg: make_single_mat_step_fn(cfg.material_id),
-        metric_fn=lambda cfg: make_single_mat_metric_fn(cfg.material_id),
-    ),
-    'MaskedFNO_GNN': ArchEntry(
-        cls=MaskedFNO_GNN,
-        cfg_cls=MaskedFNO_GNNConfig,
-        loader_mode='mesh_v1',
-        model_kwargs=lambda cfg: {k: v for k, v in asdict(cfg).items() if k != 'lambda_loss'},
-        make_step_fn=lambda cfg, lcfg: make_masked_fno_gnn_step(cfg.lambda_loss),
-        metric_fn=lambda cfg: masked_fno_gnn_metric_fn,
-    ),
     'GNN_PostBase': ArchEntry(
         cls=GNN_PostBase,
         cfg_cls=GNN_PostBaseConfig,
@@ -134,8 +88,7 @@ ARCH_REGISTRY: dict = {
     ),
     # FNO_BipartiteGNN (2026-08-10): grafo duplo vértices+elementos,
     # mode='femm_mesh_v2' (ver src/data_gen/femm_mesh_v2.py,
-    # src/neural_op/archs/femm_mesh_v2_gnn.py). eval_fn ainda não
-    # implementado (só plot/visualização — treino/métricas funcionam).
+    # src/neural_op/archs/femm_mesh_v2_gnn.py).
     'FNO_BipartiteGNN': ArchEntry(
         cls=FNO_BipartiteGNN,
         cfg_cls=FNO_BipartiteGNNConfig,
@@ -144,26 +97,11 @@ ARCH_REGISTRY: dict = {
         make_step_fn=lambda cfg, lcfg: fno_bipartite_gnn_step,
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),
-    # FNO_BipartiteGNN_v3 (2026-08-20, renomeado de FNO_BipartiteGNN_v2 no
-    # mesmo dia pra alinhar com o nome do parser FEMM_MESH_V3): igual
-    # FNO_BipartiteGNN, com node_x ganhando node_cell_count (3ª coluna) e a
-    # GNN recebendo também a projeção das 8 células vizinhas do FNO -- ver
-    # src/neural_op/archs/femm_mesh_v3_gnn.py e src/data_gen/parsers/
-    # femm_mesh_v3.py. step_fn/metric_fn/eval_fn reaproveitados de
-    # FNO_BipartiteGNN (genéricos, não assumem largura fixa de node_x).
-    'FNO_BipartiteGNN_v3': ArchEntry(
-        cls=FNO_BipartiteGNN_v3,
-        cfg_cls=FNO_BipartiteGNN_v3Config,
-        loader_mode='femm_mesh_v2',
-        model_kwargs=_fno_gnn_kwargs,
-        make_step_fn=lambda cfg, lcfg: fno_bipartite_gnn_step,
-        metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
-    ),
     # FNO_BipartiteGNN_Elem (PROTÓTIPO 2026-10-07): bipartite com os papéis
     # trocados -- elementos = grafo principal (saída Bx,By por elemento),
     # vértices = auxiliar estático. Chunk com as chaves do femm_mesh_v2
     # (src/data_gen/parsers/femm_mesh_elem.py), então loader/step_fn/metric_fn
-    # da bipartite servem sem mudança. eval_fn ainda é stub.
+    # da bipartite servem sem mudança.
     'FNO_BipartiteGNN_Elem': ArchEntry(
         cls=FNO_BipartiteGNN_Elem,
         cfg_cls=FNO_BipartiteGNN_ElemConfig,

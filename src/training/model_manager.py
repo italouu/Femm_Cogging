@@ -155,7 +155,7 @@ class ModelManager:
         mae_hw/mae_graph : MAE bruto (Tesla) sobre o test set, calculado só no
         heartbeat via ArchEntry.metric_fn — mae_hw compara sempre a saída em grade
         H×W do FNO; mae_graph compara a saída final em grafo/nós (None se o arch
-        não produz saída em grafo, ex: FNO2d/MaskedFNO2d, ou se a run não passou
+        não produz saída em grafo, ex: FNO2d, ou se a run não passou
         metric_fn a fit()).
         """
         entry = {

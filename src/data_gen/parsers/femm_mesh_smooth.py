@@ -37,8 +37,7 @@ edge_index, e todo o resto do layout bipartite (node_x, elem_x, arestas,
 arestas cruzadas, contagens).
 
 Sem node_A/a_hw (2026-10-21): o layout v1 deixou de carregar o potencial A,
-que nenhum código do pipeline atual lia (só os eval_fn antigos de
-archs/eval.py); o gabarito do femm_mesh_v2 (curl(A)/interpolação) não é mais
+que nenhum código do pipeline atual lia (só os eval_fn antigos); o gabarito do femm_mesh_v2 (curl(A)/interpolação) não é mais
 calculado (target_field=None).
 """
 from pathlib import Path

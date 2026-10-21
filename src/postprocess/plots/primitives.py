@@ -4,8 +4,6 @@ Primitivas de plot reutilizadas por todas as figuras (recebem `ax`, não chamam 
 save_fig: origem tests/resultados/common.py (2026-10-13).
 Estilo (cores, B_VMAX, rcParams): origem tests/resultados/common.py e figures_smooth.py
 (2026-10-20); cor nova para a FNO_BipartiteGNN_Elem.
-A migrar, se usados: src/neural_op/archs/eval.py (_imshow, _scatter, _trisurf,
-_err_*), src/utils/visualization.py (plot_ang_grid, adaptada para receber ax).
 """
 from pathlib import Path
 

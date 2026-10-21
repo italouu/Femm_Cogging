@@ -1,8 +1,8 @@
 """
 run_battery.py — executa uma bateria de treinos (2026-10-13).
 
-    python -m scripts.run_battery smooth              # src/configs/batteries/smooth.py
-    python -m scripts.run_battery smooth --dry-run    # só valida e mostra a sequência
+    python -m scripts.run_battery bldc                # src/configs/batteries/bldc.py
+    python -m scripts.run_battery bldc --dry-run      # só valida e mostra a sequência
     python -m scripts.run_battery tests.minha_bateria # módulo qualquer com BATTERY
 
 A bateria (src/configs/battery.py::BatteryCfg) é uma sequência de funções que devolvem

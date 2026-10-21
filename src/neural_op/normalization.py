@@ -52,16 +52,6 @@ _LAYOUTS = {
 # GNN_PostBase: mesmo layout do FNO_GNN (node_x lido por _interpolate_fno_to_nodes)
 _LAYOUTS['GNN_PostBase'] = _LAYOUTS['FNO_GNN']
 
-# Archs legadas (saem na limpeza, item 5): exclusões antigas mantidas, sem checagem de
-# colunas -- Masked*/SingleMat fazem threshold físico sobre mu_r cru (x_hw[:,0]) no forward.
-_LEGACY_RAW = {
-    'MaskedFNO2d':         {'x_hw': {0}},
-    'FNO2d_SingleMat':     {'x_hw': {0}},
-    'MaskedFNO_GNN':       {'x_hw': {0}, 'node_x': {0, 2, 3, 4}},
-    'FNO_GNN_v2':          {'node_x': {0, 2, 3, 4}},
-    'FNO_BipartiteGNN_v3': {'node_x': {0, 1}},
-}
-
 # chaves normalizadas por Normalizer.fit (as presentes no chunk)
 _NORM_KEYS = ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x', 'edge_attr', 'cross_edge_attr')
 
@@ -69,8 +59,6 @@ _NORM_KEYS = ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x', 'edge_attr', 'cross_
 def _check_layout(arch: str, sample: dict, dataset: str) -> dict:
     """Confere o chunk contra _LAYOUTS[arch] e devolve {chave: colunas cruas}. Falha alto se
     faltar chave do layout ou se o nº de colunas divergir."""
-    if arch in _LEGACY_RAW:
-        return {k: set(v) for k, v in _LEGACY_RAW[arch].items()}
     if arch not in _LAYOUTS:
         raise KeyError(f"Normalizer: arch '{arch}' sem layout declarado em _LAYOUTS")
     excl = {}
@@ -129,7 +117,7 @@ class Normalizer:
     """
     z-score por canal para x_hw/y_hw/node_x/node_y/elem_x/edge_attr/cross_edge_attr. Stats 1x sobre
     os chunks de treino de um dataset (ver fit); colunas cruas (posição lida pela
-    interpolação grade -> pontos) por arch em _LAYOUTS (legadas: _LEGACY_RAW).
+    interpolação grade -> pontos) por arch em _LAYOUTS.
     encode/decode fazem broadcast por canal, suportando
     tensores [B,C,H,W] (grade) e [S,C] (nós).
     """

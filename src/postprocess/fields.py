@@ -5,8 +5,6 @@ Origem: tests/resultados/common.py (2026-10-13), sem mudança de lógica
 (_mag -> mag, agora pública).
 Não migrados (sem uso desde a remoção do cogging): arc_theta_deg, _barycentric,
 arc_elements, arc_weights, arc_values_from_nodes, to_polar.
-Os helpers de elemento de src/neural_op/archs/eval.py só entram aqui se algum
-eval_fn em uso precisar deles.
 """
 import numpy as np
 import torch

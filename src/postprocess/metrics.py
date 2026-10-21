@@ -13,7 +13,7 @@ import math
 
 import numpy as np
 
-# Domínio de amostragem fixo (generate_samples_constrained) -- pesos da grade
+# Domínio de amostragem fixo (setor r ∈ [28,5; 46,5] mm, θ ∈ [0°, 120°]) -- grade × malha
 R_IN_MM, R_EXT_MM  = 28.5, 46.5
 ANG1_DEG, ANG2_DEG = 0.0, 120.0
 
@@ -72,26 +72,6 @@ def merge(accs):
         for f in Accum.FIELDS:
             setattr(m, f, getattr(m, f) + getattr(a, f))
     return m
-
-
-def node_err(mag_p, mag_t, area):
-    """(L1_A, L2_A, pontual) em T de 1 amostra."""
-    e = np.abs(mag_p - mag_t).astype(np.float64)
-    a = area.astype(np.float64)
-    return (float((e * a).sum() / a.sum()), float(math.sqrt((e ** 2 * a).sum() / a.sum())),
-            float(e.mean()))
-
-
-def surf_err(mag_p, mag_t, a):
-    """|erro| por nó e L1_A / L2_A / pontual (T e % de B_ref) de 1 amostra.
-    Origem: tests/resultados/surface_error_smooth.py (2026-10-20)."""
-    e = np.abs(mag_p - mag_t)
-    b_ref = np.sqrt((mag_t ** 2 * a).sum() / a.sum())
-    l1 = (e * a).sum() / a.sum()
-    l2 = np.sqrt((e ** 2 * a).sum() / a.sum())
-    return e, dict(L1_A_T=float(l1), L2_A_T=float(l2), L1_pt_T=float(e.mean()),
-                   L1_A_pct=float(100 * l1 / b_ref), L2_A_pct=float(100 * l2 / b_ref),
-                   L1_pt_pct=float(100 * e.mean() / b_ref), B_ref_T=float(b_ref))
 
 
 def pstats(v):
@@ -232,23 +212,6 @@ def surface_values_p1(tri, B_node, bary):
     (interpolação linear das componentes no triângulo)."""
     V = B_node[tri]                                      # [M,3,2]
     return np.hypot(V[..., 0] @ bary.T, V[..., 1] @ bary.T)
-
-
-def add_mesh_surface(acc, mq, mag_model):
-    """Acumula em acc o erro de superfície malha × malha: mag_model [M,K] (P1) ou [M]
-    (P0, constante no elemento) contra mq['mag'] [M,K]; peso = área/K por ponto."""
-    K = mq['bary'].shape[0]
-    mm = mag_model if mag_model.ndim == 2 else np.broadcast_to(mag_model[:, None], mq['mag'].shape)
-    w = np.broadcast_to((mq['area'] / K)[:, None], mq['mag'].shape)
-    acc.add_surface(mm.ravel(), mq['mag'].ravel(), w.ravel())
-
-
-def grid_area_weights(H, W):
-    """dA = r·dr·dθ por linha (radial); angular uniforme."""
-    dr     = (R_EXT_MM - R_IN_MM) / H
-    dtheta = math.radians(ANG2_DEG - ANG1_DEG) / W
-    r      = R_IN_MM + (np.arange(H) + 0.5) * dr
-    return np.broadcast_to((r * dr * dtheta)[:, None], (H, W))
 
 
 def surface_error_per_triangle(n_tri, tri_idx, mag_model, mag_femm, w):

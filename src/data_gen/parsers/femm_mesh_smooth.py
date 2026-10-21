@@ -1,14 +1,14 @@
 """
 parsers/femm_mesh_smooth.py
 ----------------------------
-Mesmos 4 layouts de `femm_mesh_unified.py` (FNO2d, FNO_GNN, GNN_PostBase,
-FNO_BipartiteGNN), a partir do MESMO raw (`.ans.gz`, `mode='femm_mesh_v2'`),
-mas com o gabarito B trocado pela suavização do pós-processador do FEMM
+Layouts das 4 archs de SMOOTH_ARCHS (FNO2d, FNO_GNN, GNN_PostBase,
+FNO_BipartiteGNN) a partir do raw (`.ans.gz`), com o gabarito B da suavização
+do pós-processador do FEMM
 (`ans_b_smoothing.py`, porte de xfemm validado a ~1e-15 contra o FEMM) e o
 material do nó por PRIORIDADE em vez de voto por área (2026-10-09, ver
 CLAUDE.md "Suavização de B do FEMM a partir do `.ans`").
 
-Diferenças em relação a parse_ans_gzip_sample_unified:
+Diferenças em relação ao gabarito "unificado" (curl(A); parser removido em 2026-10-21):
 
   material do nó  -- prioridade ferro > ímã > cobre > ar entre os elementos
                      incidentes (_node_material_priority), em vez do voto por
@@ -48,15 +48,14 @@ from scipy.spatial import cKDTree
 
 from src.data_gen.parsers.ans_b_smoothing import load_ans, element_b, nodal_b, point_b
 from src.data_gen.parsers.ans_parsing import (
-    _parse_label_materials, _build_edges, _element_areas, _node_material_stats,
+    _read_ans_gz, _parse_label_materials, _build_edges, _element_areas, _node_material_stats,
     _node_magnet_polarity, _node_material_priority, _wrap_edge_pairs,
     _build_bidirectional_edge_attrs, _grid_polar_xy, _MU_BY_ID, _MAGNET_ID,
     _node_current_density, _to_polar,
 )
 from src.data_gen.parsers.femm_mesh_v2 import parse_ans_gzip_sample, _build_trifinder
-from src.data_gen.parsers.femm_mesh_unified import _read_ans_gz, UNIFIED_ARCHS
 
-SMOOTH_ARCHS = UNIFIED_ARCHS
+SMOOTH_ARCHS = ('FNO2d', 'FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN')
 
 
 def _node_b_by_material(elems: np.ndarray, elem_material_id: np.ndarray,

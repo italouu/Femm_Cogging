@@ -88,7 +88,7 @@ import torch
 
 from scripts.build_smooth_ans_chunks_direct import MAX_SAMPLES
 from src.configs.datagen import DatagenConfig
-from src.data_gen.parsers.femm_mesh_unified import _read_ans_gz
+from src.data_gen.parsers.ans_parsing import _read_ans_gz
 from src.postprocess.fields import elem_to_nodes, gap_radius_mm, mag
 from src.postprocess.inference import (ARCHS, INTERP_MODE, RUN_ORDER, find_runs, floor_nodes,
                                        load_set, predict, to_torch_sample)

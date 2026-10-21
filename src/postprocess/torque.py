@@ -153,7 +153,7 @@ def parse_torque_sample(path, row, tmp_dir):
     """1 .ans.gz -> layouts para os modelos (samples.parse_smooth com Elem) + o que o torque
     usa: gt exato por elemento (xy), smooth no centróide (xy), material, centróide, área."""
     from src.data_gen.parsers.femm_mesh_elem import parse_ans_gzip_sample_elem
-    from src.data_gen.parsers.femm_mesh_unified import _read_ans_gz
+    from src.data_gen.parsers.ans_parsing import _read_ans_gz
     from src.postprocess.samples import ANG_1, ANG_2, N_A, N_R, parse_smooth
     tmp_dir = Path(tmp_dir)
     tmp_dir.mkdir(parents=True, exist_ok=True)

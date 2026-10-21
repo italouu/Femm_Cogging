@@ -2,16 +2,14 @@
 build_smooth_ans_chunks_direct.py
 ---------------------------------
 Chunks dos 4 datasets com gabarito B SUAVIZADO do FEMM (node_y por prioridade
-de material, y_hw = point_b smooth) -- raw -> chunks direto, sem staging .npz.
-Mesma mecânica de scripts/build_unified_ans_chunks_direct.py (pool novo por
-chunk, escrita atômica em <arch>/.tmp/, retomável), só trocando o parser por
-parse_ans_gzip_sample_smooth (ver src/data_gen/parsers/femm_mesh_smooth.py e
-CLAUDE.md "Suavização de B do FEMM a partir do `.ans`"). 2026-10-09.
+de material, y_hw = point_b smooth, polares) -- raw -> chunks direto, sem
+staging .npz: pool novo por chunk, escrita atômica (src/data_gen/chunks.py),
+retomável. Parser: parse_ans_gzip_sample_smooth (src/data_gen/parsers/
+femm_mesh_smooth.py; CLAUDE.md "Suavização de B do FEMM a partir do `.ans`").
 
-Raw de origem: o MESMO raw da bateria oficial sem smooth
-(data/raw/mesh_ans_138x276/) -- mesmo chunking (CHUNK_SIZE amostras, mesma
-ordem), então o split_seed=12 dá o mesmo split treino/teste.
-Saída: data/torch/data_chunks/mesh_ans_138x276/<arch>/data_chunk_XXXX.pt
+Raw de origem: data/raw/<DatagenConfig.dataset>/ -- chunking fixo (CHUNK_SIZE
+amostras, mesma ordem), então o split_seed=12 dá o mesmo split treino/teste.
+Saída: data/torch/data_chunks/<DatagenConfig.dataset>/<arch>/data_chunk_XXXX.pt
 
 Execução (a partir da raiz do projeto):
     python -m scripts.build_smooth_ans_chunks_direct

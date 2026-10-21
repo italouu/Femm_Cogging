@@ -7,26 +7,14 @@ H×W a partir do `.ans.gz` bruto salvo por mode='femm_mesh_v2'
 save_ans_gzip_sample) -- sem FEMM aberto, sem nenhuma chamada COM, só o
 arquivo já salvo em disco.
 
-Relocado de src/data_gen/femm_mesh_v2.py em 2026-08-13 -- essa etapa é,
-junto com ans_parsing.py, todo o "serviço de parsing" do pipeline
-femm_mesh_v2 (raw .ans.gz -> arrays de treino), então mora com os demais
-parsers do projeto em src/data_gen/parsers/ (ver PARSER_REGISTRY em
-src/data_gen/parsers/__init__.py -- esse módulo não entra nesse registry,
-já que não é um MotorQtreeParserConfig de seleção de colunas, mas é o mesmo
-tipo de responsabilidade: transformar dado bruto em formato de treino).
-Motivo original da separação: src/data_gen/femm_mesh.py (v1) tem
-`import femm` no topo (necessário só pras funções que abrem o FEMM de
-verdade) -- importar qualquer coisa de lá arrastava esse import junto,
-mesmo pro caminho 100% numpy daqui. Ver docstring de ans_parsing.py.
+Base estrutural dos parsers smooth (femm_mesh_smooth, femm_mesh_elem):
+eles chamam parse_ans_gzip_sample(target_field=None) e preenchem node_y/y_hw
+com o B suavizado. target_field='B' (curl(A) exato) é o gabarito do torque
+(femm_mesh_elem, src/postprocess/torque.py).
 
-Duas mudanças de design em relação a mode='femm_mesh' (v1, femm_mesh.py):
+Decisão de design (em relação ao grafo único de vértices do layout v1):
 
-  1. B deixa de ser alvo -- só A (potencial vetor), extraído nodal exato do
-     .ans. Sem o loop de mo_getb por nó (não tem como -- não existe sessão
-     FEMM aberta aqui, só o arquivo). Ver CLAUDE.md "Raw -- malha real do
-     FEMM v2".
-
-  2. Material (mu_r, M) deixa de ser feature de vértice -- no v1, um nó bem
+  Material (mu_r, M) deixa de ser feature de vértice -- no v1, um nó bem
      na fronteira ferro/ar tinha que "votar" por UM material (ambíguo, perde
      informação). Aqui vira um GRAFO SEPARADO, de elementos/centróides
      (1 material por elemento, sempre exato, sem ambiguidade nenhuma),
@@ -39,7 +27,7 @@ Duas mudanças de design em relação a mode='femm_mesh' (v1, femm_mesh.py):
 
 Grafo 1 -- vértices/campo (nós da malha real):
     node_x [S,2]  r_base, c_base
-    node_y [S,1] (target_field='A', padrão) ou [S,2] (target_field='B')
+    node_y [S,2] (target_field='B') ou None (target_field=None)
     edge_index [2,E]  bidirecional -- malha real + wrap periódico θ=0/120°
     edge_attr [E,3]  delta_r, delta_c, center_dist  (SEM delta_mu -- mu_r
                      não é mais feature de vértice, não tem o que subtrair)
@@ -52,7 +40,7 @@ target_field='B' (2026-08-13, ver CLAUDE.md "Grafo duplo vértices+elementos"):
                   absolutas), agregado por nó via média simples dos
                   elementos incidentes (_node_mean_of_elements -- mesma
                   caracterização empírica do B suavizado do FEMM usada no
-                  eval). y_hw amostrado com O MESMO padrão de A (barycentric,
+                  eval). y_hw por interpolação baricêntrica (barycentric,
                   não constante-por-elemento) -- ver _grid_barycentric.
 
 Grafo 2 -- elementos/centróides (1 nó por triângulo, SEM arestas internas):
@@ -71,10 +59,9 @@ Grade H×W (amostrada só do grafo, sem COM):
                   elemento; fallback pro elemento de centróide mais
                   próximo se o pixel cair fora da triangulação -- SEM
                   fallback por nó, nó não carrega material nesse design)
-    y_hw [1,H,W]  A -- interpolação baricêntrica nos 3 nós do elemento que
-                  contém o pixel (mesma função de forma do FEM linear;
-                  validado MAE≈0 contra point-query em 2026-07-23, ver
-                  CLAUDE.md "Point-query vs malha para a grade H×W")
+    y_hw [2,H,W]  Bx, By (target_field='B') -- interpolação baricêntrica
+                  nos 3 nós do elemento que contém o pixel (mesma função de
+                  forma do FEM linear); None com target_field=None
 
 r_in/r_ext/ang_1/ang_2 (janela de amostragem) são passados pelo chamador --
 essa função não abre FEMM nem instancia o modelo geométrico, só lê o
@@ -145,12 +132,12 @@ def _grid_barycentric(tri, node_field: np.ndarray, Xg: np.ndarray, Yg: np.ndarra
 def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
                            ang_1: float = 0.0, ang_2: float = 120.0,
                            n_r: int = 138, n_a: int = 276,
-                           tmp_dir: Path = None, target_field: str | None = 'A') -> dict:
+                           tmp_dir: Path = None, target_field: str | None = 'B') -> dict:
     """Deriva os dois grafos + grade H×W de UMA amostra a partir do
     `sample_XXXXXX.ans.gz` bruto. Sem FEMM aberto, sem chamada COM --
     só descompacta o arquivo e faz numpy/matplotlib.tri puro.
 
-    `target_field`: 'A' (padrão, retrocompatível) ou 'B' -- ver docstring do
+    `target_field`: 'B' -- ver docstring do
     módulo. Só afeta `node_y`/`y_hw`; o resto do dict (grafo de elementos,
     arestas cruzadas, x_hw) é idêntico nos dois casos. None (2026-10-21): não
     calcula gabarito nenhum (nem curl(A)/média nodal nem interpolação na grade)
@@ -161,7 +148,7 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     L/elem_L/E_L/C_L (contagens por amostra, pra agrupamento em chunks) e
     dim_H/dim_W.
     """
-    assert target_field in ('A', 'B', None), f"target_field inválido: {target_field!r}"
+    assert target_field in ('B', None), f"target_field inválido: {target_field!r}"
     ans_gz_path = Path(ans_gz_path)
     tmp_dir = Path(tmp_dir) if tmp_dir is not None else ans_gz_path.parent
     stem = ans_gz_path.name.removesuffix('.ans.gz')
@@ -217,9 +204,7 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     node_x = np.stack([r_base, c_base], axis=1).astype(np.float32)
 
     node_Bx = node_By = None
-    if target_field == 'A':
-        node_y = node_A[:, None]
-    elif target_field == 'B':
+    if target_field == 'B':
         elem_Bx, elem_By = _element_b_from_A(nodes, elems, node_A)
         node_Bx = _node_mean_of_elements(elems, elem_Bx, n_nodes)
         node_By = _node_mean_of_elements(elems, elem_By, n_nodes)
@@ -252,13 +237,9 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     Mu_hw = _grid_const_per_element(trifinder, elem_mu, centroids, Xg, Yg).reshape(n_r, n_a)
     M_hw = _grid_const_per_element(trifinder, elem_M, centroids, Xg, Yg).reshape(n_r, n_a)
     J_hw = _grid_const_per_element(trifinder, elem_J, centroids, Xg, Yg).reshape(n_r, n_a)
-    if target_field == 'A':
-        A_hw = _grid_barycentric(tri, node_A, Xg, Yg).reshape(n_r, n_a)
-        y_hw = A_hw[None, :, :]
-    elif target_field == 'B':
-        # mesmo padrão de amostragem de A -- interpolação baricêntrica do
-        # campo nodal (aqui Bx/By, já a média-por-nó calculada acima), não
-        # constante-por-elemento (estilo Mu_r/M).
+    if target_field == 'B':
+        # interpolação baricêntrica do campo nodal (Bx/By, a média-por-nó
+        # calculada acima), não constante-por-elemento (estilo Mu_r/M).
         Bx_hw = _grid_barycentric(tri, node_Bx[:, 0], Xg, Yg).reshape(n_r, n_a)
         By_hw = _grid_barycentric(tri, node_By[:, 0], Xg, Yg).reshape(n_r, n_a)
         y_hw = np.stack([Bx_hw, By_hw], axis=0)

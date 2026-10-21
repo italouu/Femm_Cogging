@@ -64,7 +64,7 @@ import numpy as np
 
 from src.data_gen.parsers.ans_parsing import _element_b_from_A, _wrap_edge_pairs
 from src.data_gen.parsers.femm_mesh_v2 import parse_ans_gzip_sample
-from src.data_gen.parsers.femm_mesh_unified import _read_ans_gz
+from src.data_gen.parsers.ans_parsing import _read_ans_gz
 
 
 def check_elem_layout(d: dict, n_elems: int = None):

@@ -37,7 +37,7 @@ from src.data_gen.parsers.ans_parsing import _grid_polar_xy, _to_polar
 from src.data_gen.parsers.femm_mesh_elem import parse_ans_gzip_sample_elem
 from src.data_gen.parsers.femm_mesh_smooth import _grid_smooth_b
 from src.data_gen.parsers.femm_mesh_v2 import _build_trifinder
-from src.data_gen.parsers.femm_mesh_unified import _read_ans_gz
+from src.data_gen.parsers.ans_parsing import _read_ans_gz
 
 
 def parse_ans_gzip_sample_elem_smooth(ans_gz_path: Path, r_in: float, r_ext: float,

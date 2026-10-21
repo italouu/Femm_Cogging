@@ -29,7 +29,7 @@ from src.data_gen.parsers.ans_b_smoothing import element_b, load_ans, nodal_b
 from src.data_gen.parsers.ans_parsing import _node_material_priority, _parse_label_materials
 from src.data_gen.parsers.femm_mesh_elem_smooth import parse_ans_gzip_sample_elem_smooth
 from src.data_gen.parsers.femm_mesh_smooth import parse_ans_gzip_sample_smooth
-from src.data_gen.parsers.femm_mesh_unified import _read_ans_gz
+from src.data_gen.parsers.ans_parsing import _read_ans_gz
 from src.neural_op.dataloaders.grid_loader import split_chunk_paths
 from src.postprocess.metrics import grid_mesh_overlay, mesh_surface_quadrature
 

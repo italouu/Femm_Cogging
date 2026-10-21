@@ -126,7 +126,7 @@ def precheck(out_name=OUT_NAME, max_samples=MAX_SAMPLES) -> bool:
     B1, B2 = element_b(mesh)
     b1, b2 = nodal_b(mesh, B1, B2)
     from src.data_gen.parsers.ans_parsing import _to_polar
-    from src.data_gen.parsers.femm_mesh_unified import _read_ans_gz
+    from src.data_gen.parsers.ans_parsing import _read_ans_gz
     _, nodes, elems = _read_ans_gz(p, TMP_PARSE)
     cen = nodes[elems[:, :3], :2].mean(axis=1)
     ref = np.stack(_to_polar(b1.mean(axis=1), b2.mean(axis=1), cen[:, 0], cen[:, 1]), axis=1)

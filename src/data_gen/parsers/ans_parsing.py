@@ -7,6 +7,10 @@ sessão FEMM aberta, só numpy sobre dados já em memória/disco. Usadas pelos
 parsers smooth (femm_mesh_v2/femm_mesh_smooth/femm_mesh_elem*) e pelo
 pós-processamento (src/postprocess/), que rodam sem FEMM (Linux).
 """
+import gzip
+import shutil
+from pathlib import Path
+
 import numpy as np
 
 from src.data_gen.motor_constants import MATERIAL_ID, PERMEABILITY, MAGNETIZATION
@@ -37,6 +41,19 @@ def _parse_solution(ans_path):
     n_elems = int(lines[idx2].strip())
     elems = np.loadtxt(lines[idx2 + 1: idx2 + 1 + n_elems])[:, :4].astype(np.int64)  # n1,n2,n3,label
     return lines, nodes, elems
+
+
+def _read_ans_gz(ans_gz_path: Path, tmp_dir: Path):
+    """Descomprime `sample_XXXXXX.ans.gz` num temporário em tmp_dir e devolve
+    _parse_solution dele: (linhas, nodes [S,3] x/y/A, elems [M,4] n1/n2/n3/label)."""
+    stem = ans_gz_path.name.removesuffix('.ans.gz')
+    tmp_ans = tmp_dir / f"{stem}.tmp_unified.ans"
+    with gzip.open(ans_gz_path, 'rb') as f_in, open(tmp_ans, 'wb') as f_out:
+        shutil.copyfileobj(f_in, f_out)
+    try:
+        return _parse_solution(str(tmp_ans))
+    finally:
+        tmp_ans.unlink(missing_ok=True)
 
 
 def _parse_block_materials(lines):

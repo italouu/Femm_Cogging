@@ -198,9 +198,14 @@ class Normalizer:
     tensores [B,C,H,W] (grade) e [S,C] (nós).
     """
 
-    def __init__(self, stats: dict, exclude: dict = None):
+    # [REMOVIDO 2026-10-21] sem train_chunks (R3: identificação dos chunks das stats)
+    # def __init__(self, stats: dict, exclude: dict = None):
+    def __init__(self, stats: dict, exclude: dict = None, train_chunks: dict = None):
         self.stats   = stats or {}
         self.exclude = exclude or {}
+        # chunks de treino usados nas stats -- {'sha1': hash do nome do cache, 'n', 'cache'};
+        # gravado no config.json da run (norm_stats.train_chunks). {} em runs antigas.
+        self.train_chunks = train_chunks or {}
 
     # [REMOVIDO 2026-10-20] stats sobre TODOS os chunks do dataset (inclusive os de teste),
     # embora a docstring dissesse "chunks de treino" -- agora só os chunks de treino do split.
@@ -252,17 +257,20 @@ class Normalizer:
             stats = _fit_stats_from_chunks(chunk_paths, keys)
             cache_path.write_text(json.dumps(stats))
         # [REMOVIDO 2026-10-21] return cls(stats, exclude=_exclude_channels(arch, has_graph, node_x_ch))
-        return cls(stats, exclude=exclude)
+        return cls(stats, exclude=exclude,
+                   train_chunks={'sha1': tag, 'n': len(chunk_paths), 'cache': cache_path.name})
 
     @classmethod
     def from_dict(cls, d: dict) -> 'Normalizer':
         exclude = {k: set(v) for k, v in d.get('exclude', {}).items()}
-        return cls(d.get('stats', {}), exclude=exclude)
+        # [REMOVIDO 2026-10-21] return cls(d.get('stats', {}), exclude=exclude)
+        return cls(d.get('stats', {}), exclude=exclude, train_chunks=d.get('train_chunks'))
 
     def to_dict(self) -> dict:
         return {
             'stats':   self.stats,
             'exclude': {k: sorted(v) for k, v in self.exclude.items()},
+            'train_chunks': self.train_chunks,
         }
 
     def _mean_std(self, key, device, dtype):

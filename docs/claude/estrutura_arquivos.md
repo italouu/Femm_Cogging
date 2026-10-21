@@ -10,7 +10,6 @@
 | Script | O que faz |
 |---|---|
 | `generate_data_femm_mesh_v2` | raw: sorteio (`BLDC_Process.generate_samples` + `add_phase_currents`) → `valid_designs.csv` + FEMM por amostra → `data/raw/<dataset>/sample_XXXXXX.ans.gz` (Windows, pyfemm) |
-| `fix_stack_length` | correção pontual do `stack_length [mm]` no `valid_designs.csv` de um raw antigo |
 | `build_smooth_datasets` | os 5 datasets de uma vez: chama `build_smooth_ans_chunks_direct` (FNO2d, FNO_GNN, GNN_PostBase, FNO_BipartiteGNN) e `build_elem_smooth_chunks` (Elem) |
 | `train` | treino de um `NnCfg` (`scripts/train.py::run`) |
 | `run_battery <nome> [--dry-run]` | bateria `src/configs/batteries/<nome>.py::BATTERY` (oficial: `bldc`) |
@@ -21,7 +20,6 @@
 ```
 scripts/
     generate_data_femm_mesh_v2.py   raw (.ans.gz) + valid_designs.csv
-    fix_stack_length.py             correção do stack length no CSV
     build_smooth_datasets.py        orquestra os 5 datasets (precheck, disco, contagem final)
     build_smooth_ans_chunks_direct.py   chunks das 4 archs (parse_ans_gzip_sample_smooth)
     build_elem_smooth_chunks.py     chunks da Elem (parse_ans_gzip_sample_elem_smooth) + precheck

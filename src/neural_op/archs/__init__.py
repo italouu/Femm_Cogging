@@ -34,10 +34,6 @@ def _fno_kwargs(cfg):
     return asdict(cfg)
 
 
-def _fno_gnn_kwargs(cfg):
-    # lambda_loss não é parâmetro do construtor do modelo — usado apenas na step_fn
-    # (2026-10-20: removido das configs; o filtro fica para configs antigas)
-    return {k: v for k, v in asdict(cfg).items() if k != 'lambda_loss'}
 
 
 def _gnn_post_base_kwargs(cfg):
@@ -72,7 +68,7 @@ ARCH_REGISTRY: dict = {
         cls=FNO_GNN,
         cfg_cls=FNO_GNNConfig,
         loader_mode='mesh_v1',
-        model_kwargs=_fno_gnn_kwargs,
+        model_kwargs=_fno_kwargs,
         make_step_fn=lambda cfg, lcfg: fno_gnn_step,
         metric_fn=lambda cfg: fno_gnn_metric_fn,
     ),
@@ -91,7 +87,7 @@ ARCH_REGISTRY: dict = {
         cls=FNO_BipartiteGNN,
         cfg_cls=FNO_BipartiteGNNConfig,
         loader_mode='femm_mesh_v2',
-        model_kwargs=_fno_gnn_kwargs,   # só descarta lambda_loss, igual FNO_GNN
+        model_kwargs=_fno_kwargs,
         make_step_fn=lambda cfg, lcfg: fno_bipartite_gnn_step,
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),
@@ -104,7 +100,7 @@ ARCH_REGISTRY: dict = {
         cls=FNO_BipartiteGNN_Elem,
         cfg_cls=FNO_BipartiteGNN_ElemConfig,
         loader_mode='femm_mesh_v2',
-        model_kwargs=_fno_gnn_kwargs,
+        model_kwargs=_fno_kwargs,
         make_step_fn=lambda cfg, lcfg: fno_bipartite_gnn_step,
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),

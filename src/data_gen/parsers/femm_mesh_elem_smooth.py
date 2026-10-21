@@ -48,13 +48,17 @@ def parse_ans_gzip_sample_elem_smooth(ans_gz_path: Path, r_in: float, r_ext: flo
     ans_gz_path = Path(ans_gz_path)
     tmp_dir = Path(tmp_dir) if tmp_dir is not None else ans_gz_path.parent
 
+    # [REMOVIDO 2026-10-21] curl(A) exato e y_hw baricêntrico calculados e descartados
+    # d = parse_ans_gzip_sample_elem(ans_gz_path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
+    #                                n_r=n_r, n_a=n_a, tmp_dir=tmp_dir)
     d = parse_ans_gzip_sample_elem(ans_gz_path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
-                                   n_r=n_r, n_a=n_a, tmp_dir=tmp_dir)
+                                   n_r=n_r, n_a=n_a, tmp_dir=tmp_dir, target_field=None)
 
     _, nodes, elems = _read_ans_gz(ans_gz_path, tmp_dir)
     mesh = load_ans(ans_gz_path)
     assert np.array_equal(mesh.p, elems[:, :3]), "conectividade divergente entre leitores do .ans"
-    assert elems.shape[0] == d['node_y'].shape[0], "contagem de elementos divergente"
+    # [REMOVIDO 2026-10-21] assert elems.shape[0] == d['node_y'].shape[0], "contagem de elementos divergente"
+    assert elems.shape[0] == d['node_x'].shape[0], "contagem de elementos divergente"
     B1, B2 = element_b(mesh)
     b1, b2 = nodal_b(mesh, B1, B2)
 

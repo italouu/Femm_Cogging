@@ -146,20 +146,24 @@ def _grid_barycentric(tri, node_field: np.ndarray, Xg: np.ndarray, Yg: np.ndarra
 def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
                            ang_1: float = 0.0, ang_2: float = 120.0,
                            n_r: int = 138, n_a: int = 276,
-                           tmp_dir: Path = None, target_field: str = 'A') -> dict:
+                           tmp_dir: Path = None, target_field: str | None = 'A') -> dict:
     """Deriva os dois grafos + grade H×W de UMA amostra a partir do
     `sample_XXXXXX.ans.gz` bruto. Sem FEMM aberto, sem chamada COM --
     só descompacta o arquivo e faz numpy/matplotlib.tri puro.
 
     `target_field`: 'A' (padrão, retrocompatível) ou 'B' -- ver docstring do
     módulo. Só afeta `node_y`/`y_hw`; o resto do dict (grafo de elementos,
-    arestas cruzadas, x_hw) é idêntico nos dois casos.
+    arestas cruzadas, x_hw) é idêntico nos dois casos. None (2026-10-21): não
+    calcula gabarito nenhum (nem curl(A)/média nodal nem interpolação na grade)
+    -- `node_y`/`y_hw` saem como None, para o chamador preencher (parsers
+    smooth: femm_mesh_smooth, femm_mesh_elem).
 
     Retorna dict com todos os campos descritos na docstring do módulo, mais
     L/elem_L/E_L/C_L (contagens por amostra, pra agrupamento em chunks) e
     dim_H/dim_W.
     """
-    assert target_field in ('A', 'B'), f"target_field inválido: {target_field!r}"
+    # [REMOVIDO 2026-10-21] assert target_field in ('A', 'B'), f"target_field inválido: {target_field!r}"
+    assert target_field in ('A', 'B', None), f"target_field inválido: {target_field!r}"
     ans_gz_path = Path(ans_gz_path)
     tmp_dir = Path(tmp_dir) if tmp_dir is not None else ans_gz_path.parent
     stem = ans_gz_path.name.removesuffix('.ans.gz')
@@ -222,11 +226,14 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     node_Bx = node_By = None
     if target_field == 'A':
         node_y = node_A[:, None]
-    else:
+    # [REMOVIDO 2026-10-21] else:   (None = sem gabarito)
+    elif target_field == 'B':
         elem_Bx, elem_By = _element_b_from_A(nodes, elems, node_A)
         node_Bx = _node_mean_of_elements(elems, elem_Bx, n_nodes)
         node_By = _node_mean_of_elements(elems, elem_By, n_nodes)
         node_y = np.concatenate([node_Bx, node_By], axis=1)
+    else:
+        node_y = None   # preenchido pelo chamador
 
     # --- grafo 2: elementos/centróides (sem arestas internas) ---
     n_elems = elems.shape[0]
@@ -256,13 +263,16 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     if target_field == 'A':
         A_hw = _grid_barycentric(tri, node_A, Xg, Yg).reshape(n_r, n_a)
         y_hw = A_hw[None, :, :]
-    else:
+    # [REMOVIDO 2026-10-21] else:   (None = sem gabarito)
+    elif target_field == 'B':
         # mesmo padrão de amostragem de A -- interpolação baricêntrica do
         # campo nodal (aqui Bx/By, já a média-por-nó calculada acima), não
         # constante-por-elemento (estilo Mu_r/M).
         Bx_hw = _grid_barycentric(tri, node_Bx[:, 0], Xg, Yg).reshape(n_r, n_a)
         By_hw = _grid_barycentric(tri, node_By[:, 0], Xg, Yg).reshape(n_r, n_a)
         y_hw = np.stack([Bx_hw, By_hw], axis=0)
+    else:
+        y_hw = None     # preenchido pelo chamador
 
     return {
         'node_x': node_x, 'node_y': node_y,

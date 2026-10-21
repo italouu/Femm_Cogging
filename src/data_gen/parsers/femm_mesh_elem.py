@@ -100,14 +100,23 @@ def _build_dual_edges(nodes: np.ndarray, elems: np.ndarray, ang_1: float, ang_2:
 def parse_ans_gzip_sample_elem(ans_gz_path: Path, r_in: float, r_ext: float,
                                 ang_1: float = 0.0, ang_2: float = 120.0,
                                 n_r: int = 138, n_a: int = 276,
-                                tmp_dir: Path = None) -> dict:
+                                tmp_dir: Path = None, target_field: str | None = 'B') -> dict:
     """1 `.ans.gz` -> layout com papéis trocados (ver docstring do módulo).
-    Mesmo formato de dict de parse_ans_gzip_sample (dim_H/dim_W escalares)."""
+    Mesmo formato de dict de parse_ans_gzip_sample (dim_H/dim_W escalares).
+
+    target_field='B' (padrão): node_y = curl(A) exato por elemento e y_hw do
+    parse_ans_gzip_sample(target_field='B') -- é o gabarito usado pelo
+    postprocess/torque.py. None (2026-10-21): sem gabarito (node_y/y_hw = None),
+    para o parser smooth (femm_mesh_elem_smooth) preencher."""
     ans_gz_path = Path(ans_gz_path)
     tmp_dir = Path(tmp_dir) if tmp_dir is not None else ans_gz_path.parent
 
+    assert target_field in ('B', None), f"target_field inválido: {target_field!r}"
+    # [REMOVIDO 2026-10-21] gabarito B sempre calculado (o smooth descartava)
+    # bip = parse_ans_gzip_sample(ans_gz_path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
+    #                             n_r=n_r, n_a=n_a, tmp_dir=tmp_dir, target_field='B')
     bip = parse_ans_gzip_sample(ans_gz_path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
-                                n_r=n_r, n_a=n_a, tmp_dir=tmp_dir, target_field='B')
+                                n_r=n_r, n_a=n_a, tmp_dir=tmp_dir, target_field=target_field)
     _, nodes, elems = _read_ans_gz(ans_gz_path, tmp_dir)
     assert nodes.shape[0] == bip['node_x'].shape[0], "contagem de nós divergente"
     assert elems.shape[0] == bip['elem_x'].shape[0], "contagem de elementos divergente"
@@ -118,8 +127,13 @@ def parse_ans_gzip_sample_elem(ans_gz_path: Path, r_in: float, r_ext: float,
     rc, cc = ex[:, 3].astype(np.float64), ex[:, 4].astype(np.float64)
     # A em float32, como em parse_ans_gzip_sample (node_A) -- média nodal deste
     # B por elemento reproduz exatamente o node_y da bateria
-    elem_Bx, elem_By = _element_b_from_A(nodes, elems, nodes[:, 2].astype(np.float32))
-    node_y = np.stack([elem_Bx, elem_By], axis=1).astype(np.float32)
+    # [REMOVIDO 2026-10-21] curl(A) sempre calculado -- agora só com target_field='B'
+    # elem_Bx, elem_By = _element_b_from_A(nodes, elems, nodes[:, 2].astype(np.float32))
+    # node_y = np.stack([elem_Bx, elem_By], axis=1).astype(np.float32)
+    node_y = None   # target_field=None: preenchido pelo chamador
+    if target_field == 'B':
+        elem_Bx, elem_By = _element_b_from_A(nodes, elems, nodes[:, 2].astype(np.float32))
+        node_y = np.stack([elem_Bx, elem_By], axis=1).astype(np.float32)
 
     centroids = nodes[elems[:, :3], :2].mean(axis=1)
     i_int, j_int, i_wrap, j_wrap = _build_dual_edges(nodes, elems, ang_1, ang_2)

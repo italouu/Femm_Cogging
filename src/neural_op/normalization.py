@@ -124,7 +124,10 @@ _LEGACY_RAW = {
 }
 
 # chaves normalizadas por Normalizer.fit (as presentes no chunk)
-_NORM_KEYS = ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x')
+# [REMOVIDO 2026-10-21] sem as arestas (R2: edge_attr/cross_edge_attr passam a ser normalizados,
+# inclusive as arestas periódicas, sem caso especial)
+# _NORM_KEYS = ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x')
+_NORM_KEYS = ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x', 'edge_attr', 'cross_edge_attr')
 
 
 def _check_layout(arch: str, sample: dict, dataset: str) -> dict:
@@ -188,7 +191,7 @@ def _fit_stats_from_chunks(chunk_paths, keys):
 
 class Normalizer:
     """
-    z-score por canal para x_hw/y_hw/node_x/node_y/elem_x. Stats computadas 1x sobre
+    z-score por canal para x_hw/y_hw/node_x/node_y/elem_x/edge_attr/cross_edge_attr. Stats 1x sobre
     os chunks de treino de um dataset (ver fit); colunas cruas (posição lida pela
     interpolação grade -> pontos) por arch em _LAYOUTS (legadas: _LEGACY_RAW).
     encode/decode fazem broadcast por canal, suportando
@@ -212,7 +215,8 @@ class Normalizer:
             force_recompute: bool = False) -> 'Normalizer':
         """Stats só dos chunks de TREINO -- mesmo split de build_loaders
         (split_chunk_paths sobre sorted(glob), como scripts/train.py). Cache por split:
-        norm_stats_train_<hash dos nomes dos chunks de treino>.json."""
+        norm_stats_train_v2_<hash dos nomes dos chunks de treino>.json (v2 = com as
+        arestas; caches sem versão, sem edge_attr/cross_edge_attr, não são reaproveitados)."""
         import glob
         import hashlib
         from src.neural_op.dataloaders.grid_loader import split_chunk_paths
@@ -237,7 +241,9 @@ class Normalizer:
         keys    = [k for k in _NORM_KEYS if k in sample]
         del sample
 
-        cache_path = chunk_dir / f'norm_stats_train_{tag}.json'
+        # [REMOVIDO 2026-10-21] cache sem versão (stats sem as arestas)
+        # cache_path = chunk_dir / f'norm_stats_train_{tag}.json'
+        cache_path = chunk_dir / f'norm_stats_train_v2_{tag}.json'
         if cache_path.exists() and not force_recompute:
             stats = json.loads(cache_path.read_text())
         else:
@@ -294,7 +300,9 @@ class Normalizer:
         normalizado sem nenhuma mudança nos step_fn de cada arch)."""
         if isinstance(batch, dict):
             out = dict(batch)
-            for key in ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x'):
+            # [REMOVIDO 2026-10-21] sem as arestas (R2)
+            # for key in ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x'):
+            for key in _NORM_KEYS:
                 if key in out:
                     out[key] = self.encode(out[key], key)
             return out

@@ -562,7 +562,10 @@ def fno_gnn_eval_fn(model, d, eval_cfg):
     with torch.no_grad():
         x_hw_in   = normalizer.encode(x_hw,   'x_hw')   if normalizer is not None else x_hw
         node_x_in = normalizer.encode(node_x, 'node_x') if normalizer is not None else node_x
-        y_hw_fno, y_nodes = model(x_hw_in, node_x_in, edge_index, edge_attr, Li)
+        edge_attr_in = normalizer.encode(edge_attr, 'edge_attr') if normalizer is not None else edge_attr   # R2 (2026-10-21)
+        # [REMOVIDO 2026-10-21] arestas cruas no modelo (R2)
+        # y_hw_fno, y_nodes = model(x_hw_in, node_x_in, edge_index, edge_attr, Li)
+        y_hw_fno, y_nodes = model(x_hw_in, node_x_in, edge_index, edge_attr_in, Li)
         if normalizer is not None:
             y_hw_fno = normalizer.decode(y_hw_fno, 'y_hw')
             y_nodes  = normalizer.decode(y_nodes,  'node_y')
@@ -897,7 +900,10 @@ def masked_fno_gnn_eval_fn(model, d, eval_cfg):
     with torch.no_grad():
         x_hw_in   = normalizer.encode(x_hw,   'x_hw')   if normalizer is not None else x_hw
         node_x_in = normalizer.encode(node_x, 'node_x') if normalizer is not None else node_x
-        y_hw_8, masks, y_nodes_2 = model(x_hw_in, node_x_in, edge_index, edge_attr, Li)
+        edge_attr_in = normalizer.encode(edge_attr, 'edge_attr') if normalizer is not None else edge_attr   # R2 (2026-10-21)
+        # [REMOVIDO 2026-10-21] arestas cruas no modelo (R2)
+        # y_hw_8, masks, y_nodes_2 = model(x_hw_in, node_x_in, edge_index, edge_attr, Li)
+        y_hw_8, masks, y_nodes_2 = model(x_hw_in, node_x_in, edge_index, edge_attr_in, Li)
         # y_hw_8:    [1, 8, H, W]  — saída FNO por material
         # masks:     [1, 4, H, W]  — calculado internamente no forward
         # y_nodes_2: [S_i, 2]      — já assemblado (GNN opera pós-assemble)
@@ -1599,9 +1605,18 @@ def femm_mesh_v2_eval_fn(model, d, eval_cfg):
         x_hw_in   = normalizer.encode(x_hw,   'x_hw')   if normalizer is not None else x_hw
         node_x_in = normalizer.encode(node_x, 'node_x') if normalizer is not None else node_x
         elem_x_in = normalizer.encode(elem_x, 'elem_x') if normalizer is not None else elem_x
+        # R2 (2026-10-21): arestas normalizadas só na entrada do modelo -- edge_attr cru
+        # (center_dist em mm) segue para _triangle_xy_from_edges
+        edge_attr_in = normalizer.encode(edge_attr, 'edge_attr') if normalizer is not None else edge_attr
+        cross_edge_attr_in = (normalizer.encode(cross_edge_attr, 'cross_edge_attr')
+                              if normalizer is not None else cross_edge_attr)
+        # [REMOVIDO 2026-10-21] arestas cruas no modelo (R2)
+        # y_hw_fno, fno_at_nodes, delta = model(
+        #     x_hw_in, node_x_in, elem_x_in, edge_index, edge_attr,
+        #     cross_edge_index, cross_edge_attr, Li, return_components=True)
         y_hw_fno, fno_at_nodes, delta = model(
-            x_hw_in, node_x_in, elem_x_in, edge_index, edge_attr,
-            cross_edge_index, cross_edge_attr, Li, return_components=True)
+            x_hw_in, node_x_in, elem_x_in, edge_index, edge_attr_in,
+            cross_edge_index, cross_edge_attr_in, Li, return_components=True)
         y_nodes = fno_at_nodes + delta
         if normalizer is not None:
             y_hw_fno     = normalizer.decode(y_hw_fno,     'y_hw')

@@ -127,12 +127,17 @@ def predict(arch, model, normalizer, ts):
         # [REMOVIDO 2026-10-20] a Elem recebia o layout bipartite (grafo errado para ela)
         # d = ts['bip']
         d = ts['elem'] if arch == 'FNO_BipartiteGNN_Elem' else ts['bip']
+        # [REMOVIDO 2026-10-21] arestas cruas no modelo (R2: edge_attr/cross_edge_attr
+        # normalizados; runs antigas sem stats de aresta -> _enc é identidade)
+        #     d['edge_index'].to(DEVICE), d['edge_attr'].to(DEVICE),
+        #     d['cross_edge_index'].to(DEVICE), d['cross_edge_attr'].to(DEVICE),
         out_hw, y_nodes = model(
             _enc(normalizer, d['x_hw'], 'x_hw').to(DEVICE),
             _enc(normalizer, d['node_x'], 'node_x').to(DEVICE),
             _enc(normalizer, d['elem_x'], 'elem_x').to(DEVICE),
-            d['edge_index'].to(DEVICE), d['edge_attr'].to(DEVICE),
-            d['cross_edge_index'].to(DEVICE), d['cross_edge_attr'].to(DEVICE),
+            d['edge_index'].to(DEVICE), _enc(normalizer, d['edge_attr'], 'edge_attr').to(DEVICE),
+            d['cross_edge_index'].to(DEVICE),
+            _enc(normalizer, d['cross_edge_attr'], 'cross_edge_attr').to(DEVICE),
             d['L'].to(DEVICE))
         return _dec(normalizer, out_hw, 'y_hw')[0], _dec(normalizer, y_nodes, 'node_y')
     d = ts['v1']
@@ -143,8 +148,11 @@ def predict(arch, model, normalizer, ts):
         y_nodes = interpolate_grid_to_nodes(out_hw, nx[:, 3], nx[:, 4], d['L'].to(DEVICE),
                                             mode=getattr(model, 'interp_mode', 'legacy'))
         return out_hw[0], y_nodes
+    # [REMOVIDO 2026-10-21] arestas cruas no modelo (R2)
+    #                         d['edge_index'].to(DEVICE), d['edge_attr'].to(DEVICE),
     out_hw, y_nodes = model(x_in, _enc(normalizer, d['node_x'], 'node_x').to(DEVICE),
-                            d['edge_index'].to(DEVICE), d['edge_attr'].to(DEVICE),
+                            d['edge_index'].to(DEVICE),
+                            _enc(normalizer, d['edge_attr'], 'edge_attr').to(DEVICE),
                             d['L'].to(DEVICE))
     return _dec(normalizer, out_hw, 'y_hw')[0], _dec(normalizer, y_nodes, 'node_y')
 

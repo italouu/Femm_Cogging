@@ -314,11 +314,17 @@ def encode_timed(runs, arrays):
             g('node_x').to(DEVICE)                   # r/c dos nós para a interpolação
         else:
             _enc(nrm, g('node_x'), 'node_x').to(DEVICE)
-            for k in ('edge_index', 'edge_attr', 'L'):
+            # [REMOVIDO 2026-10-21] arestas cruas (R2: normalizadas, como em inference.predict)
+            # for k in ('edge_index', 'edge_attr', 'L'):
+            #     g(k).to(DEVICE)
+            for k in ('edge_index', 'L'):
                 g(k).to(DEVICE)
+            _enc(nrm, g('edge_attr'), 'edge_attr').to(DEVICE)
             if LAYOUT[arch] != 'v1':
                 _enc(nrm, g('elem_x'), 'elem_x').to(DEVICE)
-                g('cross_edge_index').to(DEVICE); g('cross_edge_attr').to(DEVICE)
+                # [REMOVIDO 2026-10-21] g('cross_edge_index').to(DEVICE); g('cross_edge_attr').to(DEVICE)
+                g('cross_edge_index').to(DEVICE)
+                _enc(nrm, g('cross_edge_attr'), 'cross_edge_attr').to(DEVICE)
         torch.cuda.synchronize()
         out[arch] = _now() - s
     return out
@@ -359,9 +365,15 @@ def _prepare(arch, nrm, batch):
     x = _enc(nrm, g['x_hw'], 'x_hw')
     if arch == 'FNO2d':
         return dict(x=x, r=g['node_x'][:, 3], c=g['node_x'][:, 4], L=g['L'])
-    out = dict(x=x, nx=_enc(nrm, g['node_x'], 'node_x'), ei=g['edge_index'], ea=g['edge_attr'], L=g['L'])
+    # [REMOVIDO 2026-10-21] arestas cruas no modelo (R2)
+    # out = dict(x=x, nx=_enc(nrm, g['node_x'], 'node_x'), ei=g['edge_index'], ea=g['edge_attr'], L=g['L'])
+    # if LAYOUT[arch] != 'v1':
+    #     out.update(ex=_enc(nrm, g['elem_x'], 'elem_x'), ci=g['cross_edge_index'], ca=g['cross_edge_attr'])
+    out = dict(x=x, nx=_enc(nrm, g['node_x'], 'node_x'), ei=g['edge_index'],
+               ea=_enc(nrm, g['edge_attr'], 'edge_attr'), L=g['L'])
     if LAYOUT[arch] != 'v1':
-        out.update(ex=_enc(nrm, g['elem_x'], 'elem_x'), ci=g['cross_edge_index'], ca=g['cross_edge_attr'])
+        out.update(ex=_enc(nrm, g['elem_x'], 'elem_x'), ci=g['cross_edge_index'],
+                   ca=_enc(nrm, g['cross_edge_attr'], 'cross_edge_attr'))
     return out
 
 

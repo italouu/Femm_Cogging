@@ -47,7 +47,7 @@ from src.configs.training               import (FNOConfig, FNO_GNNConfig, FNO_GN
 class ArchEntry:
     cls         : type      # classe do modelo
     cfg_cls     : type      # dataclass de config correspondente
-    loader_mode : str       # 'grid' ou 'qtree'
+    loader_mode : str       # 'grid', 'mesh_v1' ou 'femm_mesh_v2' (dataloaders/grid_loader.build_loaders)
     model_kwargs: callable  # (arch_cfg) -> dict com kwargs do construtor do modelo
     make_step_fn: callable  # (arch_cfg, loss_cfg) -> step_fn(batch, model, loss_fn, device)
     # [REMOVIDO 2026-10-21] eval_fn     : callable  # (model, chunk_data, eval_cfg) -> None
@@ -117,7 +117,8 @@ ARCH_REGISTRY: dict = {
     'FNO_GNN': ArchEntry(
         cls=FNO_GNN,
         cfg_cls=FNO_GNNConfig,
-        loader_mode='qtree',
+        # [REMOVIDO 2026-10-21] loader_mode='qtree',
+        loader_mode='mesh_v1',
         model_kwargs=_fno_gnn_kwargs,
         # [REMOVIDO 2026-10-20] lambda_loss/loss_cfg na step_fn (features sem uso)
         # make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
@@ -143,7 +144,8 @@ ARCH_REGISTRY: dict = {
     'FNO_GNN_v2': ArchEntry(
         cls=FNO_GNN_v2,
         cfg_cls=FNO_GNN_v2Config,
-        loader_mode='qtree',
+        # [REMOVIDO 2026-10-21] loader_mode='qtree',
+        loader_mode='mesh_v1',
         model_kwargs=_fno_gnn_kwargs,
         # [REMOVIDO 2026-10-20] make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
         make_step_fn=lambda cfg, lcfg: fno_gnn_step,
@@ -171,7 +173,8 @@ ARCH_REGISTRY: dict = {
     'MaskedFNO_GNN': ArchEntry(
         cls=MaskedFNO_GNN,
         cfg_cls=MaskedFNO_GNNConfig,
-        loader_mode='qtree',
+        # [REMOVIDO 2026-10-21] loader_mode='qtree',
+        loader_mode='mesh_v1',
         model_kwargs=lambda cfg: {k: v for k, v in asdict(cfg).items() if k != 'lambda_loss'},
         make_step_fn=lambda cfg, lcfg: make_masked_fno_gnn_step(cfg.lambda_loss),
         # [REMOVIDO 2026-10-21] eval_fn=masked_fno_gnn_eval_fn,
@@ -180,7 +183,8 @@ ARCH_REGISTRY: dict = {
     'GNN_PostBase': ArchEntry(
         cls=GNN_PostBase,
         cfg_cls=GNN_PostBaseConfig,
-        loader_mode='qtree',
+        # [REMOVIDO 2026-10-21] loader_mode='qtree',
+        loader_mode='mesh_v1',
         model_kwargs=_gnn_post_base_kwargs,
         # [REMOVIDO 2026-10-20] subtract_fno via loss_cfg
         # make_step_fn=lambda cfg, lcfg: make_gnn_post_base_step_fn(lcfg),

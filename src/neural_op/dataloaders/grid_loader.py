@@ -273,17 +273,20 @@ class CUDAPrefetcher:
         return len(self.loader)
 
 
-# ── Qtree streaming dataset ───────────────────────────────────────────────────
+# ── Streaming dataset do grafo de vértices (mode='mesh_v1') ──────────────────
 
-class ChunkQtreeDataset(IterableDataset):
+# [REMOVIDO 2026-10-21] nome do modo 'qtree' (quadtree, pipeline antigo) -> 'mesh_v1' (grafo de vértices da malha do FEMM, layout v1 de FNO_GNN/GNN_PostBase)
+# class ChunkQtreeDataset(IterableDataset):
+class ChunkMeshV1Dataset(IterableDataset):
     """
-    Versão de ChunkStreamDataset que preserva dados de grafo.
+    Versão de ChunkStreamDataset que preserva dados de grafo (mode='mesh_v1':
+    grafo de vértices da malha do FEMM -- FNO_GNN, GNN_PostBase).
 
     Lê quad_chunk_*.pt do disco um a um e emite dicts individuais com
     grade (x_hw, y_hw) + grafo (node_x, node_y, edge_index, edge_attr).
 
     edge_index emitido com índices locais à amostra (0..L[i]-1).
-    qtree_collate é responsável por re-offsetar ao montar o batch.
+    mesh_v1_collate é responsável por re-offsetar ao montar o batch.
 
     Estratégia de memória:
       - x_hw, y_hw, node_x, node_y, edge_attr são views do chunk — storage
@@ -408,7 +411,7 @@ class ChunkQtreeDataset(IterableDataset):
 
 class ChunkFemmMeshV2Dataset(IterableDataset):
     """
-    Versão de ChunkQtreeDataset para o grafo duplo do mode='femm_mesh_v2'
+    Versão de ChunkMeshV1Dataset para o grafo duplo do mode='femm_mesh_v2'
     (vértices + elementos + arestas cruzadas, ver src/data_gen/femm_mesh_v2.py
     e src/neural_op/archs/femm_mesh_v2_gnn.py).
 
@@ -618,9 +621,10 @@ def femm_mesh_v2_collate(samples):
 #     return train_loader, test_loader
 
 
-def qtree_collate(samples):
+# [REMOVIDO 2026-10-21] def qtree_collate(samples):   (nome do modo 'qtree' (quadtree, pipeline antigo) -> 'mesh_v1' (grafo de vértices da malha do FEMM, layout v1 de FNO_GNN/GNN_PostBase))
+def mesh_v1_collate(samples):
     """
-    Collate para ChunkQtreeDataset.
+    Collate para ChunkMeshV1Dataset.
 
     Cada amostra chega com edge_index de índices locais (0..L[i]-1).
     Esta função re-offseta os índices para o espaço global do batch.
@@ -705,8 +709,10 @@ def build_loaders(chunk_paths, batch_size, train_split,
     num_workers    : int             workers paralelos de I/O
     prefetch_factor: int             batches pré-buscados por worker
     seed           : int|None        semente para o split reproduzível
-    mode           : 'grid'|'qtree'  'grid' usa ChunkStreamDataset + collate padrão;
-                                     'qtree' usa ChunkQtreeDataset + qtree_collate
+    mode           : str             'grid' usa ChunkStreamDataset + collate padrão;
+                                     'mesh_v1' usa ChunkMeshV1Dataset + mesh_v1_collate;
+                                     'femm_mesh_v2' usa ChunkFemmMeshV2Dataset +
+                                     femm_mesh_v2_collate
     test_split     : float|None      None → teste = complemento de train_split;
                                      float → fração fixa de chunks para teste
                                      (ver split_chunk_paths)
@@ -719,8 +725,14 @@ def build_loaders(chunk_paths, batch_size, train_split,
         cls, collate_fn = ChunkStreamDataset, None
     elif mode == 'femm_mesh_v2':
         cls, collate_fn = ChunkFemmMeshV2Dataset, femm_mesh_v2_collate
+    # [REMOVIDO 2026-10-21] qualquer outro modo caía no loader 'qtree' -- sem alias para o nome antigo
+    # else:
+    #     cls, collate_fn = ChunkQtreeDataset, qtree_collate
+    elif mode == 'mesh_v1':
+        cls, collate_fn = ChunkMeshV1Dataset, mesh_v1_collate
     else:
-        cls, collate_fn = ChunkQtreeDataset, qtree_collate
+        raise ValueError(f"mode de loader desconhecido: {mode!r} "
+                         f"(esperado 'grid', 'mesh_v1' ou 'femm_mesh_v2')")
 
     # No Windows, shared memory entre processos (necessária com num_workers > 0)
     # falha para tensores grandes (erro 1455 = ERROR_COMMITMENT_LIMIT).

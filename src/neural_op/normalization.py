@@ -304,7 +304,7 @@ class Normalizer:
 
     def encode_batch(self, batch):
         """Encode de todas as chaves conhecidas de um batch — tuple (x,y) do
-        loader 'grid' ou dict do loader 'qtree'. Usado pelo CUDAPrefetcher,
+        loader 'grid' ou dict dos loaders 'mesh_v1'/'femm_mesh_v2'. Usado pelo CUDAPrefetcher,
         transparente para step_fn (loss passa a ser calculada em espaço
         normalizado sem nenhuma mudança nos step_fn de cada arch)."""
         if isinstance(batch, dict):

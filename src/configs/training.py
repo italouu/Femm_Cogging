@@ -520,16 +520,16 @@ class MaskedFNO_GNNConfig:
 # │ MaskedFNO2d     │ masked_fno_loss      │ grid             │ MaskedFNO2dConfig        │
 # │ FNO2d_SingleMat │ single_material_     │ grid             │ SingleMatFNOConfig       │
 # │                 │   fno_loss           │                  │   (material_id=0..3)     │
-# │ FNO_GNN         │ mse / mae /          │ qtree            │ FNO_GNNConfig            │
+# │ FNO_GNN         │ mse / mae /          │ mesh_v1          │ FNO_GNNConfig            │
 # │                 │   relative_l2        │                  │                          │
-# │ FNO_GNN_v2      │ mse / mae /          │ qtree            │ FNO_GNN_v2Config         │
+# │ FNO_GNN_v2      │ mse / mae /          │ mesh_v1          │ FNO_GNN_v2Config         │
 # │                 │   relative_l2        │                  │   (edge_attr c/ delta_mu │
 # │                 │                      │                  │    direcional; parser    │
 # │                 │                      │                  │    FNO_GNN_v2 no npz)    │
-# │ MaskedFNO_GNN   │ masked_fno_gnn_loss  │ qtree            │ MaskedFNO_GNNConfig      │
-# │ FNO_GNN_Field   │ mse / mae /          │ qtree            │ FNO_GNNConfig            │
+# │ MaskedFNO_GNN   │ masked_fno_gnn_loss  │ mesh_v1          │ MaskedFNO_GNNConfig      │
+# │ FNO_GNN_Field   │ mse / mae /          │ mesh_v1          │ FNO_GNNConfig            │
 # │                 │   relative_l2        │                  │   (campo direto nos nós) │
-# │ GNN_PostBase    │ mse / mae /          │ qtree            │ GNN_PostBaseConfig       │
+# │ GNN_PostBase    │ mse / mae /          │ mesh_v1          │ GNN_PostBaseConfig       │
 # │                 │   relative_l2        │                  │   (base FNO2d/FNO_GNN    │
 # │                 │                      │                  │    congelada)            │
 # │ FNO_BipartiteGNN│ mse / mae /          │ femm_mesh_v2     │ FNO_BipartiteGNNConfig   │

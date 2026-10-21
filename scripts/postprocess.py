@@ -130,14 +130,21 @@ from src.postprocess.timing import (ARCH_STAGES, DEVICE, LAYOUT, check_mesh_vs_r
 # [REMOVIDO 2026-10-21] sem femm_ref/femm_ref_ok (C2: profundidade gravada nos caches de T22)
 # from src.postprocess.torque import (batch_summary, curve_row, femm_solve, gap, parse_torque_sample,
 #                                     sample_torques, scatter_ids, scatter_stats, select_batch_samples)
+# [REMOVIDO 2026-10-21] sem read_rows (C3: --raw-dir)
+# from src.postprocess.torque import (batch_summary, curve_row, femm_ref, femm_ref_ok, femm_solve, gap,
+#                                     parse_torque_sample, sample_torques, scatter_ids, scatter_stats,
+#                                     select_batch_samples)
 from src.postprocess.torque import (batch_summary, curve_row, femm_ref, femm_ref_ok, femm_solve, gap,
-                                    parse_torque_sample, sample_torques, scatter_ids, scatter_stats,
-                                    select_batch_samples)
+                                    parse_torque_sample, read_rows, sample_torques, scatter_ids,
+                                    scatter_stats, select_batch_samples)
 from src.postprocess.torque import thetas as torque_thetas
 from src.postprocess.train_table import train_table
 # [REMOVIDO 2026-10-20] sem sample_path/TMP_ROOT (usados pelas figuras)
 # from src.postprocess.samples import SUBSETS, design_rows, parse_smooth, samples_with_subset
-from src.postprocess.samples import (ANG_1, ANG_2, N_A, N_R, SUBSETS, TMP_ROOT, design_rows,
+# [REMOVIDO 2026-10-21] sem RAW_DIR (C3: default de --raw-dir do torque)
+# from src.postprocess.samples import (ANG_1, ANG_2, N_A, N_R, SUBSETS, TMP_ROOT, design_rows,
+#                                      parse_smooth, sample_path, samples_with_subset)
+from src.postprocess.samples import (ANG_1, ANG_2, N_A, N_R, RAW_DIR, SUBSETS, TMP_ROOT, design_rows,
                                      parse_smooth, sample_path, samples_with_subset)
 
 # [REMOVIDO 2026-10-13] nomes com sufixo _smooth e run de referência do split fixa
@@ -1005,21 +1012,27 @@ def _torque_runs(loss, archs):
     return {k: r for k, r in runs.items() if archs is None or r['arch'] in archs}
 
 
-def _torque_sweep_dir(idx):
+# [REMOVIDO 2026-10-21] pasta de trabalho fixa em TORQUE_TMP (C3: --work-dir)
+# def _torque_sweep_dir(idx):
+#     root = TORQUE_TMP / 'torque_theta_e'
+def _torque_sweep_dir(idx, work_dir=TORQUE_TMP):
     """Pasta da varredura θe de 1 amostra (amostra 15 na raiz, como nos JSONs antigos)."""
-    root = TORQUE_TMP / 'torque_theta_e'
+    root = Path(work_dir) / 'torque_theta_e'
     return root if idx == 15 else root / f'sample_{idx:06d}'
 
 
-def _femm_batch_one(idx, k, th, row):
-    d = TORQUE_TMP / 'torque_theta_e_batch' / f'sample_{idx:06d}'
+# [REMOVIDO 2026-10-21] def _femm_batch_one(idx, k, th, row):  (TORQUE_TMP fixo; C3: --work-dir)
+#     d = TORQUE_TMP / 'torque_theta_e_batch' / f'sample_{idx:06d}'
+def _femm_batch_one(idx, k, th, row, work_dir=TORQUE_TMP):
+    d = Path(work_dir) / 'torque_theta_e_batch' / f'sample_{idx:06d}'
     gz, js = d / f'theta_{k:02d}.ans.gz', d / f'theta_{k:02d}.json'
     # [REMOVIDO 2026-10-21] reaproveitava qualquer cache, inclusive os de [Depth] = 1 (C2)
     # if gz.exists() and js.exists():
     #     return
     if gz.exists() and js.exists() and femm_ref_ok(json.loads(js.read_text()), row):
         return
-    tmp = TORQUE_TMP / 'torque_theta_e_batch' / 'tmp' / f'{idx}_{k}'
+    # [REMOVIDO 2026-10-21] tmp = TORQUE_TMP / 'torque_theta_e_batch' / 'tmp' / f'{idx}_{k}'
+    tmp = Path(work_dir) / 'torque_theta_e_batch' / 'tmp' / f'{idx}_{k}'
     try:
         t22 = femm_solve(row, th, tmp, gz)
         # [REMOVIDO 2026-10-21] js.write_text(json.dumps(dict(theta_e_deg=float(th), T22_sector=t22)))
@@ -1028,14 +1041,23 @@ def _femm_batch_one(idx, k, th, row):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+# [REMOVIDO 2026-10-21] sem raw_dir/work_dir (C3)
+# def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=False,
+#                idxs=(15,), n_theta=None, n_samples=80, n_per_chunk=8, limit=None):
 def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=False,
-               idxs=(15,), n_theta=None, n_samples=80, n_per_chunk=8, limit=None):
+               idxs=(15,), n_theta=None, n_samples=80, n_per_chunk=8, limit=None,
+               raw_dir=None, work_dir=None):
     """Torque (P6): theta-e (varredura θe de amostras), batch (n_samples amostras de teste
     estratificadas por corrente × n_theta ângulos, resumo da fundamental) ou scatter (torque
     de cada amostra de teste do raw). FEMM T22 × gt × smooth × modelos da loss escolhida.
-    limit: só os primeiros `limit` ângulos (theta-e/batch) ou amostras (scatter) -- smoke."""
+    limit: só os primeiros `limit` ângulos (theta-e/batch) ou amostras (scatter) -- smoke.
+    raw_dir: raw de onde vêm valid_designs.csv e os .ans (None: samples.RAW_DIR, o do
+    DatagenConfig); work_dir: soluções FEMM das varreduras e temporários (None: TORQUE_TMP)."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    rows = design_rows()
+    # [REMOVIDO 2026-10-21] rows = design_rows()  (raw fixo do DatagenConfig; C3: --raw-dir)
+    raw_dir = Path(raw_dir) if raw_dir is not None else RAW_DIR
+    work_dir = Path(work_dir) if work_dir is not None else TORQUE_TMP
+    rows = read_rows(raw_dir)
     runs = _torque_runs(loss, archs)
     split_run = find_runs(ROOT_S)[('FNO_BipartiteGNN_Elem', loss)]   # mesmo split em todas
     meta = dict(loss=loss, frame=frame, split_run=str(split_run),
@@ -1045,7 +1067,8 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
     if mode == 'theta-e':
         n_theta = n_theta or 24
         for idx in idxs:
-            row, sw = rows[idx], _torque_sweep_dir(idx)
+            # [REMOVIDO 2026-10-21] row, sw = rows[idx], _torque_sweep_dir(idx)
+            row, sw = rows[idx], _torque_sweep_dir(idx, work_dir)
             th_all = torque_thetas(n_theta)
             # [REMOVIDO 2026-10-21] cache lido sem conferir a profundidade (C2)
             # if femm:
@@ -1092,7 +1115,8 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
     elif mode == 'batch':
         n_theta = n_theta or 16
         ids = select_batch_samples(split_run, rows, n_samples)
-        root = TORQUE_TMP / 'torque_theta_e_batch'
+        # [REMOVIDO 2026-10-21] root = TORQUE_TMP / 'torque_theta_e_batch'
+        root = work_dir / 'torque_theta_e_batch'
         # [REMOVIDO 2026-10-21] só ressolvia com --femm, e mesmo assim pulava caches existentes
         # if femm:
         #     tasks = [(i, k, th) for i in ids for k, th in enumerate(torque_thetas(n_theta))]
@@ -1107,7 +1131,8 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
                 print(f'  {len(tasks)} cache(s) de T22 com outra profundidade -> ressolvendo', flush=True)
         if tasks:
             with ProcessPoolExecutor(TORQUE_FEMM_WORKERS) as ex:
-                for f in [ex.submit(_femm_batch_one, i, k, th, rows[i]) for i, k, th in tasks]:
+                # [REMOVIDO 2026-10-21] ex.submit(_femm_batch_one, i, k, th, rows[i])
+                for f in [ex.submit(_femm_batch_one, i, k, th, rows[i], work_dir) for i, k, th in tasks]:
                     f.result()
         res, rows_ = {}, {kk: [] for kk in pk}
         with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
@@ -1150,8 +1175,11 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
         with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
             for b in range(0, len(ids), 32):
                 batch = ids[b:b + 32]
-                futs = [ex.submit(parse_torque_sample, sample_path(i), rows[i],
-                                  TMP_ROOT / 'torque_scatter' / str(i)) for i in batch]
+                # [REMOVIDO 2026-10-21] sample_path(i) e TMP_ROOT fixos (C3: --raw-dir/--work-dir)
+                # futs = [ex.submit(parse_torque_sample, sample_path(i), rows[i],
+                #                   TMP_ROOT / 'torque_scatter' / str(i)) for i in batch]
+                futs = [ex.submit(parse_torque_sample, raw_dir / f'sample_{i:06d}.ans.gz', rows[i],
+                                  work_dir / 'torque_scatter' / str(i)) for i in batch]
                 for i, f in zip(batch, futs):
                     t = sample_torques(f.result(), rows[i], runs, frame)
                     r = rows[i]
@@ -1469,6 +1497,10 @@ if __name__ == '__main__':
     p_tq.add_argument('--n-per-chunk', type=int, default=8, help='scatter: amostras por chunk de teste')
     p_tq.add_argument('--limit', type=int, default=None, help='smoke: ângulos/amostras limitados')
     p_tq.add_argument('--out', type=Path, default=OUT_ROOT / 'dados' / 'torque')
+    p_tq.add_argument('--raw-dir', type=Path, default=RAW_DIR,
+                      help=f'raw (valid_designs.csv + .ans) (default: {RAW_DIR})')
+    p_tq.add_argument('--work-dir', type=Path, default=TORQUE_TMP,
+                      help=f'soluções FEMM das varreduras e temporários (default: {TORQUE_TMP})')
     p_sat = sp.add_parser('saturation', help='saturação do aço × curva B-H (só gabarito)')
     p_sat.add_argument('n', nargs='?', type=int, default=None, help='nº de amostras (default: todas)')
     p_sat.add_argument('--knee-frac', type=float, nargs='+', default=[0.5],
@@ -1504,8 +1536,11 @@ if __name__ == '__main__':
     elif a.cmd == 'regions':
         run_regions(a.out, a.fig, a.n, a.d_int, a.d_canto, a.ang_canto)
     elif a.cmd == 'torque':
+        # [REMOVIDO 2026-10-21] sem raw_dir/work_dir (C3)
+        # run_torque(a.mode, a.out, a.loss, a.archs, a.frame, a.femm, a.idx, a.n_theta,
+        #            a.n_samples, a.n_per_chunk, a.limit)
         run_torque(a.mode, a.out, a.loss, a.archs, a.frame, a.femm, a.idx, a.n_theta,
-                   a.n_samples, a.n_per_chunk, a.limit)
+                   a.n_samples, a.n_per_chunk, a.limit, a.raw_dir, a.work_dir)
     elif a.cmd == 'saturation':
         run_saturation(a.out, a.fig, a.n, tuple(a.knee_frac), a.check_femm)
     elif a.cmd == 'timing':

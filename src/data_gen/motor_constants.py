@@ -60,6 +60,19 @@ FEMM_MATERIAL_DEFS = {
     ),
 }
 
+# Comprimento axial do pacote (stack length) [mm] -- FIXO (2026-10-21; antes sorteado em
+# U[5, 10] mm no sampler 'legacy' e 1 mm nos demais). Fonte única: coluna stack_length do
+# valid_designs.csv, profundidade do problema planar (mi_probdef) e L do torque pelo campo.
+STACK_LENGTH_MM = 15.0
+
+
+def stack_length_mm(motor_params: dict) -> float:
+    """Stack length [mm] de um design (motor_params {chave: {'unit', 'value'}}); fallback
+    STACK_LENGTH_MM se a chave não existir."""
+    sl = motor_params.get('stack_length')
+    return float(sl['value']) if sl is not None else STACK_LENGTH_MM
+
+
 # Simetria 120° (42 polos/36 ranhuras) — ver docstring de
 # BLDC_FEMM_Model_Sym120 em motor_model.py para a matemática completa.
 N_POLES_SECTOR = 14   # 120 / (360/42)

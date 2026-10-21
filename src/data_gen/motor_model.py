@@ -13,6 +13,7 @@ from src.data_gen.motor_constants import (
     MATERIAL_ID as _MOTOR_MATERIAL_ID,
     N_POLES_SECTOR as _MOTOR_N_POLES_SECTOR,
     WINDING_SECTOR as _MOTOR_WINDING_SECTOR,
+    STACK_LENGTH_MM as _MOTOR_STACK_LENGTH_MM,
 )
 _dg = DatagenConfig()
 DATASET                = _dg.dataset
@@ -487,11 +488,15 @@ class BLDC_Process:
             return rng.triangular(left=lo, right=hi, mode=md)
 
         for _ in range(num_samples):
-            # length
-            min = 5
-            max = 10
-            mode = min + 0.85 * (max - min)/2
-            stack_length = _sample(min, max, mode)
+            # [REMOVIDO 2026-10-21] stack length sorteado em [5, 10] mm -- agora fixo
+            # (motor_constants.STACK_LENGTH_MM). Tirar este sorteio muda a sequência do gerador:
+            # com a mesma semente, todas as geometrias mudam (raw precisa ser refeito).
+            # # length
+            # min = 5
+            # max = 10
+            # mode = min + 0.85 * (max - min)/2
+            # stack_length = _sample(min, max, mode)
+            stack_length = _MOTOR_STACK_LENGTH_MM
 
             # stator outer diameter
             min_rotor = 4 # min rotor thickness
@@ -611,7 +616,8 @@ class BLDC_Process:
         """Geração de amostras com geometria parcialmente fixada.
 
         Constantes: stator_inner=60mm, rotor_outer=90mm, Hs0=1mm, Hs1=1.2mm, Hs2=3.7mm,
-                    stack_length=1mm. Distribuição: DISTRIBUTION global ('uniform' ou 'triangular').
+                    stack_length=STACK_LENGTH_MM (motor_constants; até 2026-10-21, 1mm).
+                    Distribuição: DISTRIBUTION global ('uniform' ou 'triangular').
         Variáveis: stator_outer [73.8, 81]mm, rotor_inner (stator_outer+2*gap, gap∈[0.5,2]mm),
                    pole_thickness, pole_embrance [0.6, 0.90], Bs0, Bs1, Bs2.
         Bs* como frações do arco no respectivo raio (mesmos percentuais de generate_samples).
@@ -620,7 +626,8 @@ class BLDC_Process:
         ROTOR_OUTER    = 90.0
         HS0, HS1, HS2  = 1.0, 1.2, 3.7
         HS_TOTAL       = HS0 + HS1 + HS2   # 5.9
-        STACK_LENGTH   = 1.0
+        # [REMOVIDO 2026-10-21] STACK_LENGTH   = 1.0
+        STACK_LENGTH   = _MOTOR_STACK_LENGTH_MM
         N_SLOTS        = 36
         N_POLES        = 42
         OUTER_D        = 93.0
@@ -745,7 +752,8 @@ class BLDC_Process:
         ROTOR_OUTER    = 90.0
         HS0, HS1, HS2  = 1.0, 1.2, 3.7
         HS_TOTAL       = HS0 + HS1 + HS2   # 5.9
-        STACK_LENGTH   = 1.0
+        # [REMOVIDO 2026-10-21] STACK_LENGTH   = 1.0
+        STACK_LENGTH   = _MOTOR_STACK_LENGTH_MM
         N_SLOTS        = 36
         N_POLES        = 42
         OUTER_D        = 93.0
@@ -924,7 +932,8 @@ class BLDC_Process:
         BS0, BS1, BS2    = 0.74, 2.79, 2.35
         POLE_THICKNESS   = 2.0
         POLE_EMBRANCE    = 0.90
-        STACK_LENGTH     = 1.0
+        # [REMOVIDO 2026-10-21] STACK_LENGTH     = 1.0
+        STACK_LENGTH     = _MOTOR_STACK_LENGTH_MM
         N_SLOTS          = 36
         N_POLES          = 42
         OUTER_D          = 93.0

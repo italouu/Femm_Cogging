@@ -28,6 +28,7 @@ Execução (a partir da raiz do projeto):
     python -m scripts.generate_data_femm_mesh_v2
 """
 import csv
+import math
 import os
 import shutil
 from collections import deque
@@ -146,6 +147,21 @@ def _check_existing_raw(motor_params_list):
             f"(faltando: {sorted(set(new_cols) - set(old_cols))}, sobrando: "
             f"{sorted(set(old_cols) - set(new_cols))}) — use outro DatagenConfig.dataset "
             f"ou confira DatagenConfig.current_peak")
+    # 2026-10-21: mesmas colunas não bastam (ex.: stack_length fixo muda a sequência do gerador
+    # e todas as geometrias, sem mudar nenhuma coluna) -- os VALORES sorteados também precisam
+    # bater com o valid_designs.csv existente, nas linhas em comum.
+    with open(csv_path, newline='') as f:
+        old_rows = list(csv.reader(f))[1:]
+    values = list(motor_params_list.values())
+    for i, row in enumerate(old_rows[:len(values[0]['value'])]):
+        bad = [c for c, v, p in zip(old_cols, row, values)
+               if not math.isclose(float(v), float(p['value'][i]), rel_tol=1e-12, abs_tol=0.0)]
+        if bad:
+            raise RuntimeError(
+                f"{OUT_DIR} já tem amostras geradas com outro sorteio: linha {i} do "
+                f"valid_designs.csv difere em {bad} (ex.: {bad[0]} = {row[old_cols.index(bad[0])]} "
+                f"no CSV x {values[old_cols.index(bad[0])]['value'][i]!r} agora) — o raw foi "
+                f"gerado por outro sampler/semente/versão do código; use outro DatagenConfig.dataset")
 
 
 def run():

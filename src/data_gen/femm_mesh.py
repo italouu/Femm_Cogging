@@ -58,6 +58,8 @@ from pathlib import Path
 
 import numpy as np
 import femm
+
+from src.data_gen.motor_constants import stack_length_mm
 # [REMOVIDO] from shapely.geometry import Point -- usado só pra grade Mu_r/M via
 # point-query Shapely, agora derivada da malha (ver _assign_mesh_to_grid, 2026-07-23)
 
@@ -678,7 +680,10 @@ def save_ans_gzip_sample(motor_params: dict, tmp_dir: Path, out_path: Path) -> d
     femm.openfemm('bHide')
     femm.main_resize(1000, 1000)
     femm.newdocument(0)
-    femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, 0, 200)
+    # [REMOVIDO 2026-10-21] profundidade 0 -- agora = stack length do design (o campo planar não
+    # depende dela; T22/fluxo concatenado no FEMM sim)
+    # femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, 0, 200)
+    femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, stack_length_mm(motor_params), 200)
     model.draw_motor()
     femm.mi_zoomnatural()
     femm.mi_saveas(fem_file)

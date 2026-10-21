@@ -123,6 +123,7 @@ def femm_solve_timed(row, work_dir: Path):
     """Mesma sequência de femm_mesh.save_ans_gzip_sample; cronometra openfemm, geometria e
     malha à parte (fora da comparação) e o mi_analyze (solução). Retorna (tempos s, .ans)."""
     import femm
+    from src.data_gen.motor_constants import stack_length_mm
     from src.data_gen.motor_model import BLDC_FEMM_Model_Sym120_Annular
     from src.postprocess.torque import params_of
     work_dir = Path(work_dir).resolve()
@@ -137,7 +138,9 @@ def femm_solve_timed(row, work_dir: Path):
         s = _now(); femm.openfemm('bHide'); femm.main_resize(1000, 1000); tm['openfemm'] = _now() - s
         s = _now()
         femm.newdocument(0)
-        femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, 0, 200)
+        # [REMOVIDO 2026-10-21] profundidade 0 -- agora = stack length (como save_ans_gzip_sample)
+        # femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, 0, 200)
+        femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, stack_length_mm(p), 200)
         model.draw_motor(); femm.mi_zoomnatural(); femm.mi_saveas(str(work_dir / 'model.fem'))
         tm['geometry'] = _now() - s
         s = _now(); femm.mi_createmesh(); tm['mesh'] = _now() - s

@@ -14,7 +14,9 @@ Método (inalterado):
   FEMM   : T22 = mo_blockintegral(22) nos blocos do rotor (rótulos com r > r_m), × 3 setores.
   campo  : tensor de Maxwell médio na faixa de ar do entreferro, com B por elemento:
            T = −3·L/(μ0·(r2−r1)) · Σ_e r·Br·Bθ·A_e (elementos de ar com centróide em (r1, r2);
-           sinal: torque no rotor externo), L = 1 mm.
+           sinal: torque no rotor externo), L = stack length do design (coluna stack_length do
+           valid_designs.csv, fallback motor_constants.STACK_LENGTH_MM) -- a mesma profundidade
+           do mi_probdef em femm_solve (até 2026-10-21: L = 1 mm e profundidade 0).
   gt     : B exato curl(A) por elemento (parse_ans_gzip_sample_elem) -- o method_check é
            gt × FEMM T22 (mede o erro do próprio método da faixa, sem modelo).
   smooth : B suavizado no centróide (gabarito da Elem).
@@ -34,8 +36,15 @@ from pathlib import Path
 
 import numpy as np
 
-DEPTH_M = 1e-3
+# [REMOVIDO 2026-10-21] L fixo de 1 mm -- agora o stack length do design (stack_length_m)
+# DEPTH_M = 1e-3
 MU0 = 4e-7 * np.pi
+
+
+def stack_length_m(row):
+    """Stack length [m] de uma linha do valid_designs.csv; fallback STACK_LENGTH_MM."""
+    from src.data_gen.motor_constants import STACK_LENGTH_MM
+    return float(row.get('stack_length [mm]', STACK_LENGTH_MM)) * 1e-3
 
 
 # --------------------------------------------------------------------------- #
@@ -84,7 +93,8 @@ def femm_solve(row, theta_e, work_dir: Path, gz_out: Path):
     try:
         model = BLDC_FEMM_Model_Sym120_Annular(motor_params=p, phase=p['rotor_phase']['value'])
         femm.openfemm('bHide'); femm.main_resize(1000, 1000); femm.newdocument(0)
-        femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, 0, 200)
+        # [REMOVIDO 2026-10-21] femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, 0, 200)
+        femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, stack_length_m(row) * 1e3, 200)
         model.draw_motor(); femm.mi_zoomnatural(); femm.mi_saveas(str(work_dir / 'model.fem'))
         femm.mi_createmesh(); femm.mi_analyze(); femm.mi_loadsolution()
         lab = block_labels(work_dir / 'model.ans')
@@ -104,9 +114,11 @@ def femm_solve(row, theta_e, work_dir: Path, gz_out: Path):
 # --------------------------------------------------------------------------- #
 # torque pelo campo
 # --------------------------------------------------------------------------- #
-def band_torque(B, cen, area, mat, r1, r2):
+# [REMOVIDO 2026-10-21] def band_torque(B, cen, area, mat, r1, r2):  (L = DEPTH_M fixo)
+def band_torque(B, cen, area, mat, r1, r2, depth_m):
     """Torque no rotor (×3, N·m): média do tensor de Maxwell na faixa de ar do entreferro.
-    B [M,2] = (Bx, By) por elemento; cen [M,2] mm; area [M] mm²."""
+    B [M,2] = (Bx, By) por elemento; cen [M,2] mm; area [M] mm²; depth_m = stack length [m]
+    (stack_length_m(row), o mesmo da profundidade do FEMM)."""
     from src.data_gen.motor_constants import MATERIAL_ID
     r = np.hypot(cen[:, 0], cen[:, 1])
     sel = (r > r1) & (r < r2) & (mat == MATERIAL_ID['vacuum'])
@@ -116,7 +128,8 @@ def band_torque(B, cen, area, mat, r1, r2):
     bt = -bx * np.sin(th) + by * np.cos(th)
     s = (r[sel] * 1e-3 * br * bt * area[sel] * 1e-6).sum()
     # torque no conteúdo do círculo (estator) = +L/μ0/(r2−r1)·Σ; no rotor externo é o oposto
-    return -3 * DEPTH_M / (MU0 * (r2 - r1) * 1e-3) * s, int(sel.sum())
+    # [REMOVIDO 2026-10-21] return -3 * DEPTH_M / (MU0 * (r2 - r1) * 1e-3) * s, int(sel.sum())
+    return -3 * depth_m / (MU0 * (r2 - r1) * 1e-3) * s, int(sel.sum())
 
 
 def polar_to_xy(B, x, y):
@@ -168,7 +181,8 @@ def sample_torques(lay, row, runs, frame='polar'):
     from src.postprocess.inference import to_torch_sample
     tq = lay['torque']
     r1, r2 = gap(row)
-    g = lambda B: band_torque(B, tq['cen'], tq['area'], tq['mat'], r1, r2)[0]
+    # [REMOVIDO 2026-10-21] g = lambda B: band_torque(B, tq['cen'], tq['area'], tq['mat'], r1, r2)[0]
+    g = lambda B: band_torque(B, tq['cen'], tq['area'], tq['mat'], r1, r2, stack_length_m(row))[0]
     out = dict(gt=g(tq['gt']), smooth=g(tq['smooth']))
     ts = to_torch_sample(lay)
     for r in runs.values():

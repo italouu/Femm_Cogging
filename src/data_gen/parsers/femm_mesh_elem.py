@@ -142,9 +142,6 @@ def parse_ans_gzip_sample_elem(ans_gz_path: Path, r_in: float, r_ext: float,
     tmp_dir = Path(tmp_dir) if tmp_dir is not None else ans_gz_path.parent
 
     assert target_field in ('B', None), f"target_field inválido: {target_field!r}"
-    # [REMOVIDO 2026-10-21] gabarito B sempre calculado (o smooth descartava)
-    # bip = parse_ans_gzip_sample(ans_gz_path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
-    #                             n_r=n_r, n_a=n_a, tmp_dir=tmp_dir, target_field='B')
     bip = parse_ans_gzip_sample(ans_gz_path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
                                 n_r=n_r, n_a=n_a, tmp_dir=tmp_dir, target_field=target_field)
     _, nodes, elems = _read_ans_gz(ans_gz_path, tmp_dir)
@@ -157,9 +154,6 @@ def parse_ans_gzip_sample_elem(ans_gz_path: Path, r_in: float, r_ext: float,
     rc, cc = ex[:, 3].astype(np.float64), ex[:, 4].astype(np.float64)
     # A em float32, como em parse_ans_gzip_sample (node_A) -- média nodal deste
     # B por elemento reproduz exatamente o node_y da bateria
-    # [REMOVIDO 2026-10-21] curl(A) sempre calculado -- agora só com target_field='B'
-    # elem_Bx, elem_By = _element_b_from_A(nodes, elems, nodes[:, 2].astype(np.float32))
-    # node_y = np.stack([elem_Bx, elem_By], axis=1).astype(np.float32)
     node_y = None   # target_field=None: preenchido pelo chamador
     if target_field == 'B':
         elem_Bx, elem_By = _element_b_from_A(nodes, elems, nodes[:, 2].astype(np.float32))
@@ -199,8 +193,6 @@ def parse_ans_gzip_sample_elem(ans_gz_path: Path, r_in: float, r_ext: float,
     # --- auxiliar: vértices; arestas cruzadas invertidas (vértice -> elemento) ---
     cross_edge_index = bip['cross_edge_index'][[1, 0]].copy()
 
-    # [REMOVIDO 2026-10-21] return direto, sem checar o contrato
-    # return {
     out = {
         'node_x': node_x, 'node_y': node_y,
         'edge_index': edge_index, 'edge_attr': edge_attr,

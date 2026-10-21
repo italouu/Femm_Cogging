@@ -53,10 +53,6 @@ from src.data_gen.parsers.ans_parsing import (
     _build_bidirectional_edge_attrs, _grid_polar_xy, _MU_BY_ID, _MAGNET_ID,
     _node_current_density, _to_polar,
 )
-# [REMOVIDO 2026-10-21] _grid_barycentric (só servia ao a_hw)
-# from src.data_gen.parsers.femm_mesh_v2 import (
-#     parse_ans_gzip_sample, _build_trifinder, _grid_barycentric,
-# )
 from src.data_gen.parsers.femm_mesh_v2 import parse_ans_gzip_sample, _build_trifinder
 from src.data_gen.parsers.femm_mesh_unified import _read_ans_gz, UNIFIED_ARCHS
 
@@ -105,9 +101,6 @@ def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
     tmp_dir = Path(tmp_dir) if tmp_dir is not None else ans_gz_path.parent
 
     # --- layout bipartite (estrutura; node_y/y_hw substituídos abaixo) ---
-    # [REMOVIDO 2026-10-21] gabarito curl(A) calculado e descartado
-    # bip = parse_ans_gzip_sample(ans_gz_path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
-    #                              n_r=n_r, n_a=n_a, tmp_dir=tmp_dir, target_field='B')
     bip = parse_ans_gzip_sample(ans_gz_path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
                                  n_r=n_r, n_a=n_a, tmp_dir=tmp_dir, target_field=None)
 
@@ -116,7 +109,6 @@ def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
     elem_material_id = label_material_id[elems[:, 3]]
     elem_M = label_M[elems[:, 3]]
     n_nodes = nodes.shape[0]
-    # [REMOVIDO 2026-10-21] assert n_nodes == bip['node_y'].shape[0], "ordem/contagem de nós divergente entre layouts"
     assert n_nodes == bip['node_x'].shape[0], "ordem/contagem de nós divergente entre layouts"
 
     # --- B suavizado do FEMM (só .ans) ---
@@ -127,21 +119,15 @@ def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
 
     # --- material do nó por prioridade + node_y ---
     node_material_id = _node_material_priority(elems, elem_material_id, n_nodes)
-    # [REMOVIDO 2026-10-17] gabarito cartesiano (Bx, By) -- o alvo passa a ser
-    # polar (Br, Bθ), girado pelo ângulo do próprio nó.
-    # node_y = _node_b_by_material(elems, elem_material_id, node_material_id, b1, b2)
     node_bxy = _node_b_by_material(elems, elem_material_id, node_material_id, b1, b2)
     node_y = np.stack(_to_polar(node_bxy[:, 0], node_bxy[:, 1], nodes[:, 0], nodes[:, 1]), axis=1)
 
     # --- grade H×W: B suavizado no centro do pixel ---
     ang_1_rad, ang_2_rad = np.deg2rad(ang_1), np.deg2rad(ang_2)
     Xg, Yg = _grid_polar_xy(r_in, r_ext, ang_1_rad, ang_2_rad, n_r, n_a)
-    # [REMOVIDO 2026-10-21] tri, trifinder = _build_trifinder(nodes, elems)   (tri só servia ao a_hw)
     _, trifinder = _build_trifinder(nodes, elems)
     centroids = nodes[elems[:, :3], :2].mean(axis=1)
     Bx_hw, By_hw = _grid_smooth_b(mesh, B1, B2, b1, b2, trifinder, centroids, Xg, Yg)
-    # [REMOVIDO 2026-10-17] y_hw cartesiano -- agora (Br, Bθ) pelo ângulo do centro do pixel.
-    # y_hw = np.stack([Bx_hw.reshape(n_r, n_a), By_hw.reshape(n_r, n_a)], axis=0)
     Br_hw, Bt_hw = _to_polar(Bx_hw, By_hw, Xg, Yg)
     y_hw = np.stack([Br_hw.reshape(n_r, n_a), Bt_hw.reshape(n_r, n_a)], axis=0)
 
@@ -169,11 +155,6 @@ def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
     edge_index, edge_attr = _build_bidirectional_edge_attrs(
         nodes, edges_undirected, wrap_idx_1, wrap_idx_2, r_base, c_base, node_mu, n_r, n_a)
 
-    # [REMOVIDO 2026-10-21] potencial A no layout v1 -- nenhum código do pipeline atual lê
-    # node_A/a_hw (só os eval_fn antigos de archs/eval.py)
-    # node_A = nodes[:, 2].astype(np.float32)
-    # a_hw = _grid_barycentric(tri, node_A, Xg, Yg).reshape(n_r, n_a)
-
     node_x = np.stack([
         node_mu.astype(np.float32),          # mu_r (prioridade)
         node_M.astype(np.float32),           # M (segue o material do nó)
@@ -186,12 +167,10 @@ def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
     mesh_v1 = {
         'node_x':     node_x,
         'node_y':     node_y,
-        # [REMOVIDO 2026-10-21] 'node_A':     node_A,
         'edge_index': edge_index,
         'edge_attr':  edge_attr,
         'x_hw':       bip['x_hw'],
         'y_hw':       y_hw,
-        # [REMOVIDO 2026-10-21] 'a_hw':       a_hw.astype(np.float32),
         'L':          np.array([n_nodes], dtype=np.int64),
         'dim_H':      bip['dim_H'],
         'dim_W':      bip['dim_W'],

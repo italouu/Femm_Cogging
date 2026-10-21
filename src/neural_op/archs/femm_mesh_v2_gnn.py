@@ -20,28 +20,6 @@ def _interpolate_fno_to_nodes_v2(fno_out, node_x, L, mode='legacy'):
     mode    : 'legacy' | 'cell_centered' (B1 — src/neural_op/archs/interp.py)
     Retorna : [S_tot, C]
     """
-    # [REMOVIDO 2026-10-03, B1] corpo próprio com grid_sample(align_corners=True)
-    # — centralizado em src/neural_op/archs/interp.py (mode='legacy' reproduz
-    # exatamente este código). Ver fno_gnn.py::_interpolate_fno_to_nodes.
-    # B, C, _, _ = fno_out.shape
-    # device = fno_out.device
-    # dtype  = fno_out.dtype
-    # r_norm = 2.0 * node_x[:, 0] - 1.0
-    # c_norm = 2.0 * node_x[:, 1] - 1.0
-    # fno_at_nodes = torch.empty(node_x.size(0), C, device=device, dtype=dtype)
-    # offset = 0
-    # for b in range(B):
-    #     n    = int(L[b].item())
-    #     grid = torch.stack(
-    #         [c_norm[offset:offset + n], r_norm[offset:offset + n]], dim=-1
-    #     ).unsqueeze(0).unsqueeze(2)
-    #     interp = F.grid_sample(
-    #         fno_out[b:b + 1], grid,
-    #         mode='bilinear', align_corners=True, padding_mode='border',
-    #     )
-    #     fno_at_nodes[offset:offset + n] = interp[0, :, :, 0].T
-    #     offset += n
-    # return fno_at_nodes
     return interpolate_grid_to_nodes(fno_out, node_x[:, 0], node_x[:, 1], L, mode=mode)
 
 
@@ -112,62 +90,6 @@ class FNO_BipartiteGNN(torch.nn.Module):
         return y_hw_fno, fno_at_nodes + delta
 
 
-# [REMOVIDO 2026-10-20] step_fn com lambda_loss (parcela de grade, sempre 0), subtract_fno
-# (resíduo) e graph_div_b_loss -- features sem uso; a loss é só a da saída final.
-# def make_fno_bipartite_gnn_step(lambda_loss, loss_cfg=None):
-#     """Retorna step_fn fechada sobre lambda_loss e loss_cfg -- mesmo padrão de
-#     fno_gnn.py::make_fno_gnn_step, adaptado pros campos extras do grafo duplo
-#     (elem_x, cross_edge_index, cross_edge_attr).
-#
-#     graph_div_b_loss (DivBLossCfg, src/configs/loss.py) é detectada via
-#     `lambda_div` (só essa config tem esse campo) e tratada à parte: ela tem
-#     assinatura estendida (precisa de node_x/cross_edge_index pra calcular o
-#     divergente) e funciona EXCLUSIVAMENTE na parcela de nós -- a parcela de
-#     grade (FNO/H×W) não tem malha real, usa `loss_cfg.base_loss` puro (sem
-#     termo de div) nesse caso, em vez de `loss_fn`."""
-#     subtract      = getattr(loss_cfg, 'subtract_fno', False)
-#     div_base_loss = getattr(loss_cfg, 'base_loss', None)
-#     div_lambda    = getattr(loss_cfg, 'lambda_div', None)
-#     is_div_loss   = div_lambda is not None   # só DivBLossCfg tem lambda_div
-#
-#     def step(batch, model, loss_fn, device):
-#         x_hw             = batch['x_hw'].to(device)
-#         node_x           = batch['node_x'].to(device)
-#         elem_x           = batch['elem_x'].to(device)
-#         edge_index       = batch['edge_index'].to(device)
-#         edge_attr        = batch['edge_attr'].to(device)
-#         cross_edge_index = batch['cross_edge_index'].to(device)
-#         cross_edge_attr  = batch['cross_edge_attr'].to(device)
-#         L                = batch['L'].to(device)
-#         y_hw             = batch['y_hw'].to(device)
-#         y_node           = batch['node_y'].to(device)
-#
-#         # return_components=True sempre -- mesmo custo de (y_hw_fno, y_nodes)
-#         # direto (o forward normal só soma fno_at_nodes+delta internamente),
-#         # e simplifica os 3 ramos abaixo pra um único caminho de inferência.
-#         y_hw_fno, fno_at_nodes, delta = model(
-#             x_hw, node_x, elem_x, edge_index, edge_attr,
-#             cross_edge_index, cross_edge_attr, L, return_components=True)
-#         y_nodes = fno_at_nodes + delta
-#
-#         grid_loss_fn = LOSS_REGISTRY[div_base_loss] if is_div_loss else loss_fn
-#         loss_grid = grid_loss_fn(y_hw_fno, y_hw)
-#
-#         if is_div_loss:
-#             loss_nodes = loss_fn(y_nodes, y_node, node_x, cross_edge_index,
-#                                   base_loss=div_base_loss, lambda_div=div_lambda,
-#                                   r_in_mm=loss_cfg.r_in_mm, r_ext_mm=loss_cfg.r_ext_mm,
-#                                   ang_1_deg=loss_cfg.ang_1_deg, ang_2_deg=loss_cfg.ang_2_deg)
-#         elif subtract:
-#             loss_nodes = loss_fn(delta, y_node - fno_at_nodes)
-#         else:
-#             loss_nodes = loss_fn(y_nodes, y_node)
-#
-#         return lambda_loss * loss_grid + (1.0 - lambda_loss) * loss_nodes
-#
-#     return step
-
-
 def fno_bipartite_gnn_step(batch, model, loss_fn, device):
     """Loss da saída final do grafo principal contra node_y -- nós (FNO_BipartiteGNN, v3)
     ou elementos (FNO_BipartiteGNN_Elem, mesma assinatura)."""
@@ -203,23 +125,6 @@ def fno_bipartite_gnn_metric_fn(batch, model, device):
             y_nodes  = normalizer.decode(y_nodes,  'node_y')
             y_hw     = normalizer.decode(y_hw,     'y_hw')
             y_node   = normalizer.decode(y_node,   'node_y')
-        # [REMOVIDO 2026-10-20] mae_hw da grade do estágio FNO/base -- sem loss desde a remoção
-        # do lambda_loss (grade intermediária não supervisionada); só a FNO2d reporta mae_hw.
-        # mae_hw    = torch.mean(torch.abs(y_hw_fno - y_hw)).item()
         mae_hw    = None
         mae_graph = torch.mean(torch.abs(y_nodes  - y_node)).item()
     return mae_hw, mae_graph
-
-
-# [REMOVIDO 2026-08-13] stub NotImplementedError -- plot/avaliação de malha
-# dupla vértice+elemento implementado em src/neural_op/archs/eval.py
-# (femm_mesh_v2_eval_fn + _plot_femm_mesh_v2, mesmo arquivo/padrão dos demais
-# *_eval_fn do projeto). Reimportado abaixo pra ARCH_REGISTRY
-# (src/neural_op/archs/__init__.py) continuar importando de
-# femm_mesh_v2_gnn.py sem mudança.
-# def femm_mesh_v2_eval_fn(model, chunk_data, eval_cfg):
-#     """[NÃO IMPLEMENTADO] ..."""
-#     raise NotImplementedError(...)
-# [REMOVIDO 2026-10-21] reexportação para o ARCH_REGISTRY (contorno de import circular) -- eval_fn
-# saiu do registro
-# from src.neural_op.archs.eval import femm_mesh_v2_eval_fn

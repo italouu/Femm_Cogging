@@ -3,68 +3,6 @@ from pathlib import Path
 
 import torch
 
-# [REMOVIDO 2026-10-21] conjuntos de índices espalhados por arch (R1) -- substituídos pela
-# tabela declarativa _LAYOUTS abaixo (regra única: só a posição lida pela interpolação
-# grade -> pontos fica crua). FNO_GNN/GNN_PostBase deixavam mu_r e área crus.
-# # Arquiteturas que fazem threshold físico sobre mu_r (x_hw[:,0]) dentro do
-# # forward (_make_material_masks: mu_r>10 ferro, 1.01<mu_r<10 ima, mu_r<0.9995
-# # cobre) — para essas, a coluna mu_r de x_hw fica de fora do z-score, senão os
-# # limiares quebram silenciosamente. Arch sem essa lógica (FNO2d, FNO_GNN,
-# # ...) normalizam x_hw por inteiro.
-# _MASKED_ARCHS = {'MaskedFNO2d', 'FNO2d_SingleMat', 'MaskedFNO_GNN'}
-#
-# # node_x[:, {0,2,3,4}] = mu_r, cell_area/node_dual_area, r_base, c_base — usadas
-# # cruas por _interpolate_fno_to_nodes (grid_sample espera [0,1] literal),
-# # reconstrução de geometria (eval.py/bench/metrics.py) e mapas de material nos
-# # plots. Nunca normalizadas, para qualquer arch de grafo (estrutural ao
-# # dataset, não ao arch) que usa o layout node_x clássico (qtree/femm_mesh v1).
-# _NODE_X_STRUCTURAL = {0, 2, 3, 4}
-#
-# # FNO_BipartiteGNN (mode='femm_mesh_v2', ver src/data_gen/femm_mesh_v2.py):
-# # node_x = [r_base, c_base] — layout diferente do clássico acima (só posição,
-# # 2 colunas, ambas usadas cruas por _interpolate_fno_to_nodes_v2). Excluído
-# # por completo do z-score, não pelos índices fixos de _NODE_X_STRUCTURAL
-# # (que presumem 5+ colunas e estourariam IndexError aqui).
-# _NODE_X_FULLY_STRUCTURAL_ARCHS = {'FNO_BipartiteGNN'}
-#
-# # FNO_BipartiteGNN_v3 (2026-08-20, ver src/neural_op/archs/femm_mesh_v3_gnn.py
-# # e src/data_gen/parsers/femm_mesh_v3.py; renomeado de FNO_BipartiteGNN_v2
-# # no mesmo dia, pra alinhar com o nome do parser FEMM_MESH_V3): node_x =
-# # [r_base, c_base, node_cell_count] — só as colunas 0,1 (posição) são
-# # estruturais/cruas (usadas por _interpolate_fno_to_nodes_v3 pra
-# # grid_sample/gather de célula); a coluna 2 (contagem de nós por célula) é
-# # uma feature real, normalizada normalmente — diferente de FNO_BipartiteGNN,
-# # onde node_x é 100% estrutural.
-# # [REMOVIDO 2026-10-07] sem FNO_BipartiteGNN_Elem — ver abaixo
-# # _NODE_X_PARTIAL_STRUCTURAL_ARCHS = {'FNO_BipartiteGNN_v3': {0, 1}}
-# # FNO_BipartiteGNN_Elem (PROTÓTIPO 2026-10-07, src/data_gen/parsers/
-# # femm_mesh_elem.py): node_x = elementos [r_c, c_c, mu_r, M, area] -- só a
-# # posição do centróide (0,1) fica crua (interpolação do FNO).
-# _NODE_X_PARTIAL_STRUCTURAL_ARCHS = {'FNO_BipartiteGNN_v3': {0, 1},
-#                                     'FNO_BipartiteGNN_Elem': {0, 1}}
-#
-# # elem_x estrutural por arch -- FNO_BipartiteGNN_Elem: elem_x = vértices
-# # [r_base, c_base] (grafo auxiliar), crus pra interpolar o FNO no vértice
-# # (aux_fno). Demais archs: elem_x normalizado por inteiro.
-# _ELEM_X_STRUCTURAL_ARCHS = {'FNO_BipartiteGNN_Elem': {0, 1}}
-#
-#
-# def _exclude_channels(arch: str, has_graph: bool, node_x_ch: int = None) -> dict:
-#     """Canais que ficam de fora do z-score (identidade: mean=0, std=1)."""
-#     excl = {}
-#     if arch in _MASKED_ARCHS:
-#         excl['x_hw'] = {0}
-#     if has_graph:
-#         if arch in _NODE_X_PARTIAL_STRUCTURAL_ARCHS:
-#             excl['node_x'] = set(_NODE_X_PARTIAL_STRUCTURAL_ARCHS[arch])
-#         elif arch in _NODE_X_FULLY_STRUCTURAL_ARCHS:
-#             excl['node_x'] = set(range(node_x_ch)) if node_x_ch else set()
-#         else:
-#             excl['node_x'] = set(_NODE_X_STRUCTURAL)
-#     if arch in _ELEM_X_STRUCTURAL_ARCHS:
-#         excl['elem_x'] = set(_ELEM_X_STRUCTURAL_ARCHS[arch])
-#     return excl
-
 
 # ── Layout de entrada por arch (R1, 2026-10-21) ───────────────────────────────
 # Regra única: toda feature de entrada é normalizada por z-score com stats dos chunks de
@@ -125,9 +63,6 @@ _LEGACY_RAW = {
 }
 
 # chaves normalizadas por Normalizer.fit (as presentes no chunk)
-# [REMOVIDO 2026-10-21] sem as arestas (R2: edge_attr/cross_edge_attr passam a ser normalizados,
-# inclusive as arestas periódicas, sem caso especial)
-# _NORM_KEYS = ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x')
 _NORM_KEYS = ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x', 'edge_attr', 'cross_edge_attr')
 
 
@@ -199,8 +134,6 @@ class Normalizer:
     tensores [B,C,H,W] (grade) e [S,C] (nós).
     """
 
-    # [REMOVIDO 2026-10-21] sem train_chunks (R3: identificação dos chunks das stats)
-    # def __init__(self, stats: dict, exclude: dict = None):
     def __init__(self, stats: dict, exclude: dict = None, train_chunks: dict = None):
         self.stats   = stats or {}
         self.exclude = exclude or {}
@@ -208,14 +141,6 @@ class Normalizer:
         # gravado no config.json da run (norm_stats.train_chunks). {} em runs antigas.
         self.train_chunks = train_chunks or {}
 
-    # [REMOVIDO 2026-10-20] stats sobre TODOS os chunks do dataset (inclusive os de teste),
-    # embora a docstring dissesse "chunks de treino" -- agora só os chunks de treino do split.
-    # @classmethod
-    # def fit(cls, dataset: str, arch: str, force_recompute: bool = False) -> 'Normalizer':
-    #     chunk_dir   = Path(f'data/torch/data_chunks/{dataset}')
-    #     chunk_paths = sorted(str(p) for p in chunk_dir.glob('data_chunk_*.pt'))
-    #     ...
-    #     cache_path = chunk_dir / 'norm_stats.json'
     @classmethod
     def fit(cls, dataset: str, arch: str, train_split: float, split_seed=None, test_split=None,
             force_recompute: bool = False) -> 'Normalizer':
@@ -235,20 +160,10 @@ class Normalizer:
         tag = hashlib.sha1('\n'.join(names).encode()).hexdigest()[:10]
 
         sample    = torch.load(chunk_paths[0], map_location='cpu', weights_only=False)
-        # [REMOVIDO 2026-10-21] chaves e exclusões deduzidas da presença de node_x/elem_x (R1)
-        # has_graph = 'node_x' in sample
-        # has_elem  = 'elem_x' in sample   # grafo de elementos (mode='femm_mesh_v2')
-        # node_x_ch = sample['node_x'].shape[1] if has_graph else None
-        # del sample
-        # keys = (['x_hw', 'y_hw']
-        #         + (['node_x', 'node_y'] if has_graph else [])
-        #         + (['elem_x'] if has_elem else []))
         exclude = _check_layout(arch, sample, dataset)
         keys    = [k for k in _NORM_KEYS if k in sample]
         del sample
 
-        # [REMOVIDO 2026-10-21] cache sem versão (stats sem as arestas)
-        # cache_path = chunk_dir / f'norm_stats_train_{tag}.json'
         cache_path = chunk_dir / f'norm_stats_train_v2_{tag}.json'
         if cache_path.exists() and not force_recompute:
             stats = json.loads(cache_path.read_text())
@@ -257,14 +172,12 @@ class Normalizer:
                   f"em '{dataset}' (1x, cacheado em {cache_path.name})...", flush=True)
             stats = _fit_stats_from_chunks(chunk_paths, keys)
             cache_path.write_text(json.dumps(stats))
-        # [REMOVIDO 2026-10-21] return cls(stats, exclude=_exclude_channels(arch, has_graph, node_x_ch))
         return cls(stats, exclude=exclude,
                    train_chunks={'sha1': tag, 'n': len(chunk_paths), 'cache': cache_path.name})
 
     @classmethod
     def from_dict(cls, d: dict) -> 'Normalizer':
         exclude = {k: set(v) for k, v in d.get('exclude', {}).items()}
-        # [REMOVIDO 2026-10-21] return cls(d.get('stats', {}), exclude=exclude)
         return cls(d.get('stats', {}), exclude=exclude, train_chunks=d.get('train_chunks'))
 
     def to_dict(self) -> dict:
@@ -309,8 +222,6 @@ class Normalizer:
         normalizado sem nenhuma mudança nos step_fn de cada arch)."""
         if isinstance(batch, dict):
             out = dict(batch)
-            # [REMOVIDO 2026-10-21] sem as arestas (R2)
-            # for key in ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x'):
             for key in _NORM_KEYS:
                 if key in out:
                     out[key] = self.encode(out[key], key)

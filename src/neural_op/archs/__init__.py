@@ -1,12 +1,8 @@
 from dataclasses import dataclass, asdict
 
 from src.neural_op.archs.fno            import FNO2d,          fno_step_fn, fno_metric_fn
-# [REMOVIDO 2026-10-20] make_fno_gnn_step -> fno_gnn_step (sem lambda_loss/subtract_fno)
-# from src.neural_op.archs.fno_gnn        import FNO_GNN,        make_fno_gnn_step, fno_gnn_metric_fn
 from src.neural_op.archs.fno_gnn        import FNO_GNN,        fno_gnn_step, fno_gnn_metric_fn
 from src.neural_op.archs.fno_gnn_v2     import FNO_GNN_v2
-# [REMOVIDO 2026-10-13] FNO_GNN_Field fora do ARCH_REGISTRY (arch obsoleta)
-# from src.neural_op.archs.fno_gnn_field  import FNO_GNN_Field
 from src.neural_op.archs.fno_mat        import (MaskedFNO2d,    masked_fno_step_fn, masked_fno_metric_fn,
                                                 FNO2d_SingleMat, make_single_mat_step_fn,
                                                 make_single_mat_metric_fn)
@@ -14,33 +10,17 @@ from src.neural_op.archs.masked_fno_gnn import (MaskedFNO_GNN, make_masked_fno_g
                                                 masked_fno_gnn_metric_fn)
 from src.neural_op.archs.gnn_post_base  import (GNN_PostBase,
                                                 gnn_post_base_step_fn,
-                                                # [REMOVIDO 2026-10-20] make_gnn_post_base_step_fn,
                                                 gnn_post_base_metric_fn)
-# [REMOVIDO 2026-10-21] eval_fn fora do ArchEntry (nenhum código do pipeline os chama desde a
-# remoção de scripts/eval.py; plots rápidos continuam em archs/eval.py até a limpeza)
-# from src.neural_op.archs.eval           import (fno_eval_fn, fno_gnn_eval_fn,
-#                                                 masked_fno_eval_fn, masked_fno_gnn_eval_fn,
-#                                                 single_mat_fno_eval_fn)
-# from src.neural_op.archs.femm_mesh_v2_gnn import (FNO_BipartiteGNN,
-#                                                   # [REMOVIDO 2026-10-20] make_fno_bipartite_gnn_step,
-#                                                   fno_bipartite_gnn_step,
-#                                                   fno_bipartite_gnn_metric_fn,
-#                                                   femm_mesh_v2_eval_fn)
 from src.neural_op.archs.femm_mesh_v2_gnn import (FNO_BipartiteGNN,
                                                   fno_bipartite_gnn_step,
                                                   fno_bipartite_gnn_metric_fn)
 from src.neural_op.archs.femm_mesh_v3_gnn import FNO_BipartiteGNN_v3
-# [REMOVIDO 2026-10-21] from src.neural_op.archs.femm_mesh_elem_gnn import FNO_BipartiteGNN_Elem, femm_mesh_elem_eval_fn
 from src.neural_op.archs.femm_mesh_elem_gnn import FNO_BipartiteGNN_Elem
 from src.configs.training               import (FNOConfig, FNO_GNNConfig, FNO_GNN_v2Config,
                                                 MaskedFNO2dConfig, MaskedFNO_GNNConfig,
                                                 SingleMatFNOConfig, GNN_PostBaseConfig,
                                                 FNO_BipartiteGNNConfig, FNO_BipartiteGNN_v3Config,
                                                 FNO_BipartiteGNN_ElemConfig)
-# [REMOVIDO] PhiDeepONet — removido do escopo ativo (2026-05-27)
-# from src.neural_op.archs.phi_deeponet import PhiDeepONet,        phi_deeponet_step_fn
-# from src.neural_op.archs.eval         import phi_deeponet_eval_fn
-# from src.configs.training             import PhiDeepONetConfig
 
 
 @dataclass
@@ -50,7 +30,6 @@ class ArchEntry:
     loader_mode : str       # 'grid', 'mesh_v1' ou 'femm_mesh_v2' (dataloaders/grid_loader.build_loaders)
     model_kwargs: callable  # (arch_cfg) -> dict com kwargs do construtor do modelo
     make_step_fn: callable  # (arch_cfg, loss_cfg) -> step_fn(batch, model, loss_fn, device)
-    # [REMOVIDO 2026-10-21] eval_fn     : callable  # (model, chunk_data, eval_cfg) -> None
     metric_fn   : callable  # (arch_cfg) -> metric_fn(batch, model, device) -> (mae_hw, mae_graph|None)
                             # MAE bruto (sem máscara) para monitoramento em metrics.jsonl;
                             # mae_hw sempre compara a saída em grade H×W do estágio FNO;
@@ -69,11 +48,6 @@ def _fno_gnn_kwargs(cfg):
     # lambda_loss não é parâmetro do construtor do modelo — usado apenas na step_fn
     # (2026-10-20: removido das configs; o filtro fica para configs antigas)
     return {k: v for k, v in asdict(cfg).items() if k != 'lambda_loss'}
-
-
-# [REMOVIDO] _phi_deeponet_kwargs — removido com PhiDeepONet (2026-05-27)
-# def _phi_deeponet_kwargs(cfg):
-#     return {k: v for k, v in asdict(cfg).items() if k != 'data_res'}
 
 
 def _gnn_post_base_kwargs(cfg):
@@ -104,39 +78,16 @@ ARCH_REGISTRY: dict = {
         loader_mode='grid',
         model_kwargs=_fno_kwargs,
         make_step_fn=lambda cfg, lcfg: fno_step_fn,
-        # [REMOVIDO 2026-10-21] eval_fn=fno_eval_fn,
         metric_fn=lambda cfg: fno_metric_fn,
     ),
-    # [REMOVIDO] 'phi_DeepONet' — removido do registry (2026-05-27)
-    # 'phi_DeepONet': ArchEntry(
-    #     cls=PhiDeepONet, cfg_cls=PhiDeepONetConfig, loader_mode='qtree',
-    #     model_kwargs=_phi_deeponet_kwargs,
-    #     make_step_fn=lambda cfg, lcfg: phi_deeponet_step_fn,
-    #     eval_fn=phi_deeponet_eval_fn,
-    # ),
     'FNO_GNN': ArchEntry(
         cls=FNO_GNN,
         cfg_cls=FNO_GNNConfig,
-        # [REMOVIDO 2026-10-21] loader_mode='qtree',
         loader_mode='mesh_v1',
         model_kwargs=_fno_gnn_kwargs,
-        # [REMOVIDO 2026-10-20] lambda_loss/loss_cfg na step_fn (features sem uso)
-        # make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
         make_step_fn=lambda cfg, lcfg: fno_gnn_step,
-        # [REMOVIDO 2026-10-21] eval_fn=fno_gnn_eval_fn,
         metric_fn=lambda cfg: fno_gnn_metric_fn,
     ),
-    # [REMOVIDO 2026-10-13] FNO_GNN_Field — arch obsoleta; compartilhava FNO_GNNConfig com
-    # FNO_GNN, o que impede derivar a arch do tipo de arch_cfg (NnCfg.__post_init__)
-    # 'FNO_GNN_Field': ArchEntry(
-    #     cls=FNO_GNN_Field,
-    #     cfg_cls=FNO_GNNConfig,   # mesma config de FNO_GNN — só o forward muda (campo vs delta)
-    #     loader_mode='qtree',
-    #     model_kwargs=_fno_gnn_kwargs,
-    #     make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
-    #     eval_fn=fno_gnn_eval_fn,
-    #     metric_fn=lambda cfg: fno_gnn_metric_fn,
-    # ),
     # FNO_GNN_v2 (2026-07-17): edge_attr [E,5] com delta_mu direcional
     # (mu_origem - mu_destino). Requer dataset gerado com npz_parser='FNO_GNN_v2'
     # (src/data_gen/parsers/fno_gnn_v2.py) — incompatível com chunks de FNO_GNN
@@ -144,12 +95,9 @@ ARCH_REGISTRY: dict = {
     'FNO_GNN_v2': ArchEntry(
         cls=FNO_GNN_v2,
         cfg_cls=FNO_GNN_v2Config,
-        # [REMOVIDO 2026-10-21] loader_mode='qtree',
         loader_mode='mesh_v1',
         model_kwargs=_fno_gnn_kwargs,
-        # [REMOVIDO 2026-10-20] make_step_fn=lambda cfg, lcfg: make_fno_gnn_step(cfg.lambda_loss, lcfg),
         make_step_fn=lambda cfg, lcfg: fno_gnn_step,
-        # [REMOVIDO 2026-10-21] eval_fn=fno_gnn_eval_fn,
         metric_fn=lambda cfg: fno_gnn_metric_fn,
     ),
     'MaskedFNO2d': ArchEntry(
@@ -158,7 +106,6 @@ ARCH_REGISTRY: dict = {
         loader_mode='grid',
         model_kwargs=lambda cfg: asdict(cfg),
         make_step_fn=lambda cfg, lcfg: masked_fno_step_fn,
-        # [REMOVIDO 2026-10-21] eval_fn=masked_fno_eval_fn,
         metric_fn=lambda cfg: masked_fno_metric_fn,
     ),
     'FNO2d_SingleMat': ArchEntry(
@@ -167,29 +114,22 @@ ARCH_REGISTRY: dict = {
         loader_mode='grid',
         model_kwargs=lambda cfg: asdict(cfg),   # material_id é parâmetro do construtor
         make_step_fn=lambda cfg, lcfg: make_single_mat_step_fn(cfg.material_id),
-        # [REMOVIDO 2026-10-21] eval_fn=single_mat_fno_eval_fn,
         metric_fn=lambda cfg: make_single_mat_metric_fn(cfg.material_id),
     ),
     'MaskedFNO_GNN': ArchEntry(
         cls=MaskedFNO_GNN,
         cfg_cls=MaskedFNO_GNNConfig,
-        # [REMOVIDO 2026-10-21] loader_mode='qtree',
         loader_mode='mesh_v1',
         model_kwargs=lambda cfg: {k: v for k, v in asdict(cfg).items() if k != 'lambda_loss'},
         make_step_fn=lambda cfg, lcfg: make_masked_fno_gnn_step(cfg.lambda_loss),
-        # [REMOVIDO 2026-10-21] eval_fn=masked_fno_gnn_eval_fn,
         metric_fn=lambda cfg: masked_fno_gnn_metric_fn,
     ),
     'GNN_PostBase': ArchEntry(
         cls=GNN_PostBase,
         cfg_cls=GNN_PostBaseConfig,
-        # [REMOVIDO 2026-10-21] loader_mode='qtree',
         loader_mode='mesh_v1',
         model_kwargs=_gnn_post_base_kwargs,
-        # [REMOVIDO 2026-10-20] subtract_fno via loss_cfg
-        # make_step_fn=lambda cfg, lcfg: make_gnn_post_base_step_fn(lcfg),
         make_step_fn=lambda cfg, lcfg: gnn_post_base_step_fn,
-        # [REMOVIDO 2026-10-21] eval_fn=fno_gnn_eval_fn,   # mesma assinatura de forward que FNO_GNN
         metric_fn=lambda cfg: gnn_post_base_metric_fn,
     ),
     # FNO_BipartiteGNN (2026-08-10): grafo duplo vértices+elementos,
@@ -201,9 +141,7 @@ ARCH_REGISTRY: dict = {
         cfg_cls=FNO_BipartiteGNNConfig,
         loader_mode='femm_mesh_v2',
         model_kwargs=_fno_gnn_kwargs,   # só descarta lambda_loss, igual FNO_GNN
-        # [REMOVIDO 2026-10-20] make_step_fn=lambda cfg, lcfg: make_fno_bipartite_gnn_step(cfg.lambda_loss, lcfg),
         make_step_fn=lambda cfg, lcfg: fno_bipartite_gnn_step,
-        # [REMOVIDO 2026-10-21] eval_fn=femm_mesh_v2_eval_fn,
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),
     # FNO_BipartiteGNN_v3 (2026-08-20, renomeado de FNO_BipartiteGNN_v2 no
@@ -218,9 +156,7 @@ ARCH_REGISTRY: dict = {
         cfg_cls=FNO_BipartiteGNN_v3Config,
         loader_mode='femm_mesh_v2',
         model_kwargs=_fno_gnn_kwargs,
-        # [REMOVIDO 2026-10-20] make_step_fn=lambda cfg, lcfg: make_fno_bipartite_gnn_step(cfg.lambda_loss, lcfg),
         make_step_fn=lambda cfg, lcfg: fno_bipartite_gnn_step,
-        # [REMOVIDO 2026-10-21] eval_fn=femm_mesh_v2_eval_fn,
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),
     # FNO_BipartiteGNN_Elem (PROTÓTIPO 2026-10-07): bipartite com os papéis
@@ -233,9 +169,7 @@ ARCH_REGISTRY: dict = {
         cfg_cls=FNO_BipartiteGNN_ElemConfig,
         loader_mode='femm_mesh_v2',
         model_kwargs=_fno_gnn_kwargs,
-        # [REMOVIDO 2026-10-20] make_step_fn=lambda cfg, lcfg: make_fno_bipartite_gnn_step(cfg.lambda_loss, lcfg),
         make_step_fn=lambda cfg, lcfg: fno_bipartite_gnn_step,
-        # [REMOVIDO 2026-10-21] eval_fn=femm_mesh_elem_eval_fn,
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),
 }

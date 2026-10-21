@@ -6,9 +6,6 @@ import torch
 from src.neural_op.archs._blocks import GNN
 from src.neural_op.archs.fno_gnn import _interpolate_fno_to_nodes
 
-# [REMOVIDO] _SUPPORTED_BASE_ARCHS = ('FNO2d', 'FNO_GNN') — faltava 'FNO_GNN_v2';
-# FNO_GNN_v2 é subclasse de FNO_GNN com mesma assinatura de forward (ver
-# _base_pred_at_nodes abaixo, branch 'else'), então só faltava liberar aqui.
 _SUPPORTED_BASE_ARCHS = ('FNO2d', 'FNO_GNN', 'FNO_GNN_v2')
 
 
@@ -48,11 +45,6 @@ def _load_frozen_base(base_run_dir, base_checkpoint, fallback_arch=None, fallbac
         )
 
     entry = ARCH_REGISTRY[arch]
-    # [REMOVIDO] arch_cfg = entry.cfg_cls(**arch_cfg_dict) — quebrava para arch_cfgs
-    # com campo init=False (ex: edge_dim em FNO_GNNConfig/FNO_GNN_v2Config): asdict()
-    # grava 'edge_dim' no config.json, mas __init__ não aceita esse kwarg. Mesmo
-    # padrão de scripts/eval.py:26-31 (hasattr from_dict) para reconstruir sem
-    # rechamar __post_init__/__init__.
     if hasattr(entry.cfg_cls, 'from_dict'):
         arch_cfg = entry.cfg_cls.from_dict(arch_cfg_dict)
     else:
@@ -97,17 +89,6 @@ class GNN_PostBase(torch.nn.Module):
         [node_x | base_at_nodes] → GNN (treinável) → Δ
         y_nodes = base_at_nodes + Δ
     """
-
-    # [REMOVIDO] _NODE_IN_CH/_BASE_OUT_CH/_GNN_IN_CH constantes de classe
-    # hardcoded (5/2/7) — mesmo motivo de FNO_GNN: quebravam com datasets/bases
-    # de canal diferente (ex: base treinada em A, 1 canal, em vez de B).
-    # Viraram parâmetros do construtor (node_in_ch/base_out_ch), auto-
-    # detectados em GNN_PostBaseConfig (node_in_ch a partir do dataset desta
-    # run, base_out_ch a partir do config.json de base_run_dir).
-    #
-    # _NODE_IN_CH  = 5
-    # _BASE_OUT_CH = 2
-    # _GNN_IN_CH   = _NODE_IN_CH + _BASE_OUT_CH
 
     def __init__(self, base_run_dir, base_checkpoint, gnn_node_width, gnn_n_layers,
                  edge_dim, node_in_ch, base_out_ch, base_arch=None, base_arch_cfg=None,
@@ -185,33 +166,6 @@ class GNN_PostBase(torch.nn.Module):
         return y_hw_base, base_at_nodes + delta
 
 
-# [REMOVIDO 2026-10-20] step_fn com subtract_fno (resíduo) -- feature sem uso.
-# def make_gnn_post_base_step_fn(loss_cfg=None):
-#     """Retorna step_fn fechada sobre loss_cfg."""
-#     subtract = getattr(loss_cfg, 'subtract_fno', False)
-#
-#     def gnn_post_base_step(batch, model, loss_fn, device):
-#         x_hw       = batch['x_hw'].to(device)
-#         node_x     = batch['node_x'].to(device)
-#         edge_index = batch['edge_index'].to(device)
-#         edge_attr  = batch['edge_attr'].to(device)
-#         L          = batch['L'].to(device)
-#         y_node     = batch['node_y'].to(device)   # [REMOVIDO] [:, :2] — ver fno_gnn_step
-#         if subtract:
-#             _, base_at_nodes, delta = model(x_hw, node_x, edge_index, edge_attr, L,
-#                                              return_components=True)
-#             # [REMOVIDO] return loss_fn(delta, y_node) — comparava a correção bruta
-#             # do GNN contra o alvo inteiro, não contra o resíduo real da baseline
-#             # congelada. Corrigido para residual learning de fato: delta deve
-#             # aprender (y_node - base_at_nodes), não y_node diretamente.
-#             return loss_fn(delta, y_node - base_at_nodes)
-#         else:
-#             _, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
-#             return loss_fn(y_nodes, y_node)
-#
-#     return gnn_post_base_step
-
-
 def gnn_post_base_step_fn(batch, model, loss_fn, device):
     """Loss da saída final nos nós (base congelada nos nós + GNN) contra node_y."""
     _, y_nodes = model(batch['x_hw'].to(device), batch['node_x'].to(device),
@@ -236,7 +190,7 @@ def gnn_post_base_metric_fn(batch, model, device):
     edge_attr  = batch['edge_attr'].to(device)
     L          = batch['L'].to(device)
     y_hw       = batch['y_hw'].to(device)
-    y_node     = batch['node_y'].to(device)   # [REMOVIDO] [:, :2] — ver fno_gnn_step
+    y_node     = batch['node_y'].to(device)
     with torch.no_grad():
         y_hw_base, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
         if normalizer is not None:
@@ -244,25 +198,6 @@ def gnn_post_base_metric_fn(batch, model, device):
             y_nodes   = normalizer.decode(y_nodes,   'node_y')
             y_hw      = normalizer.decode(y_hw,      'y_hw')
             y_node    = normalizer.decode(y_node,    'node_y')
-        # [REMOVIDO 2026-10-20] mae_hw da grade do estágio FNO/base -- sem loss desde a remoção
-        # do lambda_loss (grade intermediária não supervisionada); só a FNO2d reporta mae_hw.
-        # mae_hw    = torch.mean(torch.abs(y_hw_base - y_hw)).item()
         mae_hw    = None
         mae_graph = torch.mean(torch.abs(y_nodes   - y_node)).item()
     return mae_hw, mae_graph
-
-
-# [REMOVIDO] gnn_post_base_step_fn plain function — substituída por make_gnn_post_base_step_fn
-# para aceitar loss_cfg (subtract_fno). Retrocompatibilidade via fábrica com loss_cfg=None
-# (comportamento idêntico ao anterior).
-# def gnn_post_base_step_fn(batch, model, loss_fn, device):
-#     x_hw       = batch['x_hw'].to(device)
-#     node_x     = batch['node_x'].to(device)
-#     edge_index = batch['edge_index'].to(device)
-#     edge_attr  = batch['edge_attr'].to(device)
-#     L          = batch['L'].to(device)
-#     y_node     = batch['node_y'][:, :2].to(device)
-#     _, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
-#     return loss_fn(y_nodes, y_node)
-# [REMOVIDO 2026-10-20] alias da fábrica (removida) -- gnn_post_base_step_fn agora é função
-# gnn_post_base_step_fn = make_gnn_post_base_step_fn()

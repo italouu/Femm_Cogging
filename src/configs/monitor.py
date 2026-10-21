@@ -5,9 +5,7 @@ from typing import Optional
 @dataclass
 class MonitorCfg:
     checkpoint_every:     int           = 10
-    # [REMOVIDO 2026-10-03] default None deixava runs estagnadas rodando até n_epochs
-    # (ex: FNO2d mae unified, best na época 209, rodou até 499 sem ganho)
-    # early_stop_patience:  Optional[int] = None  # None = desativado; conta heartbeats
+    # paciência ligada por default (2026-10-03): com None, runs estagnadas iam até n_epochs
     early_stop_patience:  Optional[int] = 10    # heartbeats sem novo best (estagnação);
                                                  # None = desativado; respeita min_epochs
     early_stop_min_delta: float         = 1e-6
@@ -23,6 +21,4 @@ class MonitorCfg:
     # B4 (2026-10-03) — calcula mae_hw/mae_graph (test set, unidade física) em
     # TODA época, gravados em epochs.csv; False = só no heartbeat (antigo).
     # Custo: uma passada forward extra sobre o test set por época.
-    # [REMOVIDO 2026-10-13] default False — agora = bateria smooth (True)
-    # metrics_every_epoch:  bool          = False
     metrics_every_epoch:  bool          = True

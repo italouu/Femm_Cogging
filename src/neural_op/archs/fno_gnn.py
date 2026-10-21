@@ -16,30 +16,6 @@ def _interpolate_fno_to_nodes(fno_out, node_x, L, mode='legacy'):
               'cell_centered' (B1 — ver src/neural_op/archs/interp.py)
     Retorna : [S_tot, C]
     """
-    # [REMOVIDO 2026-10-03, B1] corpo próprio com grid_sample(align_corners=True)
-    # — centralizado em src/neural_op/archs/interp.py::interpolate_grid_to_nodes
-    # (mode='legacy' reproduz exatamente este código), pra treino e avaliação
-    # nunca divergirem. Corrigido no modo 'cell_centered' (grade centrada em
-    # células + wrap angular).
-    # B, C, _, _ = fno_out.shape
-    # device = fno_out.device
-    # dtype  = fno_out.dtype
-    # r_norm = 2.0 * node_x[:, 3] - 1.0
-    # c_norm = 2.0 * node_x[:, 4] - 1.0
-    # fno_at_nodes = torch.empty(node_x.size(0), C, device=device, dtype=dtype)
-    # offset = 0
-    # for b in range(B):
-    #     n    = int(L[b].item())
-    #     grid = torch.stack(
-    #         [c_norm[offset:offset + n], r_norm[offset:offset + n]], dim=-1
-    #     ).unsqueeze(0).unsqueeze(2)
-    #     interp = F.grid_sample(
-    #         fno_out[b:b + 1], grid,
-    #         mode='bilinear', align_corners=True, padding_mode='border',
-    #     )
-    #     fno_at_nodes[offset:offset + n] = interp[0, :, :, 0].T
-    #     offset += n
-    # return fno_at_nodes
     return interpolate_grid_to_nodes(fno_out, node_x[:, 3], node_x[:, 4], L, mode=mode)
 
 
@@ -71,18 +47,6 @@ class FNO_GNN(torch.nn.Module):
     Parâmetros GNN  : gnn_node_width, gnn_n_layers
     """
 
-    # [REMOVIDO] _GRID_IN_CH/_GRID_OUT_CH/_NODE_IN_CH/_GNN_IN_CH constantes de
-    # classe hardcoded (2/2/5/7) — quebravam com datasets de parser diferente
-    # (ex: FEMM_MESH_A_PARSER: y_hw/node_y de 1 canal em vez de 2). Viraram
-    # parâmetros do construtor (grid_in_ch/grid_out_ch/node_in_ch), auto-
-    # detectados a partir dos chunks reais em FNO_GNNConfig/NnCfg.__post_init__
-    # (helper _detect_chunk_dims) — mesmo padrão já usado para edge_dim.
-    #
-    # _GRID_IN_CH  = 2
-    # _GRID_OUT_CH = 2
-    # _NODE_IN_CH  = 5
-    # _GNN_IN_CH   = _NODE_IN_CH + _GRID_OUT_CH    # 7
-
     def __init__(self,
                  fno_modes1,
                  fno_modes2,
@@ -94,7 +58,6 @@ class FNO_GNN(torch.nn.Module):
                  fno_proj_layers,
                  data_res,
                  gnn_node_width,
-                 # gnn_msg_width,  # [REMOVIDO] — gate escalar não usa msg_width
                  gnn_n_layers,
                  edge_dim,
                  grid_in_ch,
@@ -138,42 +101,6 @@ class FNO_GNN(torch.nn.Module):
         return y_hw_fno, fno_at_nodes + delta
 
 
-# [REMOVIDO 2026-10-20] step_fn com lambda_loss (parcela de grade, sempre 0) e subtract_fno
-# (resíduo) -- features sem uso; a loss é só a da saída final.
-# def make_fno_gnn_step(lambda_loss, loss_cfg=None):
-#     """Retorna step_fn fechada sobre lambda_loss e loss_cfg."""
-#     subtract = getattr(loss_cfg, 'subtract_fno', False)
-#
-#     def fno_gnn_step(batch, model, loss_fn, device):
-#         x_hw       = batch['x_hw'].to(device)
-#         node_x     = batch['node_x'].to(device)
-#         edge_index = batch['edge_index'].to(device)
-#         edge_attr  = batch['edge_attr'].to(device)
-#         L          = batch['L'].to(device)
-#         y_hw       = batch['y_hw'].to(device)
-#         # [REMOVIDO] batch['node_y'][:, :2] — fatiava 2 colunas fixas (Bx,By);
-#         # node_y já vem do parser só com as colunas-alvo (2 pra B, 1 pra A), o
-#         # slice era redundante e presumia B. grid_out_ch (auto-detectado) já
-#         # garante que a saída do modelo bate com node_y.shape[1] sem slicing.
-#         y_node     = batch['node_y'].to(device)
-#         if subtract:
-#             y_hw_fno, fno_at_nodes, delta = model(x_hw, node_x, edge_index, edge_attr, L,
-#                                                    return_components=True)
-#             loss_grid  = loss_fn(y_hw_fno, y_hw)
-#             # [REMOVIDO] loss_nodes = loss_fn(delta, y_node) — comparava a correção
-#             # bruta do GNN contra o alvo inteiro, não contra o resíduo real da
-#             # baseline FNO. Corrigido para residual learning de fato: delta deve
-#             # aprender (y_node - fno_at_nodes), não y_node diretamente.
-#             loss_nodes = loss_fn(delta, y_node - fno_at_nodes)
-#         else:
-#             y_hw_fno, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
-#             loss_grid  = loss_fn(y_hw_fno, y_hw)
-#             loss_nodes = loss_fn(y_nodes,  y_node)
-#         return lambda_loss * loss_grid + (1.0 - lambda_loss) * loss_nodes
-#
-#     return fno_gnn_step
-
-
 def fno_gnn_step(batch, model, loss_fn, device):
     """Loss da saída final nos nós (estágio FNO interpolado + GNN) contra node_y."""
     _, y_nodes = model(batch['x_hw'].to(device), batch['node_x'].to(device),
@@ -197,7 +124,7 @@ def fno_gnn_metric_fn(batch, model, device):
     edge_attr  = batch['edge_attr'].to(device)
     L          = batch['L'].to(device)
     y_hw       = batch['y_hw'].to(device)
-    y_node     = batch['node_y'].to(device)   # [REMOVIDO] [:, :2] — ver fno_gnn_step
+    y_node     = batch['node_y'].to(device)
     with torch.no_grad():
         y_hw_fno, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
         if normalizer is not None:
@@ -205,9 +132,6 @@ def fno_gnn_metric_fn(batch, model, device):
             y_nodes  = normalizer.decode(y_nodes,  'node_y')
             y_hw     = normalizer.decode(y_hw,     'y_hw')
             y_node   = normalizer.decode(y_node,   'node_y')
-        # [REMOVIDO 2026-10-20] mae_hw da grade do estágio FNO/base -- sem loss desde a remoção
-        # do lambda_loss (grade intermediária não supervisionada); só a FNO2d reporta mae_hw.
-        # mae_hw    = torch.mean(torch.abs(y_hw_fno - y_hw)).item()
         mae_hw    = None
         mae_graph = torch.mean(torch.abs(y_nodes  - y_node)).item()
     return mae_hw, mae_graph

@@ -86,11 +86,3 @@ class FNO_BipartiteGNN_Elem(FNO_BipartiteGNN):
         if return_components:
             return y_hw_fno, fno_at_main, delta
         return y_hw_fno, fno_at_main + delta
-
-
-# [REMOVIDO 2026-10-21] stub do eval_fn (eval_fn saiu do ARCH_REGISTRY; avaliação da Elem no
-# postprocess)
-# def femm_mesh_elem_eval_fn(model, chunk_data, eval_cfg):
-#     """Protótipo: sem plot ainda (femm_mesh_v2_eval_fn presume vértices como
-#     grafo principal). Treino e mae_hw/mae_graph funcionam."""
-#     raise NotImplementedError("eval/plot do FNO_BipartiteGNN_Elem ainda não implementado (protótipo)")

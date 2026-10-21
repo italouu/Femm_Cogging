@@ -254,15 +254,11 @@ def _scan_interface(mesh, B1, B2, con, ei, k, direction):
         if nxt == -1:
             return 'punt', e
         if lbl[ei] != lbl[nxt]:
-            # [REMOVIDO 2026-10-11] payload sem nxt — nxt é necessário p/ bn_source='B'
-            # return 'iface', (e, pt)
             return 'iface', (e, pt, nxt)
         e = nxt
     return 'none', None
 
 
-# [REMOVIDO 2026-10-11] assinatura sem nxt/bn_source — ver bn_source abaixo
-# def _interface_contrib(mesh, B1, B2, e, k, pt):
 def _interface_contrib(mesh, B1, B2, e, k, pt, nxt=-1, bn_source='A'):
     """Contribuição do lado de interface (k, pt) — corpo comum aos dois scans.
 
@@ -279,8 +275,6 @@ def _interface_contrib(mesh, B1, B2, e, k, pt, nxt=-1, bn_source='A'):
     L = mesh.length_conv
     tn = complex(mesh.x[pt] - mesh.x[k], mesh.y[pt] - mesh.y[k])
     atn = abs(tn)
-    # [REMOVIDO 2026-10-11] normal sempre a partir de mesh.A — agora depende de bn_source
-    # bn = (mesh.A[pt] - mesh.A[k]) / (atn * L)
     if bn_source == 'A':
         bn = (mesh.A[pt] - mesh.A[k]) / (atn * L)
     elif bn_source == 'B':
@@ -298,8 +292,6 @@ def _interface_contrib(mesh, B1, B2, e, k, pt, nxt=-1, bn_source='A'):
     return z, d1, d2, d1b, d2b, tn
 
 
-# [REMOVIDO 2026-10-11] assinatura sem bn_source
-# def _nodal_b_vertex(mesh, B1, B2, con, ei, i):
 def _nodal_b_vertex(mesh, B1, B2, con, ei, i, bn_source='A'):
     """Ramo 'else' (m != NumList[k]) de GetNodalB para o vértice i do elemento ei.
 
@@ -320,8 +312,6 @@ def _nodal_b_vertex(mesh, B1, B2, con, ei, i, bn_source='A'):
         v1, v2 = 1 + 0j, 1 + 0j
         rule = 'punt'
     elif kind == 'iface':
-        # [REMOVIDO 2026-10-11] sem nxt/bn_source
-        # z, d1, d2, d1b, d2b, tn = _interface_contrib(mesh, B1, B2, pay[0], k, pay[1])
         z, d1, d2, d1b, d2b, tn = _interface_contrib(mesh, B1, B2, pay[0], k, pay[1],
                                                      pay[2], bn_source)
         R += z
@@ -337,8 +327,6 @@ def _nodal_b_vertex(mesh, B1, B2, con, ei, i, bn_source='A'):
             v1, v2 = 1 + 0j, 1 + 0j
             rule = 'punt'
         elif kind == 'iface':
-            # [REMOVIDO 2026-10-11] sem nxt/bn_source
-            # z, d1, d2, d1b, d2b, tn = _interface_contrib(mesh, B1, B2, pay[0], k, pay[1])
             z, d1, d2, d1b, d2b, tn = _interface_contrib(mesh, B1, B2, pay[0], k, pay[1],
                                                          pay[2], bn_source)
             R += z
@@ -374,8 +362,6 @@ def _nodal_b_vertex(mesh, B1, B2, con, ei, i, bn_source='A'):
     return b1, b2, rule
 
 
-# [REMOVIDO 2026-10-11] assinatura sem bn_source
-# def nodal_b(mesh: AnsMesh, B1, B2, conlist=None, return_rule=False):
 def nodal_b(mesh: AnsMesh, B1, B2, conlist=None, return_rule=False, bn_source='A'):
     """elm.b1[3]/elm.b2[3] de todos os elementos (P1 descontínuo).
 
@@ -432,8 +418,6 @@ def nodal_b(mesh: AnsMesh, B1, B2, conlist=None, return_rule=False, bn_source='A
     for ei, i in zip(*np.nonzero(~normal)):
         k = mesh.p[ei, i]
         con = con_idx[con_ptr[k]:con_ptr[k + 1]]
-        # [REMOVIDO 2026-10-11] sem bn_source
-        # vb1, vb2, r = _nodal_b_vertex(mesh, B1, B2, con, int(ei), int(i))
         vb1, vb2, r = _nodal_b_vertex(mesh, B1, B2, con, int(ei), int(i), bn_source)
         b1[ei, i], b2[ei, i] = vb1, vb2
         rule[ei, i] = rule_code[r]

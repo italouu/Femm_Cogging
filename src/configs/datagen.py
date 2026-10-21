@@ -4,8 +4,6 @@ from typing import Optional
 
 @dataclass
 class DatagenConfig:
-    # [REMOVIDO 2026-10-14] raw sem correntes (4000 amostras) — continua em data/raw/mesh_ans_138x276/
-    # dataset: str = 'mesh_ans_138x276'
     # raw com correntes de fase (current_peak abaixo), 6000 amostras — 2026-10-14
     dataset: str = 'BLDC_138x276'
 
@@ -36,7 +34,6 @@ class DatagenConfig:
     mode: str = 'femm_mesh_v2'
     distribution: str = 'uniform'
     sample_method: str = 'legacy'  # 'fixed_geometry' |'constrained' | 'legacy' | 'constrained_lhs'
-    # [REMOVIDO 2026-10-14] n_samples: int = 4000  (raw mesh_ans_138x276)
     n_samples: int = 6000
     max_depth: int = 1
     datagen_seed: int = 12
@@ -95,7 +92,7 @@ class DatagenConfig:
     #
     # [ATUALIZADO 2026-08-19] mode='femm_mesh_v2' passou a usar PARSER_REGISTRY
     # (antes era ignorado; a escolha do alvo vinha de um campo dedicado,
-    # femm_mesh_v2_target_field, descontinuado — ver [REMOVIDO] abaixo).
+    # femm_mesh_v2_target_field, descontinuado em 2026-08-19).
     # gen_npz_structures.py::_run_femm_mesh_v2 lê só
     # PARSER_REGISTRY[npz_parser].target_field e repassa pra
     # src/data_gen/parsers/femm_mesh_v2.py::parse_ans_gzip_sample, que já
@@ -113,14 +110,6 @@ class DatagenConfig:
 
     # generate_data_femm_mesh (só mode='femm_mesh')
     femm_mesh_max_workers: int = 8
-
-    # [REMOVIDO 2026-08-19] target_field de mode='femm_mesh_v2' descontinuado
-    # como campo dedicado — agora vem de PARSER_REGISTRY[npz_parser].target_field
-    # (ver npz_parser acima e femm_mesh_v2_dataset_name abaixo), mesmo
-    # mecanismo usado pelos demais modos. Motivo: reduzir a assimetria de
-    # mode='femm_mesh_v2' não seguir o contrato de parser já estabelecido
-    # pelo resto do projeto (PARSER_REGISTRY/DatagenConfig.npz_parser).
-    # femm_mesh_v2_target_field: str = 'B'
 
     @property
     def femm_mesh_v2_dataset_name(self) -> str:

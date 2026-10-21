@@ -14,16 +14,6 @@ e, para a Elem, mesh_ans_138x276_smooth_elem_proto/ — runs de 4000 amostras.)
 test_split=None → teste = complemento (19 chunks). test_split=0.30 daria int(18,9)=18 e
 deixaria 1 chunk fora de tudo.
 """
-# [REMOVIDO 2026-10-13] valores de todas as runs na bateria de 4000 amostras (125 chunks:
-# 37 treino / 37 teste / 51 fora). Trocados para o dataset de 2000 amostras com 70/30 e
-# 500 épocas (pedido do usuário):
-#     dataset='mesh_ans_138x276_smooth/<arch>',
-#     problem='mesh_ans_138x276_smooth_battery',   (Elem: 'mesh_ans_138x276_smooth_elem_proto')
-#     n_epochs=350, ...
-#     train_split=0.30, test_split=0.30, split_seed=12,
-# [REMOVIDO 2026-10-20] argumentos de features sem uso tirados de todas as runs:
-#   arch_cfg: lambda_loss=0   |   MseLossCfg(tail_alpha=0.0, tail_k_frac=0.0, subtract_fno=False)
-#   MaeLossCfg(subtract_fno=False)   -- valores idênticos aos efetivos (desligados).
 from src.configs.battery import BatteryCfg, BatteryRun
 from src.configs.training import (NnCfg, FNOConfig, FNO_GNNConfig, GNN_PostBaseConfig,
                                   FNO_BipartiteGNNConfig, FNO_BipartiteGNN_ElemConfig)

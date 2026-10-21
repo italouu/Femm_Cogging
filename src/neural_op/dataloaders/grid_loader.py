@@ -6,39 +6,6 @@ import torch
 from torch.utils.data import IterableDataset, DataLoader
 
 
-# [REMOVIDO] GridChunkDataset — carregava todos os chunks em RAM simultaneamente
-#            via torch.cat no __init__, inviável para datasets grandes.
-#            Substituída por ChunkStreamDataset (IterableDataset com buffer manual).
-#
-# class GridChunkDataset(Dataset):
-#     """
-#     Carrega todos os quad_chunk_*.pt em memória no __init__ e os concatena
-#     num único tensor contíguo [N, C, H, W].
-#     Cada item retorna (x[i], y[i]) com shape [C, H, W] via indexação direta.
-#
-#     Estimativa de RAM: N_amostras × C × H × W × 4 bytes × 2 (x e y).
-#     Para 1500 amostras [2,80,240]: ~460 MB.
-#     """
-#     def __init__(self, chunk_paths):
-#         xs, ys = [], []
-#         n_chunks = len(chunk_paths)
-#         for ci, p in enumerate(chunk_paths):
-#             print(f"\r  carregando chunks  [{ci+1}/{n_chunks}]", end='', flush=True)
-#             d = torch.load(p, map_location='cpu')
-#             xs.append(d['x_hw'])   # [B, C, H, W]
-#             ys.append(d['y_hw'])   # [B, C, H, W]
-#         print()
-#
-#         self.x = torch.cat(xs, dim=0)   # [N, C, H, W]
-#         self.y = torch.cat(ys, dim=0)   # [N, C, H, W]
-#
-#     def __len__(self):
-#         return self.x.shape[0]
-#
-#     def __getitem__(self, idx):
-#         return self.x[idx], self.y[idx]
-
-
 # ── Streaming dataset ─────────────────────────────────────────────────────────
 
 class ChunkStreamDataset(IterableDataset):
@@ -275,8 +242,6 @@ class CUDAPrefetcher:
 
 # ── Streaming dataset do grafo de vértices (mode='mesh_v1') ──────────────────
 
-# [REMOVIDO 2026-10-21] nome do modo 'qtree' (quadtree, pipeline antigo) -> 'mesh_v1' (grafo de vértices da malha do FEMM, layout v1 de FNO_GNN/GNN_PostBase)
-# class ChunkQtreeDataset(IterableDataset):
 class ChunkMeshV1Dataset(IterableDataset):
     """
     Versão de ChunkStreamDataset que preserva dados de grafo (mode='mesh_v1':
@@ -600,28 +565,7 @@ def femm_mesh_v2_collate(samples):
 
 # ── build_loaders ─────────────────────────────────────────────────────────────
 
-# [REMOVIDO] assinatura antiga de build_loaders — recebia train_portion e usava
-#            random_split sobre GridChunkDataset (split ao nível de amostra).
-#            Substituída pela versão abaixo que faz split ao nível de chunk e
-#            recebe os parâmetros de streaming.
-#
-# def build_loaders(chunk_paths, batch_size, train_portion=0.70, seed=None):
-#     ds = GridChunkDataset(chunk_paths)
-#     n       = len(ds)
-#     n_train = int(n * train_portion)
-#     n_test  = n - n_train
-#     generator = torch.Generator().manual_seed(seed) if seed is not None else None
-#     train_ds, test_ds = torch.utils.data.random_split(
-#         ds, [n_train, n_test], generator=generator
-#     )
-#     pin = torch.cuda.is_available()
-#     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=0, pin_memory=pin)
-#     test_loader  = DataLoader(test_ds,  batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=pin)
-#     print(f"Dataset: {n} amostras  ({n_train} treino / {n_test} teste)")
-#     return train_loader, test_loader
 
-
-# [REMOVIDO 2026-10-21] def qtree_collate(samples):   (nome do modo 'qtree' (quadtree, pipeline antigo) -> 'mesh_v1' (grafo de vértices da malha do FEMM, layout v1 de FNO_GNN/GNN_PostBase))
 def mesh_v1_collate(samples):
     """
     Collate para ChunkMeshV1Dataset.
@@ -725,9 +669,6 @@ def build_loaders(chunk_paths, batch_size, train_split,
         cls, collate_fn = ChunkStreamDataset, None
     elif mode == 'femm_mesh_v2':
         cls, collate_fn = ChunkFemmMeshV2Dataset, femm_mesh_v2_collate
-    # [REMOVIDO 2026-10-21] qualquer outro modo caía no loader 'qtree' -- sem alias para o nome antigo
-    # else:
-    #     cls, collate_fn = ChunkQtreeDataset, qtree_collate
     elif mode == 'mesh_v1':
         cls, collate_fn = ChunkMeshV1Dataset, mesh_v1_collate
     else:
@@ -751,15 +692,6 @@ def build_loaders(chunk_paths, batch_size, train_split,
             "para o subdiretório correto. Execute build_data_chunks.py antes do treino."
         )
 
-    # [REMOVIDO] split inline — movido para split_chunk_paths() para que
-    # scripts/eval.py possa reproduzir o mesmo split sem duplicar a lógica.
-    #
-    # rng = random.Random(seed)
-    # rng.shuffle(paths)
-    # n_train     = int(len(paths) * train_split)
-    # n_train     = max(n_train, 1) if len(paths) >= 2 else len(paths)
-    # train_paths = paths[:n_train]
-    # test_paths  = paths[n_train:]
     train_paths, test_paths = split_chunk_paths(paths, train_split, seed, test_split)
 
     train_ds = cls(train_paths, buffer_size, prefetch_chunks=2)

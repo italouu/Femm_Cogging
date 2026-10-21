@@ -20,8 +20,6 @@ ANG1_DEG, ANG2_DEG = 0.0, 120.0
 
 class Accum:
     """Acumula e = | |B|_pred - |B|_true | ponderado por área sobre amostras."""
-    # [REMOVIDO 2026-10-15] sem sum_sq (L2 ponto a ponto) -- acrescentado
-    # FIELDS = ('num_l1', 'num_l2', 'den_area', 'num_ref', 'sum_abs', 'n_pts')
     FIELDS = ('num_l1', 'num_l2', 'den_area', 'num_ref', 'sum_abs', 'sum_sq', 'n_pts')
 
     def __init__(self):
@@ -48,14 +46,6 @@ class Accum:
         l2 = math.sqrt(self.num_l2 / self.den_area)
         out = dict(B_ref=b_ref, L1_area=l1, L1_area_pct=100 * l1 / b_ref,
                    L2_area=l2, L2_area_pct=100 * l2 / b_ref, n_pts=self.n_pts)
-        # [REMOVIDO 2026-10-20] ponto a ponto sempre presente -- agora só se houver
-        # pontos (add_surface não os acumula)
-        # mae = self.sum_abs / self.n_pts
-        # l2pt = math.sqrt(self.sum_sq / self.n_pts)
-        # return dict(B_ref=b_ref, MAE_pt=mae, MAE_pt_pct=100 * mae / b_ref,
-        #             L1_area=l1, L1_area_pct=100 * l1 / b_ref,
-        #             L2_area=l2, L2_area_pct=100 * l2 / b_ref,
-        #             L2_pt=l2pt, L2_pt_pct=100 * l2pt / b_ref, n_pts=self.n_pts)
         if self.n_pts:
             mae = self.sum_abs / self.n_pts
             l2pt = math.sqrt(self.sum_sq / self.n_pts)
@@ -201,9 +191,6 @@ def grid_mesh_overlay(xy, tri, b1, b2, r_in, r_ext, n_r, n_a,
     sh = corners
     area_cells = 0.5 * np.abs((sh[:, 2, 0] - sh[:, 0, 0]) * (sh[:, 3, 1] - sh[:, 1, 1])
                               - (sh[:, 3, 0] - sh[:, 1, 0]) * (sh[:, 2, 1] - sh[:, 0, 1])).sum()
-    # [REMOVIDO 2026-10-20] sem o triângulo de cada ponto (agora usado no mapa de erro)
-    # return dict(cell=c_idx[q_piece].astype(np.int32), w=q_w.astype(np.float32),
-    #             mag=np.hypot(bx, by).astype(np.float32), area_cells=float(area_cells))
     return dict(cell=c_idx[q_piece].astype(np.int32), tri=t.astype(np.int32),
                 w=q_w.astype(np.float32), mag=np.hypot(bx, by).astype(np.float32),
                 area_cells=float(area_cells))

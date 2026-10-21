@@ -28,17 +28,6 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 class BLDC_Process:
 
     # Propriedades de materiais — fonte única para todas as subclasses.
-    # [REMOVIDO 2026-08-13] literais movidos pra src/data_gen/motor_constants.py
-    # (módulo sem `import femm`/shapely/etc.) -- reimportados abaixo, pra
-    # BLDC_Process.MATERIAL_ID/PERMEABILITY/MAGNETIZATION continuarem
-    # funcionando idênticos sem duplicar os dicts. Motivo: src/data_gen/
-    # parsers/ans_parsing.py usava só esses 3 dicts e arrastava femm junto
-    # ao importar BLDC_Process (ver docstring de motor_constants.py).
-    # MAGNETIZATION = {'iron_1008': 0,      'N35p': 1,    'N35n': -1,  'copper': 0,     'vacuum': 0  }
-    # PERMEABILITY  = {'iron_1008': 5000.0, 'N35p': 1.05, 'N35n': 1.05,'copper': 0.999, 'vacuum': 1.0}
-    # # [REMOVIDO] MATERIAL_ID = {'iron_1008': 6, 'N35p': 1, 'N35n': 5, 'copper': 3, 'vacuum': 0}
-    # # N35p e N35n unificados como ima=2; ferro=0, ar=1, bobina=3
-    # MATERIAL_ID   = {'iron_1008': 0,      'N35p': 2,    'N35n': 2,   'copper': 3,     'vacuum': 1  }
     MAGNETIZATION = _MOTOR_MAGNETIZATION
     PERMEABILITY  = _MOTOR_PERMEABILITY
     MATERIAL_ID   = _MOTOR_MATERIAL_ID
@@ -295,10 +284,6 @@ class BLDC_Process:
                           (>1 → disco vê células vizinhas, criando transições mais suaves)
         """
         def compute(c, x, y, r):
-            # [REMOVIDO] disco único — mesmo raio usado para valor e para decisão de refinamento
-            # radius    = r * ang_step / 3.0
-            # disk      = Point(x, y).buffer(radius, resolution=res)
-            # disk_area = disk.area
 
             # ── disco pequeno: calcula valor do campo (representativo da célula) ──
             radius_val = r * ang_step / 3.0
@@ -348,7 +333,6 @@ class BLDC_Process:
 
             ref_sum = sum(ref_area_dict.values())
             ref_area_dict["vacuum"] = max(disk_ref_area - ref_sum, 0.0)
-            # [REMOVIDO] max_frac = max(area_dict.values()) / disk_area if disk_area > 0 else 1.0
             max_frac = max(ref_area_dict.values()) / disk_ref_area if disk_ref_area > 0 else 1.0
 
             return (refinement_low < max_frac < refinement_high) or \
@@ -454,7 +438,6 @@ class BLDC_Process:
     def generate_samples(num_samples, seed=42):
 
         N_POLES   = 42
-        # [REMOVIDO] PHASE_MAX = 360.0 / (2 * N_POLES)  # cobria só 1/4 do período forma+polaridade (360/21)
         PHASE_MAX = 2 * 360.0 / N_POLES
 
         space = {
@@ -488,12 +471,6 @@ class BLDC_Process:
             return rng.triangular(left=lo, right=hi, mode=md)
 
         for _ in range(num_samples):
-            # [REMOVIDO 2026-10-21] stack length sorteado em [5, 10] mm e usado -- agora fixo
-            # (motor_constants.STACK_LENGTH_MM).
-            # stack_length = _sample(min, max, mode)
-            # [REMOVIDO 2026-10-21] sorteio retirado (mudava a sequência do gerador e todas as
-            # geometrias) -- restaurado abaixo (R7a), com o valor descartado.
-            # stack_length = _MOTOR_STACK_LENGTH_MM
             # length -- sorteio MANTIDO só para preservar a sequência do gerador (e, com a
             # mesma semente, as geometrias do raw já gerado); o valor é descartado e o stack
             # length usado é o fixo STACK_LENGTH_MM.
@@ -631,7 +608,6 @@ class BLDC_Process:
         ROTOR_OUTER    = 90.0
         HS0, HS1, HS2  = 1.0, 1.2, 3.7
         HS_TOTAL       = HS0 + HS1 + HS2   # 5.9
-        # [REMOVIDO 2026-10-21] STACK_LENGTH   = 1.0
         STACK_LENGTH   = _MOTOR_STACK_LENGTH_MM
         N_SLOTS        = 36
         N_POLES        = 42
@@ -757,7 +733,6 @@ class BLDC_Process:
         ROTOR_OUTER    = 90.0
         HS0, HS1, HS2  = 1.0, 1.2, 3.7
         HS_TOTAL       = HS0 + HS1 + HS2   # 5.9
-        # [REMOVIDO 2026-10-21] STACK_LENGTH   = 1.0
         STACK_LENGTH   = _MOTOR_STACK_LENGTH_MM
         N_SLOTS        = 36
         N_POLES        = 42
@@ -937,14 +912,12 @@ class BLDC_Process:
         BS0, BS1, BS2    = 0.74, 2.79, 2.35
         POLE_THICKNESS   = 2.0
         POLE_EMBRANCE    = 0.90
-        # [REMOVIDO 2026-10-21] STACK_LENGTH     = 1.0
         STACK_LENGTH     = _MOTOR_STACK_LENGTH_MM
         N_SLOTS          = 36
         N_POLES          = 42
         OUTER_D          = 93.0
         INNER_D          = 57.0
 
-        # [REMOVIDO] PHASE_MAX = 360.0 / (2*N_POLES)  # docstring dizia "pitch completo" (17°) mas fórmula dava 4.29°
         PHASE_MAX = 2 * 360.0 / N_POLES   # ≈ 17.14° — um pitch de polo completo (forma + polaridade)
 
         space = {
@@ -1240,7 +1213,6 @@ class BLDC_FEMM_Model(BLDC_Process):
         res = 1
         femm.mi_addboundprop("A=0", 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)
 
-        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_gap) — exigia o material na biblioteca local do FEMM; ver _get_material
         self._get_material(self.material_gap)
         femm.mi_addblocklabel(0,0)
         femm.mi_selectlabel(0,0)
@@ -1266,7 +1238,6 @@ class BLDC_FEMM_Model(BLDC_Process):
         femm.mi_setarcsegmentprop(1,"A=0", 0, 0)
         femm.mi_clearselected()
 
-        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_gap) — exigia o material na biblioteca local do FEMM; ver _get_material
         self._get_material(self.material_gap)
         femm.mi_addblocklabel(r_in * np.cos(theta),r_in * np.sin(theta))
         femm.mi_selectlabel(r_in * np.cos(theta),r_in * np.sin(theta))
@@ -1295,7 +1266,6 @@ class BLDC_FEMM_Model(BLDC_Process):
             
         ang_avg = np.pi/2
         r_avg = (self.rotor_inner_diameter+self.stator_outer_diameter)/4
-        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_gap) — exigia o material na biblioteca local do FEMM; ver _get_material
         self._get_material(self.material_gap)
         femm.mi_addblocklabel(r_avg * np.cos(ang_avg),r_avg * np.sin(ang_avg))
         femm.mi_selectlabel(r_avg * np.cos(ang_avg),r_avg * np.sin(ang_avg))
@@ -1316,7 +1286,6 @@ class BLDC_FEMM_Model(BLDC_Process):
         
         ang_avg = np.pi/2
         r_avg = (self.stator_inner_diameter/2 + self.stator_outer_diameter/2 - (self.slot_Hs0 + self.slot_Hs1 + self.slot_Hs2))/2
-        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_iron) — exigia o material na biblioteca local do FEMM; ver _get_material
         self._get_material(self.material_iron)
         femm.mi_addblocklabel(r_avg * np.cos(ang_avg),r_avg * np.sin(ang_avg))
         femm.mi_selectlabel(r_avg * np.cos(ang_avg),r_avg * np.sin(ang_avg))
@@ -1352,7 +1321,6 @@ class BLDC_FEMM_Model(BLDC_Process):
             femm.mi_addcircprop('coil_' + str(i) + '_1', 0, 1)
 
             ang = step * i + step/2 - ang_offset
-            # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_copper) — exigia o material na biblioteca local do FEMM; ver _get_material
             self._get_material(self.material_copper)
             femm.mi_addblocklabel(r*np.cos(ang),r*np.sin(ang))
             femm.mi_selectlabel(r*np.cos(ang),r*np.sin(ang))
@@ -1360,7 +1328,6 @@ class BLDC_FEMM_Model(BLDC_Process):
             femm.mi_clearselected()
 
             ang = step * i + step/2 + ang_offset
-            # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_copper) — exigia o material na biblioteca local do FEMM; ver _get_material
             self._get_material(self.material_copper)
             femm.mi_addblocklabel(r*np.cos(ang),r*np.sin(ang))
             femm.mi_selectlabel(r*np.cos(ang),r*np.sin(ang))
@@ -1400,7 +1367,6 @@ class BLDC_FEMM_Model(BLDC_Process):
         if material:
             ang_avg = (ang_in_1+ang_in_2+ang_ext_1+ang_ext_2)/4
             r_avg = (r_in+r_ext)/2
-            # [REMOVIDO 2026-10-07] femm.mi_getmaterial(material) — exigia o material na biblioteca local do FEMM; ver _get_material
             self._get_material(material)
             femm.mi_addblocklabel(r_avg * np.cos(ang_avg),r_avg * np.sin(ang_avg))
             femm.mi_selectlabel(r_avg * np.cos(ang_avg),r_avg * np.sin(ang_avg))
@@ -1528,7 +1494,6 @@ class BLDC_FEMM_Model(BLDC_Process):
             c["bx"], c["by"] = float(bx), float(by)
             c["a"] = float(femm.mo_geta(x, y))
 
-        # [REMOVIDO] depth_arr salvo como Mag_B_depth_qt_ — depth unificado já em depth_qt_
         Bx = np.array([c["bx"] for c in leaves], dtype=float).reshape(-1, 1)
         By = np.array([c["by"] for c in leaves], dtype=float).reshape(-1, 1)
         A  = np.array([c["a"]  for c in leaves], dtype=float).reshape(-1, 1)
@@ -1550,31 +1515,17 @@ class BLDC_Shapely_Model(BLDC_Process):
 
         # backiron
         center = Point(0,0)
-        # [REMOVIDO] mesmo problema do c2 abaixo: resolução padrão do buffer
-        # (quad_segs=8, ~11.25°/segmento) facetava o círculo externo do rotor,
-        # criando serrilhado ferro/vácuo (sagita ~0.22mm no raio de 45mm) na
-        # fronteira externa do back_iron — visível como zigue-zague na borda
-        # do rotor no grid de mu_r em vez de uma linha reta.
-        # c1 = center.buffer(self.rotor_outer_diameter/2)
+        # quad_segs=90: a resolução padrão do buffer facetava os círculos (serrilhado
+        # ferro/vácuo na borda do rotor e sobreposição polos × back_iron)
         c1 = center.buffer(self.rotor_outer_diameter/2, quad_segs=90)
-        # [REMOVIDO] resolução padrão do buffer (quad_segs=16, ~5.6°/segmento) não
-        # casava com a malha de 1° usada em _create_sec para os polos, causando
-        # sobreposição visível entre poles e back_iron perto do raio
-        # rotor_inner/2+pole_thickness (sagita ~0.05mm vs coroa mínima de ~1mm)
-        # c2 = center.buffer(self.rotor_inner_diameter/2 + self.pole_thickness)
         c2 = center.buffer(self.rotor_inner_diameter/2 + self.pole_thickness, quad_segs=90)
         self.back_iron = c1.difference(c2)
         self.geometries['iron_1008'].append(self.back_iron)
 
-        #out motor
+        #out motor -- fora de self.geometries: o vácuo é implícito (resíduo da área não coberta
+        # por ferro/ímã/cobre); cadastrá-lo contava a área de vácuo duas vezes no refinamento
         c_out = center.buffer(self.outer_diameter/2)
         self.out_motor = c_out.difference(c1)
-        # [REMOVIDO] vácuo deve ser implícito (resíduo de área não coberta por
-        # ferro/ímã/cobre), igual ao resto do código. Adicionar out_motor aqui
-        # fazia compute() em _make_material_compute_fn contar a área de vácuo
-        # duas vezes (interseção + resíduo), zerando frac_dom e forçando refino
-        # até max_depth no anel entre o rotor e o raio externo de amostragem.
-        # self.geometries['vacuum'].append(self.out_motor)
 
         # poles
         step_ang = 360/self.number_rotor_poles
@@ -1611,11 +1562,6 @@ class BLDC_Shapely_Model(BLDC_Process):
 
         #in motor
         self.in_motor = center.buffer(self.inner_diameter/2)
-        # [REMOVIDO] mesmo motivo do out_motor acima — vácuo implícito, não
-        # cadastrado em geometries['vacuum']. Na prática in_motor nunca
-        # intersecta o domínio amostrado (raio igual a r_in da amostragem),
-        # mas mantemos o mesmo padrão por consistência.
-        # self.geometries['vacuum'].append(self.in_motor)
 
     def _create_air_gap(self):
         center = Point(0,0)
@@ -1793,13 +1739,6 @@ class BLDC_Shapely_Model(BLDC_Process):
         Mag = np.array([c["m"] for c in leaves], dtype=float).reshape(-1, 1)
         self.save_csv(Fields=[Mag], names=[f"Mag_M_qt_{code}.csv"])
 
-    # [REMOVIDO] save_material_mu_avg_qtree — substituído por save_material_mu_qtree
-    # Motivo: usava dois discos Shapely (disk_val + disk_ref) para refinamento;
-    #         gerava Mu_avg_qt_ (média ponderada por área) e não incluía frac_dom.
-    # def save_material_mu_avg_qtree(self, ang_1, ang_2, n_r, n_a,
-    #                                max_depth=1, code=0, res=20,
-    #                                r_interest=None, r_d=0.5): ...
-
     def save_material_mu_qtree(self, ang_1, ang_2, n_r, n_a,
                                max_depth=1, code=0):
         """Quadtree sampling de permeabilidade (mu_r) e fração dominante (frac_dom).
@@ -1974,10 +1913,6 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
     em tests/inspect_femm_phase_sym120.py (wrap exato nos cortes, |ΔA|~1e-12).
     """
 
-    # [REMOVIDO 2026-08-13] N_POLES_SECTOR = 14 -- movido pra
-    # src/data_gen/motor_constants.py (mesmo motivo do bloco de materiais
-    # acima em BLDC_Process: src/data_gen/parsers/femm_mesh_v2.py usava só
-    # esse inteiro e arrastava femm junto ao importar esta classe).
     N_POLES_SECTOR = _MOTOR_N_POLES_SECTOR   # 120 / (360/42) == 14
     N_SLOTS_SECTOR = 12   # 120 / (360/36)
     _PERIODIC = "periodic_120"
@@ -1994,22 +1929,6 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
                           r_ext=self.rotor_outer_diameter / 2,
                           ang_in_1=0, ang_in_2=120,
                           material=self.material_iron)
-
-        # [REMOVIDO 2026-10-05] polos com phase=0 fixo — a fase do rotor sorteada
-        # (rotor_phase) nunca chegava ao desenho; substituído pelo laço abaixo, que
-        # gira os polos dentro do setor (com phase=0 o desenho é idêntico a este).
-        # # --- polos 0..13 (idêntico ao original, só o range muda) ---
-        # step_ang = 360 / self.number_rotor_poles
-        # pole_ang = step_ang * self.pole_embrance
-        # for pole in range(self.N_POLES_SECTOR):
-        #     ang_1 = step_ang * pole
-        #     ang_2 = ang_1 + pole_ang
-        #     direction = 0 if pole % 2 == 0 else 180
-        #     self._create_sec(r_in=self.rotor_inner_diameter / 2,
-        #                       r_ext=self.rotor_inner_diameter / 2 + self.pole_thickness,
-        #                       ang_in_1=ang_1, ang_in_2=ang_2,
-        #                       material=self.material_mag,
-        #                       direction=direction, phase=0)
 
         # --- polos 0..13 girados pela fase do rotor, dentro do setor ---
         # _create_sec usa magdir = centro do PEDAÇO desenhado + direction; o
@@ -2127,7 +2046,6 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
             femm.mi_addcircprop('coil_' + str(i) + '_1', -sign * i_ph[ph] + 0.0, 1)
 
             ang = step * i + step / 2 - ang_offset
-            # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_copper) — exigia o material na biblioteca local do FEMM; ver _get_material
             self._get_material(self.material_copper)
             femm.mi_addblocklabel(r * np.cos(ang), r * np.sin(ang))
             femm.mi_selectlabel(r * np.cos(ang), r * np.sin(ang))
@@ -2135,7 +2053,6 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
             femm.mi_clearselected()
 
             ang = step * i + step / 2 + ang_offset
-            # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_copper) — exigia o material na biblioteca local do FEMM; ver _get_material
             self._get_material(self.material_copper)
             femm.mi_addblocklabel(r * np.cos(ang), r * np.sin(ang))
             femm.mi_selectlabel(r * np.cos(ang), r * np.sin(ang))
@@ -2167,7 +2084,6 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
         # label do "gap" (vácuo) entre estator e rotor — 90 graus cai dentro do setor
         ang_avg = np.pi / 2
         r_avg = (self.rotor_inner_diameter + self.stator_outer_diameter) / 4
-        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_gap) — exigia o material na biblioteca local do FEMM; ver _get_material
         self._get_material(self.material_gap)
         femm.mi_addblocklabel(r_avg * np.cos(ang_avg), r_avg * np.sin(ang_avg))
         femm.mi_selectlabel(r_avg * np.cos(ang_avg), r_avg * np.sin(ang_avg))
@@ -2185,7 +2101,6 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
         # buraco automaticamente); igual ao (0,0) do modelo original
         r_bore_lab = (self._bore_start_radius() + r_in2) / 2
         ang_bore = np.deg2rad(60)
-        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_gap) — exigia o material na biblioteca local do FEMM; ver _get_material
         self._get_material(self.material_gap)
         femm.mi_addblocklabel(r_bore_lab * np.cos(ang_bore), r_bore_lab * np.sin(ang_bore))
         femm.mi_selectlabel(r_bore_lab * np.cos(ang_bore), r_bore_lab * np.sin(ang_bore))
@@ -2195,7 +2110,6 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
         ang_avg = np.deg2rad(60)
         r_avg = (self.stator_inner_diameter / 2 + self.stator_outer_diameter / 2
                  - (self.slot_Hs0 + self.slot_Hs1 + self.slot_Hs2)) / 2
-        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_iron) — exigia o material na biblioteca local do FEMM; ver _get_material
         self._get_material(self.material_iron)
         femm.mi_addblocklabel(r_avg * np.cos(ang_avg), r_avg * np.sin(ang_avg))
         femm.mi_selectlabel(r_avg * np.cos(ang_avg), r_avg * np.sin(ang_avg))
@@ -2220,7 +2134,6 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
 
         r_in = self.outer_diameter / 2 * 0.99
         theta = np.deg2rad(60)
-        # [REMOVIDO 2026-10-07] femm.mi_getmaterial(self.material_gap) — exigia o material na biblioteca local do FEMM; ver _get_material
         self._get_material(self.material_gap)
         femm.mi_addblocklabel(r_in * np.cos(theta), r_in * np.sin(theta))
         femm.mi_selectlabel(r_in * np.cos(theta), r_in * np.sin(theta))
@@ -2277,8 +2190,6 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
             ("per_slot_bottom", slot_bottom,                         r_bs0,                           False),  # reaproveita aresta do lóbulo
             ("per_slot_throat", r_bs0,                                self.stator_outer_diameter / 2,  True),
             ("per_airgap", self.stator_outer_diameter / 2,           self.rotor_inner_diameter / 2,    True),
-            # [REMOVIDO 2026-10-05] "pole0" supunha o polo 0 começando em theta=0 (phase=0)
-            # ("per_pole_ring", self.rotor_inner_diameter / 2,          self.rotor_inner_diameter / 2 + self.pole_thickness, "pole0"),  # theta=0 reaproveita polo0
             ("per_pole_ring", self.rotor_inner_diameter / 2,          self.rotor_inner_diameter / 2 + self.pole_thickness, "poles"),  # reaproveita aresta de polo que cair no corte
             ("per_back_iron", self.rotor_inner_diameter / 2 + self.pole_thickness, self.rotor_outer_diameter / 2, "existing"),  # já desenhado por _create_sec
             ("per_outer_margin", self.rotor_outer_diameter / 2,      self.outer_diameter / 2,          True),

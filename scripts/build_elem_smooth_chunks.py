@@ -30,20 +30,13 @@ from pathlib import Path
 from scripts.build_smooth_ans_chunks_direct import (
     RAW_DIR, CHUNKS_ROOT, N_R, N_A, ANG_1, ANG_2, CHUNK_SIZE, MAX_WORKERS, MAX_SAMPLES,
 )
-# [REMOVIDO 2026-10-21] helpers dos scripts do protótipo/unificado (gravação pelo _flush de
-# build_data_chunks_femm_mesh_v2 com a global de saída trocada) -- agora src/data_gen/chunks.py (G1)
-# from scripts.build_unified_ans_chunks_direct import _sample_idx
 from src.data_gen.chunks import sample_idx as _sample_idx, write_chunk
-# [REMOVIDO 2026-10-14] N_RAW_EXPECTED do protótipo (4000 fixo) — agora o nº do DatagenConfig
-# from scripts.build_elem_proto_chunks import _write_chunk, N_RAW_EXPECTED, MIN_FREE_GB
-# [REMOVIDO 2026-10-21] from scripts.build_elem_proto_chunks import _write_chunk, MIN_FREE_GB
 MIN_FREE_GB = 55   # valor de scripts/build_elem_proto_chunks.py (chunks de 4000 amostras ~47 GB)
 from src.configs.datagen import DatagenConfig
 N_RAW_EXPECTED = DatagenConfig().n_samples   # precheck com max_samples=None: raw completo
 from src.data_gen.parsers.femm_mesh_elem_smooth import parse_ans_gzip_sample_elem_smooth
 
 OUT_NAME  = 'FNO_BipartiteGNN_Elem'
-# [REMOVIDO 2026-10-14] TMP_PARSE = Path("data/temp") / "mesh_ans_138x276_elem_smooth_parse"
 TMP_PARSE = Path("data/temp") / f"{DatagenConfig().dataset}_elem_smooth_parse"
 
 
@@ -82,7 +75,6 @@ def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, out_name=OUT_NAME):
                                       float(row['outer_diameter [mm]']) / 2,
                                       TMP_PARSE))
             samples = [f.result() for f in futs]   # ordem preservada
-        # [REMOVIDO 2026-10-21] _write_chunk(chunk_idx, samples, out_dir)
         write_chunk(out_dir, chunk_idx, samples, 'bipartite')
         del samples
         feitos += 1
@@ -133,8 +125,6 @@ def precheck(out_name=OUT_NAME, max_samples=MAX_SAMPLES) -> bool:
     mesh = load_ans(p)
     B1, B2 = element_b(mesh)
     b1, b2 = nodal_b(mesh, B1, B2)
-    # [REMOVIDO 2026-10-17] referência cartesiana -- o node_y agora é (Br, Bθ) no centróide.
-    # ref = np.stack([b1.mean(axis=1), b2.mean(axis=1)], axis=1)
     from src.data_gen.parsers.ans_parsing import _to_polar
     from src.data_gen.parsers.femm_mesh_unified import _read_ans_gz
     _, nodes, elems = _read_ans_gz(p, TMP_PARSE)
@@ -161,8 +151,6 @@ def precheck(out_name=OUT_NAME, max_samples=MAX_SAMPLES) -> bool:
 
 def main():
     ap = argparse.ArgumentParser()
-    # [REMOVIDO 2026-10-13] default None (todas) — agora o mesmo limite dos 4 datasets smooth
-    # ap.add_argument('--max-samples', type=int, default=None)
     ap.add_argument('--max-samples', type=int, default=MAX_SAMPLES)
     ap.add_argument('--chunk-size', type=int, default=CHUNK_SIZE)
     ap.add_argument('--out-name', default=OUT_NAME)

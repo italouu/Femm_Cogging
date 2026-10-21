@@ -34,9 +34,6 @@ class TrainingMonitor:
                 self.checkpoint_path.parent / (self.checkpoint_path.stem + '_best.pth')
             )
 
-        # [REMOVIDO] ckpt_extra migrado para config.json via ModelManager
-        # self.ckpt_extra = ckpt_extra or {}
-
         self._best_loss      = float('inf')
         self._patience_count = 0
         self._gl_count       = 0    # heartbeats consecutivos com GL > gl_threshold
@@ -93,18 +90,6 @@ class TrainingMonitor:
                 self.stop_reason   = 'early_stop_patience'
                 return True
 
-        # [REMOVIDO 2026-10-02] GL parava no PRIMEIRO heartbeat acima do limiar — um único
-        # heartbeat ruidoso (ex: FNO2d mse parou na época 39, +6,8%) ou um pico de
-        # instabilidade da otimização (train_loss também explode e depois recupera) bastava
-        # pra encerrar o treino. Substituído por GL sustentado (gl_patience heartbeats
-        # consecutivos) + warm-up min_epochs, logo acima/abaixo.
-        # if self.cfg.gl_threshold is not None:
-        #     gl = 100.0 * (test_loss / self._best_loss - 1.0)
-        #     if gl > self.cfg.gl_threshold:
-        #         print(f"  early stop: generalization loss {gl:.2f}% > {self.cfg.gl_threshold}% "
-        #               f"(best test={self._best_loss:.4e}, atual={test_loss:.4e})")
-        #         self.stopped_early = True
-        #         return True
         if self.cfg.gl_threshold is not None:
             gl_patience = getattr(self.cfg, 'gl_patience', 1)
             if self._gl_count >= gl_patience:

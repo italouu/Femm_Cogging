@@ -162,7 +162,6 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     L/elem_L/E_L/C_L (contagens por amostra, pra agrupamento em chunks) e
     dim_H/dim_W.
     """
-    # [REMOVIDO 2026-10-21] assert target_field in ('A', 'B'), f"target_field inválido: {target_field!r}"
     assert target_field in ('A', 'B', None), f"target_field inválido: {target_field!r}"
     ans_gz_path = Path(ans_gz_path)
     tmp_dir = Path(tmp_dir) if tmp_dir is not None else ans_gz_path.parent
@@ -176,13 +175,8 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     finally:
         tmp_ans.unlink(missing_ok=True)
 
-    # [REMOVIDO 2026-10-05] label do elemento indexando [BlockProps] + polaridade pela
-    # ordem de criação (exigia 14 blocos de ímã; quebra com a fase do rotor aplicada)
-    # block_material_id, block_mu = _parse_block_materials(lines)
-    # block_M = _block_magnet_polarity(block_material_id, _N_POLES_SECTOR)
-    #
-    # elem_mu = block_mu[elems[:, 3]]
-    # elem_M = block_M[elems[:, 3]]
+    # material/polaridade pelo rótulo de cada bloco (2026-10-05) -- indexar [BlockProps] pela
+    # ordem de criação exigia 14 blocos de ímã e quebra com a fase do rotor aplicada
     _, label_mu, label_M = _parse_label_materials(lines)
     elem_mu = label_mu[elems[:, 3]]
     elem_M = label_M[elems[:, 3]]
@@ -226,7 +220,6 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     node_Bx = node_By = None
     if target_field == 'A':
         node_y = node_A[:, None]
-    # [REMOVIDO 2026-10-21] else:   (None = sem gabarito)
     elif target_field == 'B':
         elem_Bx, elem_By = _element_b_from_A(nodes, elems, node_A)
         node_Bx = _node_mean_of_elements(elems, elem_Bx, n_nodes)
@@ -263,7 +256,6 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     if target_field == 'A':
         A_hw = _grid_barycentric(tri, node_A, Xg, Yg).reshape(n_r, n_a)
         y_hw = A_hw[None, :, :]
-    # [REMOVIDO 2026-10-21] else:   (None = sem gabarito)
     elif target_field == 'B':
         # mesmo padrão de amostragem de A -- interpolação baricêntrica do
         # campo nodal (aqui Bx/By, já a média-por-nó calculada acima), não

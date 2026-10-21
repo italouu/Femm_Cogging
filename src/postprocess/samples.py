@@ -35,17 +35,12 @@ from src.postprocess.metrics import grid_mesh_overlay, mesh_surface_quadrature
 
 _dg = DatagenConfig()
 
-# [REMOVIDO 2026-10-14] RAW_DIR  = Path('data/raw/mesh_ans_138x276') — agora DatagenConfig.dataset
 RAW_DIR  = Path('data/raw') / _dg.dataset
 TMP_ROOT = Path('data/temp') / 'postprocess'
 N_R, N_A     = _dg.n_r, _dg.n_a
 ANG_1, ANG_2 = _dg.ang_1, _dg.ang_2
 CHUNK_SIZE   = _dg.chunk_size
 
-# [REMOVIDO 2026-10-13] nº de chunks fixo e rótulos da bateria de 4000 amostras (30/30/40);
-# agora o nº de chunks é deduzido do split.json (_n_chunks) e os rótulos são genéricos.
-# N_CHUNKS = 125            # 4000 amostras / 32
-# SUBSETS  = ('teste37', 'fora51')
 SUBSETS  = ('teste', 'fora')
 
 
@@ -60,32 +55,6 @@ def design_rows():
 
 def sample_path(idx):
     return RAW_DIR / f'sample_{idx:06d}.ans.gz'
-
-
-# [REMOVIDO 2026-10-13] versão com N_CHUNKS fixo, rótulos 'teste37'/'fora51' e
-# max_samples sempre meio a meio (quebra com o subset 'fora' vazio do split 70/30):
-# def samples_with_subset(split_run_dir: Path, max_samples=None):
-#     """[(chunk_name, subset, sample_idx, ans_path)] dos chunks fora do treino, na
-#     ordem do split de `split_run_dir` (config.json + split.json de uma run da
-#     bateria); max_samples -> metade de cada subset."""
-#     cfg = json.loads((split_run_dir / 'config.json').read_text())
-#     split = json.loads((split_run_dir / 'split.json').read_text())
-#     names = [f'data_chunk_{i:04d}.pt' for i in range(N_CHUNKS)]
-#     train, rest = split_chunk_paths(names, cfg['train_split'], seed=cfg['split_seed'])
-#     assert train == split['train'] and rest[:len(split['test'])] == split['test'], \
-#         f'split reconstruído difere do split.json de {split_run_dir}'
-#     test = set(split['test'])
-#     ans = sorted(RAW_DIR.glob('sample_*.ans.gz'), key=_sample_idx)
-#     out = []
-#     for name in rest:
-#         ci = int(name.split('_')[-1].split('.')[0])
-#         sub = 'teste37' if name in test else 'fora51'
-#         for p in ans[ci * CHUNK_SIZE:(ci + 1) * CHUNK_SIZE]:
-#             out.append((name, sub, _sample_idx(p), p))
-#     if max_samples is not None:
-#         out = ([x for x in out if x[1] == 'teste37'][:max_samples // 2]
-#                + [x for x in out if x[1] == 'fora51'][:max_samples - max_samples // 2])
-#     return out
 
 
 def _n_chunks(cfg, split, n_max):
@@ -128,18 +97,6 @@ def samples_with_subset(split_run_dir: Path, max_samples=None, n_samples=None):
     return out
 
 
-# [REMOVIDO 2026-10-20] sem o layout da Elem -- substituída pela versão com with_elem
-# (elem_smooth_eval integrado ao eval).
-# def parse_smooth(path, row, tmp_dir=TMP_ROOT / 'parse'):
-#     """1 .ans.gz -> layouts do gabarito smooth {'v1': FNO_GNN, 'bip': FNO_BipartiteGNN}."""
-#     tmp_dir.mkdir(parents=True, exist_ok=True)
-#     r_in = float(row['inner_diameter [mm]']) / 2
-#     r_ext = float(row['outer_diameter [mm]']) / 2
-#     s = parse_ans_gzip_sample_smooth(path, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2,
-#                                      n_r=N_R, n_a=N_A, tmp_dir=tmp_dir)
-#     return dict(v1=s['FNO_GNN'], bip=s['FNO_BipartiteGNN'])
-# [REMOVIDO 2026-10-20] assinatura sem with_overlay
-# def parse_smooth(path, row, tmp_dir=TMP_ROOT / 'parse', with_elem=False):
 def parse_smooth(path, row, tmp_dir=TMP_ROOT / 'parse', with_elem=False, with_overlay=False):
     """1 .ans.gz -> layouts do gabarito smooth {'v1': FNO_GNN, 'bip': FNO_BipartiteGNN}.
     with_elem: acrescenta 'elem' (layout FNO_BipartiteGNN_Elem, gabarito por elemento) e a

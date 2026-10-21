@@ -1,13 +1,8 @@
 from src.configs.datagen  import DatagenConfig
 from src.configs.training import NnCfg, FNOConfig, MaskedFNO2dConfig, FNO_GNNConfig, FNO_GNN_v2Config, MaskedFNO_GNNConfig, SingleMatFNOConfig, GNN_PostBaseConfig
-# [REMOVIDO] PhiDeepONetConfig — removida (2026-05-27)
 from src.configs.monitor  import MonitorCfg
 from src.configs.eval     import EvalCfg
 from src.configs.bench    import BenchCfg
-# [REMOVIDO 2026-10-20] RelativeL2LossCfg (feature sem uso)
-# from src.configs.loss     import (LossCfg, MseLossCfg, MaeLossCfg, RelativeL2LossCfg,
-#                                   MaskedFNOLossCfg, SingleMaterialFNOLossCfg,
-#                                   MaskedFNOGNNLossCfg, LOSS_CFG_REGISTRY)
 from src.configs.loss     import (LossCfg, MseLossCfg, MaeLossCfg,
                                   MaskedFNOLossCfg, SingleMaterialFNOLossCfg,
                                   MaskedFNOGNNLossCfg, LOSS_CFG_REGISTRY)

@@ -119,23 +119,17 @@ class EdgeConvLayer(nn.Module):
     def __init__(self, node_width, edge_dim, act=nn.GELU):
         super().__init__()
 
-        # [REMOVIDO] msg_mlp: NodeMLP(2*node_width + edge_dim → msg_width)
-        # custo alto por aresta — gather de src+dst para cada aresta em MLP grande
-
         self.gate_mlp = NodeMLP(
             in_ch=edge_dim, out_ch=1, hidden_ch=edge_dim * 4, n_layers=2, act=act,
         )
         self.W = nn.Linear(node_width, node_width, bias=False)
         self.upd_mlp = NodeMLP(
-            in_ch=2 * node_width,   # [REMOVIDO] era node_width + msg_width
+            in_ch=2 * node_width,
             out_ch=node_width, hidden_ch=node_width, n_layers=2, act=act,
         )
 
     def forward(self, h, edge_index, edge_attr):
         src, dst = edge_index[0], edge_index[1]
-
-        # [REMOVIDO] msg_in = torch.cat([h[src], h[dst], edge_attr], dim=-1)
-        # [REMOVIDO] msg    = self.msg_mlp(msg_in)
 
         gate = torch.sigmoid(self.gate_mlp(edge_attr))   # [E_tot, 1]
         msg  = gate * self.W(h[src])                      # [E_tot, node_width]

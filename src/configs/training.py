@@ -2,36 +2,11 @@ from dataclasses import dataclass, field, fields, MISSING
 from typing import Any, Optional
 
 from src.configs.monitor import MonitorCfg   # noqa: F401  re-exportado daqui por retrocompatibilidade
-# [REMOVIDO 2026-10-20] RelativeL2LossCfg e DivBLossCfg (features sem uso)
-# from src.configs.loss    import (            # noqa: F401  re-exportado daqui por retrocompatibilidade
-#     LossCfg, MseLossCfg, MaeLossCfg, RelativeL2LossCfg,
-#     MaskedFNOLossCfg, SingleMaterialFNOLossCfg, MaskedFNOGNNLossCfg, DivBLossCfg,
-#     LOSS_CFG_REGISTRY,
-# )
 from src.configs.loss    import (            # noqa: F401  re-exportado daqui por retrocompatibilidade
     LossCfg, MseLossCfg, MaeLossCfg,
     MaskedFNOLossCfg, SingleMaterialFNOLossCfg, MaskedFNOGNNLossCfg,
     LOSS_CFG_REGISTRY,
 )
-
-
-# [REMOVIDO] _detect_edge_dim_from_dataset — só detectava edge_dim. Generalizada
-# para _detect_chunk_dims (abaixo), que lê também in/out channels de x_hw/y_hw e
-# node_x/node_y no mesmo torch.load (evita reabrir o chunk uma vez por campo) —
-# necessário desde que FEMM_MESH_A_PARSER passou a gerar chunks com y_hw/node_y
-# de 1 canal em vez de 2 (ver src/data_gen/parsers/femm_mesh_a.py), o que exige
-# que FNOConfig/FNO_GNNConfig também parem de hardcodar 2 canais.
-#
-# def _detect_edge_dim_from_dataset(dataset: str) -> int:
-#     import glob
-#     import torch
-#     chunk_paths = sorted(glob.glob(f'data/torch/data_chunks/{dataset}/data_chunk_*.pt'))
-#     if not chunk_paths:
-#         raise FileNotFoundError(...)
-#     sample = torch.load(chunk_paths[0], map_location='cpu', weights_only=False)
-#     if 'edge_attr' not in sample:
-#         raise ValueError(...)
-#     return sample['edge_attr'].shape[-1]
 
 
 def _detect_chunk_dims(dataset: str) -> dict:
@@ -112,15 +87,7 @@ class FNOConfig:
     # out_channels=2 num dataset FEMM_MESH_A, que tem y_hw de 1 canal).
     in_channels: int = field(default=2, init=False)
     out_channels: int = field(default=2, init=False)
-    # [REMOVIDO 2026-10-13] defaults antigos — agora = config do FNO2d da bateria smooth
-    # (data/logs/mesh_ans_138x276_smooth_battery/FNO2d/run_0002, mae)
-    # 2026-10-21: defaults = run fno2d_mae da bateria bldc (src/configs/batteries/bldc.py) —
-    # conferidos campo a campo (os mesmos valores da bateria smooth acima).
-    # modes1: int = 270
-    # modes2: int = 270
-    # conv_width: int = 6
-    # data_res: tuple = (135, 270)
-    # interp_mode: str = 'legacy'
+    # Defaults = run fno2d_mae da bateria bldc (src/configs/batteries/bldc.py), conferidos campo a campo.
     modes1: int = 69
     modes2: int = 139
     conv_width: int = 8
@@ -179,15 +146,7 @@ class MaskedFNO2dConfig:
 
 @dataclass
 class FNO_GNNConfig:
-    # [REMOVIDO 2026-10-13] defaults antigos — agora = config do FNO_GNN da bateria smooth
-    # (data/logs/mesh_ans_138x276_smooth_battery/FNO_GNN/run_0002, mae)
-    # 2026-10-21: defaults = run fno_gnn_mae da bateria bldc (src/configs/batteries/bldc.py) —
-    # conferidos campo a campo (os mesmos valores da bateria smooth acima).
-    # fno_modes1: int = 270
-    # fno_modes2: int = 270
-    # data_res: tuple = (135, 270)
-    # interp_mode: str = 'legacy'
-    # fno_node_rescale: bool = False
+    # Defaults = run fno_gnn_mae da bateria bldc (src/configs/batteries/bldc.py), conferidos campo a campo.
     fno_modes1: int = 69
     fno_modes2: int = 139
     fno_conv_width: int = 6
@@ -199,9 +158,6 @@ class FNO_GNNConfig:
     data_res: tuple = (138, 276)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
-    # [REMOVIDO 2026-10-20] lambda_loss (parcela de grade da loss, sempre 0) -- feature sem uso;
-    # a loss é só a da saída final. Runs antigas: from_dict ignora o campo.
-    # lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
     interp_mode: str = 'cell_centered_border'   # B1 — ver FNOConfig.interp_mode
     # B2 (2026-10-03) — True: saída do FNO interpolada nos nós é recodificada de
     # stats de y_hw para stats de node_y antes de somar o resíduo da GNN
@@ -249,14 +205,7 @@ class FNO_BipartiteGNNConfig:
     grafo duplo vértices (iterado) + elementos (estático, injetado via
     arestas cruzadas), mode='femm_mesh_v2' (ver src/data_gen/femm_mesh_v2.py
     e CLAUDE.md/conversa 2026-08-10 sobre a arquitetura)."""
-    # [REMOVIDO 2026-10-13] defaults antigos — agora = config do FNO_BipartiteGNN da bateria
-    # smooth (data/logs/mesh_ans_138x276_smooth_battery/FNO_BipartiteGNN/run_0002, mae)
-    # 2026-10-21: defaults = run bipartite_mae da bateria bldc (src/configs/batteries/bldc.py) —
-    # conferidos campo a campo (os mesmos valores da bateria smooth acima).
-    # fno_modes1: int = 270
-    # fno_modes2: int = 270
-    # interp_mode: str = 'legacy'
-    # fno_node_rescale: bool = False
+    # Defaults = run bipartite_mae da bateria bldc (src/configs/batteries/bldc.py), conferidos campo a campo.
     fno_modes1: int = 69
     fno_modes2: int = 139
     fno_conv_width: int = 6
@@ -268,9 +217,6 @@ class FNO_BipartiteGNNConfig:
     data_res: tuple = (138, 276)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
-    # [REMOVIDO 2026-10-20] lambda_loss (parcela de grade da loss, sempre 0) -- feature sem uso;
-    # a loss é só a da saída final. Runs antigas: from_dict ignora o campo.
-    # lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
     interp_mode: str = 'cell_centered_border'   # B1 — ver FNOConfig.interp_mode
     fno_node_rescale: bool = True   # B2 — ver FNO_GNNConfig.fno_node_rescale
 
@@ -317,9 +263,6 @@ class FNO_BipartiteGNN_v3Config:
     data_res: tuple = (138, 276)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
-    # [REMOVIDO 2026-10-20] lambda_loss (parcela de grade da loss, sempre 0) -- feature sem uso;
-    # a loss é só a da saída final. Runs antigas: from_dict ignora o campo.
-    # lambda_loss: float = 0   # peso da loss de grade; loss_nós = 1 - lambda_loss
 
     # edge_dim/grid_in_ch/grid_out_ch/node_in_ch/elem_in_ch/cross_edge_dim --
     # todos auto-detectados em NnCfg.__post_init__ (helper _detect_chunk_dims),
@@ -349,14 +292,7 @@ class FNO_BipartiteGNN_ElemConfig:
     mesh_ans_138x276_unified/FNO_BipartiteGNN_Elem
     (scripts/build_elem_proto_chunks.py). Mesmos campos de
     FNO_BipartiteGNNConfig + aux_fno."""
-    # [REMOVIDO 2026-10-13] defaults antigos — agora = config do FNO_BipartiteGNN_Elem da
-    # bateria smooth (data/logs/mesh_ans_138x276_smooth_elem_proto/FNO_BipartiteGNN_Elem/run_0002, mae)
-    # 2026-10-21: defaults = run elem_mae da bateria bldc (src/configs/batteries/bldc.py) —
-    # conferidos campo a campo (os mesmos valores da bateria smooth acima).
-    # fno_modes1: int = 270
-    # fno_modes2: int = 270
-    # interp_mode: str = 'legacy'
-    # fno_node_rescale: bool = False
+    # Defaults = run elem_mae da bateria bldc (src/configs/batteries/bldc.py), conferidos campo a campo.
     fno_modes1: int = 69
     fno_modes2: int = 139
     fno_conv_width: int = 6
@@ -368,13 +304,9 @@ class FNO_BipartiteGNN_ElemConfig:
     data_res: tuple = (138, 276)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
-    # [REMOVIDO 2026-10-20] lambda_loss (parcela de grade da loss, sempre 0) -- feature sem uso;
-    # a loss é só a da saída final. Runs antigas: from_dict ignora o campo.
-    # lambda_loss: float = 0   # peso da loss de grade; loss_elementos = 1 - lambda_loss
     interp_mode: str = 'cell_centered_border'
     fno_node_rescale: bool = True
-    # [REMOVIDO 2026-10-07] default True — decisão do usuário: auxiliar (vértices) só com posição
-    # aux_fno: bool = True     # auxiliar (vértices) recebe também o FNO interpolado no vértice
+    # aux_fno=False: decisão do usuário (2026-10-07) -- auxiliar (vértices) só com posição
     aux_fno: bool = False    # True = auxiliar (vértices) recebe também o FNO interpolado no vértice
 
     # auto-detectados em NnCfg.__post_init__; defaults = layout de
@@ -396,20 +328,8 @@ class FNO_BipartiteGNN_ElemConfig:
 class GNN_PostBaseConfig:
     # Treino em duas etapas (não end-to-end): base_run_dir aponta para um run já treinado
     # (FNO2d ou FNO_GNN), congelado; só o GNN novo é treinado.
-    # [REMOVIDO 2026-10-13] defaults antigos — agora = config do GNN_PostBase da bateria smooth
-    # (data/logs/mesh_ans_138x276_smooth_battery/GNN_PostBase/run_0002, mae; base =
-    # FNO2d mae da mesma bateria)
-    # base_run_dir   : str = 'data/logs/motor_default_v2_135x270/FNO2d/run_0001'
-    # gnn_node_width : int = 32
-    # gnn_n_layers   : int = 3
-    # interp_mode    : str = 'legacy'
-    # [REMOVIDO 2026-10-21] base = FNO2d mae da bateria smooth (x_hw sem J, 2 canais)
-    # base_run_dir   : str = 'data/logs/mesh_ans_138x276_smooth_battery/FNO2d/run_0002'
-    # 2026-10-21: defaults = run postbase_mae da bateria bldc; nela a base é runs['fno2d_mae']
-    # [REMOVIDO 2026-10-21] descrição errada da run (é polar, 2026-10-19, não xy):
-    # (resolvida pelo runner) — aqui, o FNO2d mae local de BLDC_138x276 (run xy, anterior ao alvo
-    # polar; trocar pela run nova depois que a bateria for refeita).
-    # (resolvida pelo runner) — aqui, o FNO2d mae local de BLDC_138x276 (alvo polar Br, Bθ, run de
+    # Defaults = run postbase_mae da bateria bldc; nela a base é runs['fno2d_mae'] (resolvida
+    # pelo runner) -- aqui, o FNO2d mae local de BLDC_138x276 (alvo polar Br, Bθ, run de
     # 2026-10-19; trocar pela run nova depois que a bateria for refeita).
     base_run_dir   : str = 'data/logs/BLDC_138x276/FNO2d/run_0002'
     base_checkpoint: str = 'best'   # 'best', 'latest' ou 'final'
@@ -573,36 +493,17 @@ class MaskedFNO_GNNConfig:
 
 @dataclass
 class NnCfg:
-    # [REMOVIDO 2026-10-13] arch/loss como string de entrada — redundantes com o tipo de
-    # arch_cfg/loss_cfg (e podiam divergir dele sem erro). Agora são derivados do tipo em
-    # __post_init__ (init=False) e continuam no config.json (asdict) com o mesmo nome.
-    # Defaults antigos de dataset/problem/lr/n_epochs/test_split apontavam para datasets
-    # removidos — agora = run da bateria smooth (FNO_BipartiteGNN_Elem, mae).
-    # dataset: str = 'mesh_ans_138x276_B'
-    # arch: str = 'FNO_BipartiteGNN_v3'
-    # loss: str = 'mae'
-    # problem: str = 'mesh_ans_138x276_B'
-    # lr: float = 1e-3
-    # n_epochs: int = 500
-    # test_split: Optional[float] = None
-    # [REMOVIDO 2026-10-13] dataset/problem com sufixo _smooth — renomeados para o nome oficial
-    # dataset: str = 'mesh_ans_138x276_smooth/FNO_BipartiteGNN_Elem'
-    # problem: str = 'mesh_ans_138x276_smooth'
-    # [REMOVIDO 2026-10-21] defaults = run Elem mae da bateria smooth (dataset sem J, 350 épocas,
-    # split 30/30) — agora = run elem_mae da bateria bldc (src/configs/batteries/bldc.py), campo a
-    # campo: dataset, problem, lr, épocas, scheduler, split 70/30 (test_split=None), loader,
-    # normalize, arch_cfg (FNO_BipartiteGNN_ElemConfig()), loss_cfg (MaeLossCfg()), monitor_cfg.
-    # dataset: str = 'mesh_ans_138x276/FNO_BipartiteGNN_Elem'
+    # Defaults = run elem_mae da bateria bldc (src/configs/batteries/bldc.py), campo a campo.
+    # arch/loss são derivados do TIPO de arch_cfg/loss_cfg em __post_init__ (init=False) e
+    # continuam no config.json (asdict) com o mesmo nome.
     dataset: str = 'BLDC_138x276/FNO_BipartiteGNN_Elem'
     arch: str = field(default='', init=False)   # derivado de type(arch_cfg) — ARCH_REGISTRY
     loss: str = field(default='', init=False)   # derivado de type(loss_cfg) — LOSS_CFG_REGISTRY
 
-    # [REMOVIDO 2026-10-21] problem: str = 'mesh_ans_138x276'
     problem: str = 'BLDC_138x276'
 
     # Treino
     lr: float = 0.01
-    # [REMOVIDO 2026-10-21] n_epochs: int = 350
     n_epochs: int = 500
     scheduler: str = 'step'   # só 'step' (StepLR) é implementado em scripts/train.py::run
     scheduler_step: int = 100
@@ -610,9 +511,6 @@ class NnCfg:
 
     # Dataloader
     batch_size: int = 32
-    # [REMOVIDO 2026-10-21] split 30/30 da bateria smooth
-    # train_split: float = 0.30
-    # test_split: Optional[float] = 0.30
     train_split: float = 0.70
     test_split: Optional[float] = None  # None → complemento de train_split (1 - train_split);
                                          # valor explícito → fração fixa de chunks para teste,
@@ -633,9 +531,6 @@ class NnCfg:
     resume_checkpoint: str           = 'latest' # 'latest' ou 'best'
     resume_modified:   bool          = False    # True = carrega só pesos; optimizer/scheduler do zero
 
-    # [REMOVIDO 2026-10-13] None → instanciado a partir da string arch/loss
-    # arch_cfg:     Any        = None   # None → auto-instanciado em __post_init__ via ARCH_REGISTRY
-    # loss_cfg:     Any        = None   # None → auto-instanciado em __post_init__ via LOSS_CFG_REGISTRY
     # O TIPO de arch_cfg/loss_cfg define a arch/loss (ver arch/loss acima).
     arch_cfg:     Any        = field(default_factory=FNO_BipartiteGNN_ElemConfig)
     monitor_cfg:  MonitorCfg = field(default_factory=MonitorCfg)
@@ -659,21 +554,6 @@ class NnCfg:
         from pathlib import Path
         from src.neural_op.archs import ARCH_REGISTRY
         from src.neural_op.losses import LOSS_REGISTRY
-        # [REMOVIDO 2026-10-13] validação da string arch contra o tipo de arch_cfg —
-        # agora a string é derivada do tipo (abaixo)
-        # if self.arch not in ARCH_REGISTRY:
-        #     raise ValueError(
-        #         f"arch='{self.arch}' não existe no ARCH_REGISTRY. "
-        #         f"Disponíveis: {list(ARCH_REGISTRY)}"
-        #     )
-        # expected = ARCH_REGISTRY[self.arch].cfg_cls
-        # if self.arch_cfg is None:
-        #     self.arch_cfg = expected()
-        # elif not isinstance(self.arch_cfg, expected):
-        #     raise TypeError(
-        #         f"arch='{self.arch}' espera arch_cfg do tipo {expected.__name__}, "
-        #         f"recebido {type(self.arch_cfg).__name__}"
-        #     )
         # Tipo EXATO (não isinstance): FNO_GNN_v2Config herda de FNO_GNNConfig.
         archs = [n for n, e in ARCH_REGISTRY.items() if e.cfg_cls is type(self.arch_cfg)]
         if len(archs) != 1:
@@ -689,14 +569,6 @@ class NnCfg:
         self.loss = losses[0]
         if self.scheduler != 'step':
             raise ValueError(f"scheduler={self.scheduler!r} não implementado — só 'step' (StepLR)")
-        # [REMOVIDO] só cobria edge_dim — generalizado abaixo para também cobrir
-        # in/out channels da grade (FNOConfig.in_channels/out_channels;
-        # FNO_GNNConfig/GNN_PostBaseConfig.grid_in_ch/grid_out_ch) e features de nó
-        # (node_in_ch), todos sempre recalculados a partir dos chunks reais de
-        # self.dataset, nunca deixados no default da dataclass.
-        #
-        # if hasattr(self.arch_cfg, 'edge_dim'):
-        #     self.arch_cfg.edge_dim = _detect_edge_dim_from_dataset(self.dataset)
         _dim_fields = ('grid_in_ch', 'grid_out_ch', 'node_in_ch', 'edge_dim',
                        'elem_in_ch', 'cross_edge_dim')
         if isinstance(self.arch_cfg, FNOConfig) or any(hasattr(self.arch_cfg, f) for f in _dim_fields):
@@ -730,15 +602,8 @@ class NnCfg:
                     f"{dims['grid_hw']} de '{self.dataset}'", stacklevel=2)
         if self.normalize:
             from src.neural_op.normalization import Normalizer
-            # [REMOVIDO 2026-10-20] stats de todos os chunks (inclusive teste)
-            # self.norm_stats = Normalizer.fit(self.dataset, self.arch).to_dict()
             self.norm_stats = Normalizer.fit(self.dataset, self.arch, self.train_split,
                                              self.split_seed, self.test_split).to_dict()
-        # [REMOVIDO 2026-10-13] loss_cfg instanciado a partir da string loss — agora o
-        # tipo de loss_cfg define a loss (validado no início do __post_init__)
-        # if self.loss_cfg is None:
-        #     cls = LOSS_CFG_REGISTRY.get(self.loss, MseLossCfg)
-        #     self.loss_cfg = cls()
         if self.resume_run is not None and not Path(self.resume_run).exists():
             resolved = Path('data/logs') / self.problem / self.arch / self.resume_run
             self.resume_run = str(resolved)

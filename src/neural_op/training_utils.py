@@ -2,18 +2,7 @@ import torch
 import time
 from functools import reduce
 import operator
-# [REMOVIDO] Path migrado para src/neural_op/monitor.py
-# from pathlib import Path
 
-
-# [REMOVIDO] mse_loss migrado para src/neural_op/losses.py — use LOSS_REGISTRY['mse']
-# def mse_loss(out, y):
-#     return torch.mean((out - y) ** 2)
-
-# [REMOVIDO] l2_loss renomeado para mse_loss — nome anterior era impreciso (calculava MSE, não L2)
-# def l2_loss(out, y):
-#     l2 = torch.mean((out - y) ** 2)
-#     return l2
 
 def count_params(model):
     c = 0
@@ -118,8 +107,6 @@ def compute_mae_metrics(model, loader, device, metric_fn):
     with torch.no_grad():
         for batch in loader:
             mae_hw, mae_graph = metric_fn(batch, model, device)
-            # [REMOVIDO 2026-10-20] mae_hw sempre presente
-            # total_hw += mae_hw
             if mae_hw is not None:
                 total_hw += mae_hw
                 has_hw = True
@@ -130,7 +117,6 @@ def compute_mae_metrics(model, loader, device, metric_fn):
     if n_batches == 0:
         return 0.0, None
     mae_graph_avg = (total_graph / n_batches) if has_graph else None
-    # [REMOVIDO 2026-10-20] return total_hw / n_batches, mae_graph_avg
     return (total_hw / n_batches) if has_hw else None, mae_graph_avg
 
 
@@ -143,8 +129,6 @@ def _default_log_epoch(ep, train_loss, test_loss, train_time_s, eval_time_s, sam
 
 
 def save_checkpoint(path, epoch, model, optimizer, scheduler
-                    # [REMOVIDO] train_losses, test_losses → metrics.jsonl via ModelManager
-                    # [REMOVIDO] extra → config.json via ModelManager
                     ):
     """Salva estado de treino: pesos, otimizador, scheduler e época."""
     # strip de '_metadata': neuralop.FNO inclui essa chave no state_dict para
@@ -156,10 +140,6 @@ def save_checkpoint(path, epoch, model, optimizer, scheduler
         'scheduler_state_dict': scheduler.state_dict() if scheduler is not None else None,
         'epoch':                epoch,
     }, path)
-
-
-# [REMOVIDO] TrainingMonitor migrado para src/neural_op/monitor.py
-# class TrainingMonitor: ...
 
 
 def fit(model, train_loader, test_loader,
@@ -197,8 +177,6 @@ def fit(model, train_loader, test_loader,
     model : nn.Module
     losses : {'train': list[float], 'test': list[float]}
     """
-    # [REMOVIDO] checkpoint_every, checkpoint_path, ckpt_extra migrados para TrainingMonitor
-    # checkpoint_every=0, checkpoint_path=None, ckpt_extra=None
     log_fn = log_fn or _default_log_epoch
     model = model.to(device)
     # Após load_state_dict com map_location='cpu', os buffers de momentum do Adam
@@ -240,11 +218,6 @@ def fit(model, train_loader, test_loader,
         samples_per_s = n_train_samples / train_time_s if train_time_s > 0 else 0.0
         train_losses.append(train_loss)
         test_losses.append(test_loss)
-        # [REMOVIDO 2026-08-18] print hardcoded — virou log_fn (propriedade da
-        # loss, ver BaseLoss.log_epoch em src/neural_op/losses.py), chamado
-        # logo abaixo. _default_log_epoch imprime o mesmo texto de antes.
-        # print(f"epoch {ep:>4d}  train {train_loss:.4e}  test {test_loss:.4e}"
-        #       f"  [{train_time_s:.1f}s + {eval_time_s:.1f}s eval]  {samples_per_s:.0f} samp/s")
         log_fn(ep, train_loss, test_loss, train_time_s, eval_time_s, samples_per_s)
         if epoch_log_fn is not None:
             epoch_log_fn(epoch=ep, train_loss=train_loss, test_loss=test_loss, lr=epoch_lr,
@@ -252,21 +225,10 @@ def fit(model, train_loader, test_loader,
                          metric_time_s=t3 - t2, epoch_time_s=t3 - t0,
                          mae_hw=mae_hw, mae_graph=mae_graph)
 
-        # [REMOVIDO] bloco de checkpoint inline — substituído por TrainingMonitor
-        # if checkpoint_every > 0 and checkpoint_path and (i + 1) % checkpoint_every == 0:
-        #     save_checkpoint(checkpoint_path, ep, ...)
-
         if monitor is not None:
             monitor.last_epoch = ep
             if is_heartbeat:
                 current_lr = optimizer.param_groups[0]['lr']
-                # [REMOVIDO 2026-10-03, B4] cálculo do MAE aqui — movido pra cima
-                # (logo após eval_epoch), pra poder rodar em toda época sem
-                # recalcular no heartbeat. Mesmo valor (modelo não muda entre os dois pontos).
-                # mae_hw, mae_graph = (
-                #     compute_mae_metrics(model, test_loader, device, metric_fn)
-                #     if metric_fn is not None else (None, None)
-                # )
                 should_stop = monitor.step(
                     ep, train_losses, test_losses, model, optimizer, scheduler,
                     lr=current_lr, train_time_s=train_time_s,
@@ -277,41 +239,3 @@ def fit(model, train_loader, test_loader,
                     break
 
     return model, {'train': train_losses, 'test': test_losses}
-
-
-# [REMOVIDO] stack_to_bchw e bchw_to_stack descartados junto com Quad_FNO2d
-#            (src/neural_op/quad_fno.py) — eram usados exclusivamente por ele.
-
-# def stack_to_bchw(L, dim, cells, data):
-#     """Transform a concatenated stream [1, C, S] into [B, C, H, W]."""
-#     device = data.device
-#     L     = torch.as_tensor(L, device=device, dtype=torch.long)
-#     cells = torch.as_tensor(cells, device=device, dtype=torch.long)
-#     B = int(L.numel())
-#     C = int(data.size(1))
-#     H, W = int(dim[0]), int(dim[1])
-#     S = int(L.sum().item())
-#     assert cells.numel() == S
-#     block_id = torch.repeat_interleave(torch.arange(B, device=device, dtype=torch.long), L)
-#     vals = data.squeeze(0).transpose(0, 1).contiguous()
-#     out = torch.zeros(B, C, H*W, dtype=data.dtype, device=device)
-#     ch_idx   = torch.arange(C, device=device, dtype=torch.long).view(1,-1).expand(S,-1)
-#     blk_idx  = block_id.view(-1,1).expand(-1,C)
-#     cell_idx = cells.view(-1,1).expand(-1,C)
-#     out.index_put_((blk_idx, ch_idx, cell_idx), vals, accumulate=True)
-#     return out.view(B, C, H, W)
-
-# def bchw_to_stack(L, cells, conv_data, base_res):
-#     """Rebuild the concatenated stream [1, C, S] from a BCHW tensor."""
-#     device = conv_data.device
-#     dtype  = conv_data.dtype
-#     L     = torch.as_tensor(L, device=device, dtype=torch.long)
-#     cells = torch.as_tensor(cells, device=device, dtype=torch.long)
-#     B, C, Hc, Wc = conv_data.shape
-#     H, W = int(base_res[0]), int(base_res[1])
-#     block_id = torch.repeat_interleave(torch.arange(B, device=device, dtype=torch.long), L)
-#     r = torch.div(cells, W, rounding_mode='floor')
-#     c = torch.remainder(cells, W)
-#     out_SC = conv_data[block_id, :, r, c]
-#     out = out_SC.transpose(0, 1).unsqueeze(0).to(dtype)
-#     return out

@@ -21,9 +21,6 @@ são desta bateria polar (alvo Br, Bθ; conferido no torque: frame='polar' bate 
 
     python -m scripts.run_battery bldc [--dry-run]
 """
-# [REMOVIDO 2026-10-20] argumentos de features sem uso tirados de todas as runs:
-#   arch_cfg: lambda_loss=0   |   MseLossCfg(tail_alpha=0.0, tail_k_frac=0.0, subtract_fno=False)
-#   MaeLossCfg(subtract_fno=False)   -- valores idênticos aos efetivos (desligados).
 from src.configs.battery import BatteryCfg, BatteryRun
 from src.configs.training import (NnCfg, FNOConfig, FNO_GNNConfig, GNN_PostBaseConfig,
                                   FNO_BipartiteGNNConfig, FNO_BipartiteGNN_ElemConfig)
@@ -259,24 +256,6 @@ def elem_mae(runs):
     )
 
 
-# [REMOVIDO 2026-10-17] ordem da bateria xy (alvo cartesiano) — substituída pela bateria
-# polar abaixo (decisão do usuário: Elem primeiro, GNN_PostBase por último).
-# BATTERY = BatteryCfg(
-#     name='bldc',
-#     n_repeats=1,
-#     runs=[
-#         BatteryRun('fno2d_mse',     fno2d_mse),
-#         BatteryRun('fno2d_mae',     fno2d_mae),
-#         BatteryRun('fno_gnn_mse',   fno_gnn_mse),
-#         BatteryRun('fno_gnn_mae',   fno_gnn_mae),
-#         BatteryRun('postbase_mse',  postbase_mse,  needs=('fno2d_mse',)),
-#         BatteryRun('postbase_mae',  postbase_mae,  needs=('fno2d_mae',)),
-#         BatteryRun('bipartite_mse', bipartite_mse),
-#         BatteryRun('bipartite_mae', bipartite_mae),
-#         BatteryRun('elem_mse',      elem_mse),
-#         BatteryRun('elem_mae',      elem_mae),
-#     ],
-# )
 BATTERY = BatteryCfg(
     name='bldc',
     n_repeats=1,

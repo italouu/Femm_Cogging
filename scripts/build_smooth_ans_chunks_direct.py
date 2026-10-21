@@ -23,20 +23,10 @@ from pathlib import Path
 
 from src.configs.datagen import DatagenConfig
 from src.data_gen.parsers.femm_mesh_smooth import parse_ans_gzip_sample_smooth, SMOOTH_ARCHS
-# [REMOVIDO 2026-10-21] helpers do script unificado (que gravava pelos _flush dos scripts
-# antigos trocando a global de saída deles) -- agora src/data_gen/chunks.py (G1)
-# from scripts.build_unified_ans_chunks_direct import _sample_idx, _dim, _builders
 from src.data_gen.chunks import LAYOUT_BY_ARCH, sample_idx as _sample_idx, write_chunk
 
 _dg = DatagenConfig()
 
-# [REMOVIDO 2026-10-14] raw/saída fixos no dataset sem correntes — agora vêm de
-# DatagenConfig.dataset (BLDC_138x276: raw com correntes, 6000 amostras)
-# # raw da bateria oficial sem smooth (mesh_ans_138x276_unified) -- fonte única
-# RAW_DATASET  = 'mesh_ans_138x276'
-# # [REMOVIDO 2026-10-13] nome com sufixo _smooth — o smooth passou a ser o dataset oficial
-# # OUT_DATASET  = 'mesh_ans_138x276_smooth'
-# OUT_DATASET  = 'mesh_ans_138x276'
 # raw e chunks com o mesmo nome: data/raw/<dataset>/ -> data/torch/data_chunks/<dataset>/<arch>/
 RAW_DATASET  = _dg.dataset
 OUT_DATASET  = _dg.dataset
@@ -45,14 +35,6 @@ ANG_1, ANG_2 = _dg.ang_1, _dg.ang_2
 CHUNK_SIZE   = _dg.chunk_size
 MAX_WORKERS  = _dg.npz_max_workers
 
-# [REMOVIDO 2026-10-13] todas as 4000 amostras do raw — dataset reduzido para 2000 (decisão
-# do usuário: gerar local sem trazer >100 GB da VM; o dataset final será refeito na VM).
-# # None = todas as amostras do raw
-# MAX_SAMPLES = None
-# [REMOVIDO 2026-10-14] 2000 primeiras amostras do mesh_ans_138x276 (63 chunks)
-# # 2000 primeiras amostras (ordem de índice) -> 63 chunks (62 × 32 + 1 × 16). Usado também
-# # por scripts/build_elem_smooth_chunks.py e scripts/build_smooth_datasets.py. None = todas.
-# MAX_SAMPLES = 2000
 # Todas as amostras do raw (BLDC_138x276: 6000 -> 188 chunks, 187 × 32 + 1 × 16). Usado também
 # por scripts/build_elem_smooth_chunks.py, scripts/build_smooth_datasets.py e
 # scripts/postprocess.py. None = todas.
@@ -69,24 +51,6 @@ def _parse_one(path: Path, r_in: float, r_ext: float, tmp_dir: Path) -> dict:
                                          n_r=N_R, n_a=N_A, tmp_dir=tmp_dir)
 
 
-# [REMOVIDO 2026-10-21] gravação pelo _flush de outro módulo com a global de saída trocada
-# (monkeypatch) -- agora src/data_gen/chunks.write_chunk, com o destino como argumento (G1)
-# def _write_chunk(chunk_idx: int, arch: str, samples: list, builders: dict, chunks_root: Path):
-#     make_bufs, mod, out_attr = builders[arch]
-#     final_dir = chunks_root / arch
-#     tmp_dir = final_dir / ".tmp"
-#     tmp_dir.mkdir(parents=True, exist_ok=True)
-#     name = f"data_chunk_{chunk_idx:04d}.pt"
-#
-#     orig = getattr(mod, out_attr)
-#     setattr(mod, out_attr, tmp_dir)
-#     try:
-#         mod._flush(chunk_idx, make_bufs(samples), _dim(samples[0]))
-#     finally:
-#         setattr(mod, out_attr, orig)
-#     (tmp_dir / name).replace(final_dir / name)
-
-
 def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, chunks_root=CHUNKS_ROOT,
         max_workers=MAX_WORKERS):
     TMP_PARSE.mkdir(parents=True, exist_ok=True)
@@ -98,7 +62,6 @@ def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, chunks_root=CHUNKS_ROOT,
         rows = list(csv.DictReader(f))
 
     groups = [ans_paths[i:i + chunk_size] for i in range(0, len(ans_paths), chunk_size)]
-    # [REMOVIDO 2026-10-21] builders = _builders()   (G1: src/data_gen/chunks.py)
 
     print(f"\n=== Chunks com B suavizado do FEMM, direto do raw ===")
     print(f"  origem  : {RAW_DIR}  ({len(ans_paths)} amostras)")
@@ -126,7 +89,6 @@ def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, chunks_root=CHUNKS_ROOT,
 
         for arch in SMOOTH_ARCHS:
             if not (chunks_root / arch / name).exists():
-                # [REMOVIDO 2026-10-21] _write_chunk(chunk_idx, arch, [l[arch] for l in layouts], builders, chunks_root)
                 write_chunk(chunks_root / arch, chunk_idx, [l[arch] for l in layouts],
                             LAYOUT_BY_ARCH[arch])
         del layouts

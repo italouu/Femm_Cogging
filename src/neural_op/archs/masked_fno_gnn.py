@@ -4,9 +4,6 @@ from src.neural_op.archs.fno      import FNO2d
 from src.neural_op.archs.fno_gnn  import _interpolate_fno_to_nodes
 from src.neural_op.archs.fno_mat  import _make_material_masks
 
-# [REMOVIDO] _material_ids_from_mu — material_ids por nó não é mais necessário;
-# assemble agora é feito na grade antes de passar para a GNN.
-
 
 class MaskedFNO_GNN(torch.nn.Module):
     """
@@ -31,9 +28,6 @@ class MaskedFNO_GNN(torch.nn.Module):
     _GRID_IN_CH  = 2
     _GRID_OUT_CH = 8    # 4 materiais × 2 campos (saída FNO antes do assemble)
     _NODE_IN_CH  = 5    # mu_r, M, cell_area, r_base, c_base  (MASKED_FNO_GNN_PARSER)
-    # [REMOVIDO] _EDGE_DIM = 4 hardcoded — edge_dim agora detectado automaticamente
-    # em MaskedFNO_GNNConfig/NnCfg.__post_init__ e passado explicitamente (mesmo
-    # motivo de FNO_GNN — ver src/neural_op/archs/fno_gnn.py).
     _GNN_IN_CH   = _NODE_IN_CH + 2   # 5 + 2 (FNO assemblado 8→2 antes da GNN)
 
     def __init__(self,
@@ -77,8 +71,6 @@ class MaskedFNO_GNN(torch.nn.Module):
         for m in range(4):
             out += pred8[:, 2 * m: 2 * m + 2] * masks[:, m: m + 1].float()
         return out
-
-    # [REMOVIDO] assemble_nodes — GNN agora produz 2 canais diretamente; assemble por nó desnecessário.
 
 
 def make_masked_fno_gnn_step(lambda_loss):

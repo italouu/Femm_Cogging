@@ -49,16 +49,12 @@ def parse_ans_gzip_sample_elem_smooth(ans_gz_path: Path, r_in: float, r_ext: flo
     ans_gz_path = Path(ans_gz_path)
     tmp_dir = Path(tmp_dir) if tmp_dir is not None else ans_gz_path.parent
 
-    # [REMOVIDO 2026-10-21] curl(A) exato e y_hw baricêntrico calculados e descartados
-    # d = parse_ans_gzip_sample_elem(ans_gz_path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
-    #                                n_r=n_r, n_a=n_a, tmp_dir=tmp_dir)
     d = parse_ans_gzip_sample_elem(ans_gz_path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
                                    n_r=n_r, n_a=n_a, tmp_dir=tmp_dir, target_field=None)
 
     _, nodes, elems = _read_ans_gz(ans_gz_path, tmp_dir)
     mesh = load_ans(ans_gz_path)
     assert np.array_equal(mesh.p, elems[:, :3]), "conectividade divergente entre leitores do .ans"
-    # [REMOVIDO 2026-10-21] assert elems.shape[0] == d['node_y'].shape[0], "contagem de elementos divergente"
     assert elems.shape[0] == d['node_x'].shape[0], "contagem de elementos divergente"
     B1, B2 = element_b(mesh)
     b1, b2 = nodal_b(mesh, B1, B2)
@@ -67,16 +63,12 @@ def parse_ans_gzip_sample_elem_smooth(ans_gz_path: Path, r_in: float, r_ext: flo
     centroids = nodes[elems[:, :3], :2].mean(axis=1)
     m_idx = np.arange(elems.shape[0])
     bx_c, by_c = point_b(mesh, B1, B2, b1, b2, m_idx, centroids[:, 0], centroids[:, 1], smooth=True)
-    # [REMOVIDO 2026-10-17] gabarito cartesiano -- agora (Br, Bθ) pelo ângulo do centróide.
-    # node_y = np.stack([bx_c, by_c], axis=1).astype(np.float32)
     node_y = np.stack(_to_polar(bx_c, by_c, centroids[:, 0], centroids[:, 1]), axis=1)
 
     # --- grade H×W: B suavizado no centro do pixel (= femm_mesh_smooth) ---
     Xg, Yg = _grid_polar_xy(r_in, r_ext, np.deg2rad(ang_1), np.deg2rad(ang_2), n_r, n_a)
     _, trifinder = _build_trifinder(nodes, elems)
     Bx_hw, By_hw = _grid_smooth_b(mesh, B1, B2, b1, b2, trifinder, centroids, Xg, Yg)
-    # [REMOVIDO 2026-10-17] y_hw cartesiano -- agora (Br, Bθ) pelo ângulo do centro do pixel.
-    # y_hw = np.stack([Bx_hw.reshape(n_r, n_a), By_hw.reshape(n_r, n_a)], axis=0)
     Br_hw, Bt_hw = _to_polar(Bx_hw, By_hw, Xg, Yg)
     y_hw = np.stack([Br_hw.reshape(n_r, n_a), Bt_hw.reshape(n_r, n_a)], axis=0)
 

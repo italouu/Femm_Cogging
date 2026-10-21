@@ -88,34 +88,12 @@ import torch
 
 from scripts.build_smooth_ans_chunks_direct import MAX_SAMPLES
 from src.configs.datagen import DatagenConfig
-# [REMOVIDO 2026-10-20] sem as projeções elemento <-> nó
-# from src.postprocess.fields import mag
 from src.data_gen.parsers.femm_mesh_unified import _read_ans_gz
-# [REMOVIDO 2026-10-20] nodes_to_elem (nível elem removido)
-# from src.postprocess.fields import elem_to_nodes, gap_radius_mm, mag, nodes_to_elem
 from src.postprocess.fields import elem_to_nodes, gap_radius_mm, mag
-# [REMOVIDO 2026-10-20] sem ARCHS/RUN_ORDER (usados pelas figuras)
-# from src.postprocess.inference import (INTERP_MODE, find_runs, floor_nodes, load_set, predict,
-#                                        to_torch_sample)
-# [REMOVIDO 2026-10-20] INTERP_MODE/floor_nodes (piso da grade nos nós, removido)
-# from src.postprocess.inference import (ARCHS, INTERP_MODE, RUN_ORDER, find_runs, floor_nodes,
-#                                        load_set, predict, to_torch_sample)
-# [REMOVIDO 2026-10-20] sem INTERP_MODE/floor_nodes -- voltam com o erro nodal secundário (P1)
-# from src.postprocess.inference import (ARCHS, RUN_ORDER, find_runs, load_set, predict,
-#                                        to_torch_sample)
 from src.postprocess.inference import (ARCHS, INTERP_MODE, RUN_ORDER, find_runs, floor_nodes,
                                        load_set, predict, to_torch_sample)
-# [REMOVIDO 2026-10-20] sem surf_err
-# from src.postprocess.metrics import Accum, grid_area_weights, merge, node_err, pstats
-# [REMOVIDO 2026-10-20] sem a superfície malha × malha
-# from src.postprocess.metrics import Accum, grid_area_weights, merge, node_err, pstats, surf_err
-# [REMOVIDO 2026-10-20] níveis antigos (grid_area_weights, node_err, surf_err, add_mesh_surface)
-# from src.postprocess.metrics import (Accum, add_mesh_surface, grid_area_weights, merge, node_err,
-#                                      pstats, surf_err, surface_values_p1)
 from src.postprocess.metrics import (R_EXT_MM, R_IN_MM, Accum, merge, pstats,
                                      surface_error_per_triangle, surface_values_p1)
-# [REMOVIDO 2026-10-20] fig_surface_error -- mapa novo com piso e contornos (P4)
-# from src.postprocess.plots.errors import fig_bars, fig_surface_error
 from src.postprocess.plots.errors import fig_bars, fig_regions, fig_surface_error_map
 from src.postprocess.plots.fields import fig_field
 from src.postprocess.plots.primitives import apply_style, save_fig
@@ -127,241 +105,27 @@ from src.postprocess.plots.saturation import MU_LABEL, fig_bh, fig_steel_map
 from src.postprocess.timing import (ARCH_STAGES, DEVICE, LAYOUT, check_mesh_vs_raw,
                                     check_preprocess, collate, encode_timed, femm_solve_timed,
                                     hardware_info, iqr_stats, preprocess_timed, time_batch)
-# [REMOVIDO 2026-10-21] sem femm_ref/femm_ref_ok (C2: profundidade gravada nos caches de T22)
-# from src.postprocess.torque import (batch_summary, curve_row, femm_solve, gap, parse_torque_sample,
-#                                     sample_torques, scatter_ids, scatter_stats, select_batch_samples)
-# [REMOVIDO 2026-10-21] sem read_rows (C3: --raw-dir)
-# from src.postprocess.torque import (batch_summary, curve_row, femm_ref, femm_ref_ok, femm_solve, gap,
-#                                     parse_torque_sample, sample_torques, scatter_ids, scatter_stats,
-#                                     select_batch_samples)
 from src.postprocess.torque import (batch_summary, curve_row, femm_ref, femm_ref_ok, femm_solve, gap,
                                     parse_torque_sample, read_rows, sample_torques, scatter_ids,
                                     scatter_stats, select_batch_samples)
 from src.postprocess.torque import thetas as torque_thetas
 from src.postprocess.train_table import train_table
-# [REMOVIDO 2026-10-20] sem sample_path/TMP_ROOT (usados pelas figuras)
-# from src.postprocess.samples import SUBSETS, design_rows, parse_smooth, samples_with_subset
-# [REMOVIDO 2026-10-21] sem RAW_DIR (C3: default de --raw-dir do torque)
-# from src.postprocess.samples import (ANG_1, ANG_2, N_A, N_R, SUBSETS, TMP_ROOT, design_rows,
-#                                      parse_smooth, sample_path, samples_with_subset)
 from src.postprocess.samples import (ANG_1, ANG_2, N_A, N_R, RAW_DIR, SUBSETS, TMP_ROOT, design_rows,
                                      parse_smooth, sample_path, samples_with_subset)
 
-# [REMOVIDO 2026-10-13] nomes com sufixo _smooth e run de referência do split fixa
-# (bateria de 4000 amostras). Agora o dataset smooth é o oficial e o split vem da run
-# FNO2d mse da própria bateria (find_runs).
-# DATASET   = 'mesh_ans_138x276_smooth'
-# ROOT_S    = Path('data/logs/mesh_ans_138x276_smooth_battery')        # bateria smooth
-# SPLIT_RUN = ROOT_S / 'FNO2d' / 'run_0001'                            # referência do split
-# [REMOVIDO 2026-10-14] DATASET   = 'mesh_ans_138x276' — agora DatagenConfig.dataset (= raw)
 DATASET   = DatagenConfig().dataset
 ROOT_S    = Path('data/logs') / DATASET                              # logs da bateria smooth
 N_SAMPLES = MAX_SAMPLES   # amostras do raw no dataset (as mesmas do build dos chunks)
 OUT_ROOT  = Path('resultados') / DATASET
 N_WORKERS = 12
-# [REMOVIDO 2026-10-20] sem grid_inter
-# LEVELS    = ('mesh', 'grid', 'elem')                        # 'elem' só em ELEM_ARCHS
-# [REMOVIDO 2026-10-20] sem 'surface'
-# LEVELS    = ('mesh', 'grid', 'grid_inter', 'elem')          # 'elem' só em ELEM_ARCHS
-# [REMOVIDO 2026-10-20] níveis antigos removidos -- só a superfície oficial
-# LEVELS    = ('surface', 'mesh', 'grid', 'grid_inter', 'elem')  # 'elem' só em ELEM_ARCHS
 GRID_ARCHS = ('FNO2d',)                # saída = grade H×W -> superfície por interseção
 SURF_KINDS = ('grade', 'P1_nos', 'P0_elem')   # pisos: o gabarito em cada tipo de superfície
-# [REMOVIDO 2026-10-20] ELEM_ARCHS = ('FNO_BipartiteGNN', 'FNO_BipartiteGNN_Elem')  (nível elem)
 REF_RUN   = 'FNO_BipartiteGNN_mae'     # run que escolhe as amostras P50/P95 das figuras
 
 
 def _mag_np(b):
     """|B| de [N,2] numpy."""
     return np.hypot(b[:, 0], b[:, 1])
-
-
-# [REMOVIDO 2026-10-20] versão com os níveis antigos (mesh nodal, grid × y_hw, grid_inter de
-# todas as archs, elem e pisos elem<->nó) -- removidos por decisão do usuário; a avaliação é
-# só o erro de superfície oficial (nível surface + pisos de superfície).
-# def run_eval(out_dir: Path, max_samples=None):
-#     out_dir.mkdir(parents=True, exist_ok=True)
-#     rows = design_rows()
-#     # [REMOVIDO 2026-10-13] run de referência fixa
-#     # samples = samples_with_subset(SPLIT_RUN, max_samples)
-#     samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], max_samples, N_SAMPLES)
-#     runs = load_set(ROOT_S)
-#     for k, r in runs.items():
-#         print(f"  {k:24s} {r['run']} best ép.{r['epoch']} interp={r['interp_mode']}")
-#
-#     # [REMOVIDO 2026-10-20] sem o nível 'elem' (Elem integrada ao eval)
-#     # acc = {(k, sub, kind): Accum() for k in runs for sub in SUBSETS for kind in ('mesh', 'grid')}
-#     acc = {(k, sub, kind): Accum() for k in runs for sub in SUBSETS for kind in LEVELS}
-#     acc_floor = {sub: Accum() for sub in SUBSETS}
-#     acc_floor_elem = {(lv, sub): Accum() for lv in ('mesh', 'elem') for sub in SUBSETS}
-#     acc_floor_inter = {sub: Accum() for sub in SUBSETS}
-#     # superfície oficial: piso de cada tipo de superfície discreta, com o próprio gabarito
-#     acc_floor_surf = {(kind, sub): Accum() for kind in SURF_KINDS for sub in SUBSETS}
-#     per_surf = {k: [] for k in runs}     # run_key -> list[(L1_A, L2_A)] da superfície
-#     per = {k: [] for k in runs}          # run_key -> list[(L1, L2, pt)]
-#     per_floor = []
-#     ids, subs, n_nodes = [], [], []
-#
-#     groups = {}
-#     for name, sub, idx, p in samples:
-#         groups.setdefault(name, []).append((sub, idx, p))
-#
-#     t0 = time.time()
-#     done = 0
-#     for gi, (name, items) in enumerate(groups.items()):
-#         t = time.time()
-#         with ProcessPoolExecutor(max_workers=min(N_WORKERS, len(items))) as ex:
-#             # [REMOVIDO 2026-10-20] sem o layout da Elem
-#             # futs = [ex.submit(parse_smooth, p, rows[idx]) for _, idx, p in items]
-#             # [REMOVIDO 2026-10-20] sem a sobreposição grade × malha
-#             # futs = [ex.submit(parse_smooth, p, rows[idx], with_elem=True) for _, idx, p in items]
-#             futs = [ex.submit(parse_smooth, p, rows[idx], with_elem=True, with_overlay=True)
-#                     for _, idx, p in items]
-#             for (sub, idx, p), f in zip(items, futs):
-#                 lay = f.result()
-#                 ts = to_torch_sample(lay)
-#                 area = lay['v1']['node_x'][:, 2]
-#                 gt = lay['v1']['node_y']
-#                 assert np.array_equal(gt, lay['bip']['node_y'])
-#                 mag_t = np.hypot(gt[:, 0], gt[:, 1])
-#                 y_hw = ts['v1']['y_hw']
-#                 agrid = grid_area_weights(*y_hw.shape[-2:])
-#                 ids.append(idx)
-#                 subs.append(sub)
-#                 n_nodes.append(len(area))
-#
-#                 assert np.array_equal(lay['elem']['y_hw'], lay['v1']['y_hw'])
-#                 gt_e = lay['elem']['node_y'].astype(np.float64)      # [M,2] centróides
-#                 a_e = lay['elem']['node_x'][:, 4]                    # área do elemento
-#                 mag_te = np.hypot(gt_e[:, 0], gt_e[:, 1])
-#
-#                 mf = mag(floor_nodes(ts))
-#                 acc_floor[sub].add(mf, mag_t, area)
-#                 per_floor.append(node_err(mf, mag_t, area))
-#                 ov = lay['overlay']
-#                 acc_floor_inter[sub].add_surface(mag(y_hw).ravel()[ov['cell']], ov['mag'], ov['w'])
-#                 mq = lay['mesh_quad']
-#                 acc_floor_surf[('grade', sub)].add_surface(mag(y_hw).ravel()[ov['cell']],
-#                                                            ov['mag'], ov['w'])
-#                 add_mesh_surface(acc_floor_surf[('P1_nos', sub)], mq,
-#                                  surface_values_p1(lay['tri'], gt.astype(np.float64), mq['bary']))
-#                 add_mesh_surface(acc_floor_surf[('P0_elem', sub)], mq, mag_te)
-#                 # piso da troca de suporte: gabarito elem -> nós e nós -> elem
-#                 gt_n = gt.astype(np.float64)
-#                 acc_floor_elem[('mesh', sub)].add(_mag_np(elem_to_nodes(lay, gt_e)), mag_t, area)
-#                 acc_floor_elem[('elem', sub)].add(_mag_np(nodes_to_elem(lay, gt_n)), mag_te, a_e)
-#
-#                 for k, r in runs.items():
-#                     out_hw, yn = predict(r['arch'], r['model'], r['normalizer'], ts)
-#                     # [REMOVIDO 2026-10-20] saída sempre por nó -- a Elem sai por elemento
-#                     # mag_p = mag(yn.float().cpu())
-#                     yp = yn.double().cpu().numpy()
-#                     if r['arch'] == 'FNO_BipartiteGNN_Elem':
-#                         p_e, yp = yp, elem_to_nodes(lay, yp)
-#                     elif r['arch'] == 'FNO_BipartiteGNN':
-#                         p_e = nodes_to_elem(lay, yp)
-#                     else:
-#                         p_e = None
-#                     mag_p = _mag_np(yp)
-#                     if p_e is not None:
-#                         acc[(k, sub, 'elem')].add(_mag_np(p_e), mag_te, a_e)
-#                     acc[(k, sub, 'mesh')].add(mag_p, mag_t, area)
-#                     mag_hw = mag(out_hw.float().cpu())
-#                     acc[(k, sub, 'grid')].add(mag_hw, mag(y_hw), agrid)
-#                     acc[(k, sub, 'grid_inter')].add_surface(mag_hw.ravel()[ov['cell']],
-#                                                             ov['mag'], ov['w'])
-#                     per[k].append(node_err(mag_p, mag_t, area))
-#                     # superfície discreta do modelo × superfície do FEMM (oficial, 2026-10-20)
-#                     a_s = Accum()
-#                     if r['arch'] in GRID_ARCHS:
-#                         a_s.add_surface(mag_hw.ravel()[ov['cell']], ov['mag'], ov['w'])
-#                     elif r['arch'] == 'FNO_BipartiteGNN_Elem':
-#                         add_mesh_surface(a_s, mq, _mag_np(p_e))
-#                     else:
-#                         add_mesh_surface(a_s, mq, surface_values_p1(lay['tri'], yp, mq['bary']))
-#                     acc[(k, sub, 'surface')] = merge([acc[(k, sub, 'surface')], a_s])
-#                     rs = a_s.report()
-#                     per_surf[k].append((rs['L1_area'], rs['L2_area']))
-#                 done += 1
-#         print(f'  [{gi + 1}/{len(groups)}] {name} ({items[0][0]})  {time.time() - t:.0f}s  '
-#               f'(amostras {done}, {(time.time() - t0) / 60:.1f} min)', flush=True)
-#
-#     # ------------------------------------------------------------------ #
-#     subs_arr = np.array(subs)
-#     present = [s for s in SUBSETS if (subs_arr == s).any()]
-#
-#     def reports(getter):
-#         r = {sub: getter([sub]).report() for sub in present}
-#         r['total'] = getter(list(SUBSETS)).report()
-#         return r
-#
-#     res = dict(n_samples=done, n_by_subset={s: int((subs_arr == s).sum()) for s in SUBSETS},
-#                interp_mode=INTERP_MODE, runs={},
-#                floor=reports(lambda ss: merge([acc_floor[s] for s in ss])),
-#                floor_grid_inter=reports(lambda ss: merge([acc_floor_inter[s] for s in ss])),
-#                floor_surface={kd: reports(lambda ss, kd=kd: merge([acc_floor_surf[(kd, s)] for s in ss]))
-#                               for kd in SURF_KINDS},
-#                floor_elem={lv: reports(lambda ss, lv=lv: merge([acc_floor_elem[(lv, s)] for s in ss]))
-#                            for lv in ('mesh', 'elem')})
-#     for k, r in runs.items():
-#         arr = np.array(per[k])
-#         res['runs'][k] = dict(
-#             arch=r['arch'], loss=r['loss'], run=r['run'], best_epoch=r['epoch'],
-#             surface_kind=('grade' if r['arch'] in GRID_ARCHS else
-#                           'P0_elem' if r['arch'] == 'FNO_BipartiteGNN_Elem' else 'P1_nos'),
-#             surface=reports(lambda ss, k=k: merge([acc[(k, s, 'surface')] for s in ss])),
-#             mesh=reports(lambda ss, k=k: merge([acc[(k, s, 'mesh')] for s in ss])),
-#             grid=reports(lambda ss, k=k: merge([acc[(k, s, 'grid')] for s in ss])),
-#             grid_inter=reports(lambda ss, k=k: merge([acc[(k, s, 'grid_inter')] for s in ss])),
-#             per_sample_L1_A={sub: pstats(arr[subs_arr == sub, 0]) for sub in present})
-#         if r['arch'] in ELEM_ARCHS:
-#             res['runs'][k]['elem'] = reports(lambda ss, k=k: merge([acc[(k, s, 'elem')] for s in ss]))
-#
-#     np.savez_compressed(
-#         out_dir / 'eval_smooth_per_sample.npz',
-#         sample_idx=np.array(ids), subset=subs_arr, n_nodes=np.array(n_nodes),
-#         floor=np.array(per_floor), **{k: np.array(v) for k, v in per.items()},
-#         **{f'surface_{k}': np.array(v) for k, v in per_surf.items()},
-#     )
-#     (out_dir / 'eval_smooth.json').write_text(json.dumps(res, indent=2))
-#     print(f'\nsalvo em {out_dir} ({(time.time() - t0) / 60:.1f} min)')
-#     print(f'{done} amostras — ERRO DE SUPERFÍCIE (oficial): superfície discreta do modelo × '
-#           f'FEMM (B suavizado P1), % de B_ref (L1_A / L2_A)')
-#     for k, v in res['runs'].items():
-#         g = v['surface']['total']
-#         print(f"  {k:26s} [{v['surface_kind']:7s}] L1 {g['L1_area_pct']:5.2f}%  L2 {g['L2_area_pct']:5.2f}%"
-#               f"  (B_ref {g['B_ref']:.4f} T)")
-#     for kd in SURF_KINDS:
-#         g = res['floor_surface'][kd]['total']
-#         print(f"  {'piso ' + kd:26s} [{kd:7s}] L1 {g['L1_area_pct']:5.2f}%  L2 {g['L2_area_pct']:5.2f}%")
-#     print(f'{done} amostras — erro de |B| nos nós, % de B_ref (pontual / L1_A / L2_A)')
-#     for k, v in res['runs'].items():
-#         g = v['mesh']['total']
-#         print(f"  {k:24s} pt {g['MAE_pt_pct']:5.2f}%  L1 {g['L1_area_pct']:5.2f}%"
-#               f"  L2 {g['L2_area_pct']:5.2f}%")
-#     g = res['floor']['total']
-#     print(f"  {'piso da grade':24s} pt {g['MAE_pt_pct']:5.2f}%  L1 {g['L1_area_pct']:5.2f}%"
-#           f"  L2 {g['L2_area_pct']:5.2f}%")
-#     g = res['floor_elem']['mesh']['total']
-#     print(f"  {'piso elem -> nós':24s} pt {g['MAE_pt_pct']:5.2f}%  L1 {g['L1_area_pct']:5.2f}%"
-#           f"  L2 {g['L2_area_pct']:5.2f}%")
-#     print('erro de |B| da saída em grade × FEMM (interseção célula x triângulo): L1_A / L2_A '
-#           '[grid: × y_hw no centro do pixel]')
-#     for k, v in res['runs'].items():
-#         g, h = v['grid_inter']['total'], v['grid']['total']
-#         print(f"  {k:24s} L1 {g['L1_area_pct']:5.2f}%  L2 {g['L2_area_pct']:5.2f}%"
-#               f"   [grid L1 {h['L1_area_pct']:5.2f}%  L2 {h['L2_area_pct']:5.2f}%]")
-#     g = res['floor_grid_inter']['total']
-#     print(f"  {'piso y_hw':24s} L1 {g['L1_area_pct']:5.2f}%  L2 {g['L2_area_pct']:5.2f}%")
-#     print('erro de |B| por elemento (área do elemento)')
-#     for k, v in res['runs'].items():
-#         if 'elem' in v:
-#             g = v['elem']['total']
-#             print(f"  {k:24s} pt {g['MAE_pt_pct']:5.2f}%  L1 {g['L1_area_pct']:5.2f}%"
-#                   f"  L2 {g['L2_area_pct']:5.2f}%")
-#     g = res['floor_elem']['elem']['total']
-#     print(f"  {'piso nós -> elem':24s} pt {g['MAE_pt_pct']:5.2f}%  L1 {g['L1_area_pct']:5.2f}%"
-#           f"  L2 {g['L2_area_pct']:5.2f}%")
 
 
 def _node_mags(runs, lay, ts):
@@ -380,90 +144,6 @@ def _mesh(idx):
     """(nós [N,3], elementos [M,4]) do .ans da amostra."""
     _, nodes, elems = _read_ans_gz(sample_path(idx), TMP_ROOT / 'parse')
     return nodes, elems
-
-
-# [REMOVIDO 2026-10-20] figures sobre os níveis antigos (mesh nodal, grid × y_hw, grid_inter de
-# todas as archs, elem e pisos elem<->nó) -- removidos por decisão do usuário; a avaliação é
-# só o erro de superfície oficial (nível surface + pisos de superfície).
-# def run_figures(data_dir: Path, fig_dir: Path):
-#     """Origem: tests/resultados/figures_smooth.main (2026-10-20). P50/P95 do L1_A da
-#     REF_RUN no subset 'fora' -- ou 'teste', se 'fora' estiver vazio (split 70/30)."""
-#     import matplotlib.tri as mtri
-#     apply_style()
-#     res = json.loads((data_dir / 'eval_smooth.json').read_text())
-#     per = np.load(data_dir / 'eval_smooth_per_sample.npz')
-#     save_fig(fig_training(find_runs(ROOT_S), ARCHS), fig_dir / '1_curvas_treino')
-#     save_fig(fig_bars(res, RUN_ORDER), fig_dir / '2_barras_erro')
-#
-#     sub_name = 'fora' if (per['subset'] == 'fora').any() else 'teste'
-#     sub = per['subset'] == sub_name
-#     l1 = per[REF_RUN][:, 0]
-#     rows = design_rows()
-#     runs = load_set(ROOT_S, losses=('mae',))
-#     chosen = {}
-#     for tag, q in (('P50', 50), ('P95', 95)):
-#         cand = np.flatnonzero(sub)
-#         # method='lower': o alvo é sempre o valor de uma amostra (com nº par de amostras a
-#         # mediana cai entre duas equidistantes e o empate era decidido por ruído de float)
-#         target = np.percentile(l1[cand], q, method='lower')
-#         pos = cand[np.argmin(np.abs(l1[cand] - target))]
-#         idx = int(per['sample_idx'][pos])
-#         chosen[tag] = dict(sample_idx=idx, subset=sub_name, ref_run=REF_RUN,
-#                            L1_A_ref=float(l1[pos]))
-#
-#         lay = parse_smooth(sample_path(idx), rows[idx], with_elem=True)
-#         nodes, elems = _mesh(idx)
-#         tri = mtri.Triangulation(nodes[:, 0], nodes[:, 1], triangles=elems[:, :3])
-#         gt = _mag_np(lay['v1']['node_y'].astype(np.float64))
-#         preds = _node_mags(runs, lay, to_torch_sample(lay))
-#         preds = {a: preds[a] for a in ARCHS}
-#         r_m, _ = gap_radius_mm(rows[idx])
-#         th0, half = np.deg2rad(60.0), 4.5
-#         for zoom in (None, (r_m * np.cos(th0), r_m * np.sin(th0), half)):
-#             where = (f'zoom no entreferro (r≈{r_m:.1f} mm, θ≈60°, janela {2 * half:.0f} mm)'
-#                      if zoom else 'setor de 120°')
-#             title = (f'Amostra {idx} ({tag} do L1_A de {REF_RUN} em {sub_name}, '
-#                      f'{l1[pos] * 1e3:.1f} mT) — modelos com loss mae — {where}')
-#             save_fig(fig_field(tri, gt, preds, title, zoom=zoom),
-#                      fig_dir / f"3_campo_{tag}_amostra{idx}{'_zoom' if zoom else ''}")
-#         print(f'  {tag}: amostra {idx}')
-#     (data_dir / 'figures_smooth.json').write_text(json.dumps(chosen, indent=2))
-#     print(f'figuras em {fig_dir}')
-
-
-# [REMOVIDO 2026-10-20] surface com erro nodal lumped (surf_err nos nós) -- agora a
-# mesma superfície oficial do eval, com mapa por triângulo.
-# def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path):
-#     """Origem: tests/resultados/surface_error_smooth.main (2026-10-20); 5 archs, sem
-#     amostra default (a 3735 era do dataset antigo)."""
-#     apply_style()
-#     data_dir.mkdir(parents=True, exist_ok=True)
-#     row = design_rows()[sample_idx]
-#     print(f'amostra {sample_idx}: {sample_path(sample_idx)}')
-#     lay = parse_smooth(sample_path(sample_idx), row, with_elem=True)
-#     area = lay['v1']['node_x'][:, 2].astype(np.float64)
-#     mag_t = _mag_np(lay['bip']['node_y'].astype(np.float64))
-#
-#     runs = load_set(ROOT_S, losses=(loss,))
-#     preds = _node_mags(runs, lay, to_torch_sample(lay))
-#     res = dict(sample_idx=sample_idx, loss=loss, n_nodes=int(len(area)), runs={}, erros={})
-#     E = {}
-#     for r in runs.values():
-#         a = r['arch']
-#         E[a], res['erros'][a] = surf_err(preds[a], mag_t, area)
-#         res['runs'][a] = dict(run_dir=r['run_dir'], epoch=r['epoch'])
-#         x = res['erros'][a]
-#         print(f"  {a:22s} L1_A={x['L1_A_T']:.4f} T ({x['L1_A_pct']:.2f}%)  "
-#               f"L2_A={x['L2_A_T']:.4f} T ({x['L2_A_pct']:.2f}%)  L1_pt={x['L1_pt_T']:.4f} T")
-#
-#     nodes, elems = _mesh(sample_idx)
-#     stem = f'sample_{sample_idx:06d}_{loss}'
-#     (data_dir / f'{stem}.json').write_text(json.dumps(res, indent=1))
-#     np.savez_compressed(data_dir / f'{stem}.npz', xy=nodes[:, :2], elems=elems[:, :3],
-#                         mag_gt=mag_t, **{f'e_{a}': E[a] for a in E})
-#     save_fig(fig_surface_error(res, nodes[:, :2], elems[:, :3], E, [a for a in ARCHS if a in E]),
-#              fig_dir / stem, pdf=False, dpi=150)
-#     print(f'figura: {fig_dir / stem}.png')
 
 
 def _surface_points(arch, lay, out_hw, yn):
@@ -502,96 +182,6 @@ def _floor_points(kind, lay):
 
 def _surface_kind(arch):
     return 'grade' if arch in GRID_ARCHS else 'P0_elem' if arch == 'FNO_BipartiteGNN_Elem' else 'P1_nos'
-
-
-# [REMOVIDO 2026-10-20] versão sem o erro nodal secundário (P1) -- substituída abaixo
-# def run_eval(out_dir: Path, max_samples=None):
-#     """Erro de superfície oficial (CLAUDE.md, "Convenção de erro"): superfície discreta de
-#     cada modelo × superfície do FEMM (B suavizado P1 descontínuo); L1_A, L2_A, B_ref.
-#     Saída: eval_smooth.json (runs + floor_surface) e eval_smooth_per_sample.npz
-#     (por run e por piso: [n_amostras, 2] = L1_A, L2_A em T)."""
-#     out_dir.mkdir(parents=True, exist_ok=True)
-#     rows = design_rows()
-#     samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], max_samples, N_SAMPLES)
-#     runs = load_set(ROOT_S)
-#     for k, r in runs.items():
-#         print(f"  {k:26s} {r['run']} best ép.{r['epoch']}  superfície {_surface_kind(r['arch'])}")
-#
-#     acc = {(k, sub): Accum() for k in runs for sub in SUBSETS}
-#     acc_floor = {(kd, sub): Accum() for kd in SURF_KINDS for sub in SUBSETS}
-#     per = {k: [] for k in runs}
-#     per_floor = {kd: [] for kd in SURF_KINDS}
-#     ids, subs = [], []
-#
-#     groups = {}
-#     for name, sub, idx, p in samples:
-#         groups.setdefault(name, []).append((sub, idx, p))
-#
-#     t0 = time.time()
-#     done = 0
-#     for gi, (name, items) in enumerate(groups.items()):
-#         t = time.time()
-#         with ProcessPoolExecutor(max_workers=min(N_WORKERS, len(items))) as ex:
-#             futs = [ex.submit(parse_smooth, p, rows[idx], with_elem=True, with_overlay=True)
-#                     for _, idx, p in items]
-#             for (sub, idx, p), f in zip(items, futs):
-#                 lay = f.result()
-#                 ts = to_torch_sample(lay)
-#                 ids.append(idx)
-#                 subs.append(sub)
-#                 for kd in SURF_KINDS:
-#                     a = Accum()
-#                     a.add_surface(*_floor_points(kd, lay))
-#                     acc_floor[(kd, sub)] = merge([acc_floor[(kd, sub)], a])
-#                     r_ = a.report()
-#                     per_floor[kd].append((r_['L1_area'], r_['L2_area']))
-#                 for k, r in runs.items():
-#                     out_hw, yn = predict(r['arch'], r['model'], r['normalizer'], ts)
-#                     mm, mf, w, _ = _surface_points(r['arch'], lay, out_hw, yn)
-#                     a = Accum()
-#                     a.add_surface(mm, mf, w)
-#                     acc[(k, sub)] = merge([acc[(k, sub)], a])
-#                     r_ = a.report()
-#                     per[k].append((r_['L1_area'], r_['L2_area']))
-#                 done += 1
-#         print(f'  [{gi + 1}/{len(groups)}] {name} ({items[0][0]})  {time.time() - t:.0f}s  '
-#               f'(amostras {done}, {(time.time() - t0) / 60:.1f} min)', flush=True)
-#
-#     subs_arr = np.array(subs)
-#     present = [s for s in SUBSETS if (subs_arr == s).any()]
-#
-#     def reports(getter):
-#         r = {sub: getter([sub]).report() for sub in present}
-#         r['total'] = getter(list(SUBSETS)).report()
-#         return r
-#
-#     res = dict(n_samples=done, n_by_subset={s: int((subs_arr == s).sum()) for s in SUBSETS},
-#                metric='erro de superfície de |B| (superfície do modelo × FEMM P1 descontínuo)',
-#                runs={},
-#                floor_surface={kd: reports(lambda ss, kd=kd: merge([acc_floor[(kd, s)] for s in ss]))
-#                               for kd in SURF_KINDS})
-#     for k, r in runs.items():
-#         arr = np.array(per[k])
-#         res['runs'][k] = dict(
-#             arch=r['arch'], loss=r['loss'], run=r['run'], best_epoch=r['epoch'],
-#             surface_kind=_surface_kind(r['arch']),
-#             surface=reports(lambda ss, k=k: merge([acc[(k, s)] for s in ss])),
-#             per_sample_L1_A={sub: pstats(arr[subs_arr == sub, 0]) for sub in present})
-#
-#     np.savez_compressed(
-#         out_dir / 'eval_smooth_per_sample.npz', sample_idx=np.array(ids), subset=subs_arr,
-#         **{k: np.array(v) for k, v in per.items()},
-#         **{f'floor_{kd}': np.array(v) for kd, v in per_floor.items()})
-#     (out_dir / 'eval_smooth.json').write_text(json.dumps(res, indent=2))
-#     print(f'\nsalvo em {out_dir} ({(time.time() - t0) / 60:.1f} min)')
-#     print(f'{done} amostras — erro de superfície, % de B_ref (L1_A / L2_A)')
-#     for k, v in res['runs'].items():
-#         g = v['surface']['total']
-#         print(f"  {k:26s} [{v['surface_kind']:7s}] L1 {g['L1_area_pct']:5.2f}%  "
-#               f"L2 {g['L2_area_pct']:5.2f}%  (B_ref {g['B_ref']:.4f} T)")
-#     for kd in SURF_KINDS:
-#         g = res['floor_surface'][kd]['total']
-#         print(f"  {'piso ' + kd:26s} [{kd:7s}] L1 {g['L1_area_pct']:5.2f}%  L2 {g['L2_area_pct']:5.2f}%")
 
 
 NODAL_COLS = ('MAE_pt', 'L2_pt', 'L1_area', 'L2_area')   # colunas nodal_* do .npz (T)
@@ -798,44 +388,6 @@ def run_figures(data_dir: Path, fig_dir: Path):
     print(f'figuras em {fig_dir}')
 
 
-# [REMOVIDO 2026-10-20] sem --pct, sem painel do piso e sem contornos dos materiais (P4)
-# def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path):
-#     """Erro de superfície oficial em 1 amostra: L1_A/L2_A de cada modelo e mapa da
-#     densidade do erro por triângulo do FEMM (surface_error_per_triangle)."""
-#     apply_style()
-#     data_dir.mkdir(parents=True, exist_ok=True)
-#     row = design_rows()[sample_idx]
-#     print(f'amostra {sample_idx}: {sample_path(sample_idx)}')
-#     lay = parse_smooth(sample_path(sample_idx), row, with_elem=True, with_overlay=True)
-#     ts = to_torch_sample(lay)
-#     n_tri = len(lay['tri'])
-#     runs = load_set(ROOT_S, losses=(loss,))
-#     res = dict(sample_idx=sample_idx, loss=loss, n_tri=int(n_tri), runs={}, erros={})
-#     E = {}
-#     for r in runs.values():
-#         a = r['arch']
-#         out_hw, yn = predict(a, r['model'], r['normalizer'], ts)
-#         mm, mf, w, t_idx = _surface_points(a, lay, out_hw, yn)
-#         acc = Accum()
-#         acc.add_surface(mm, mf, w)
-#         x = acc.report()
-#         E[a] = surface_error_per_triangle(n_tri, t_idx, mm, mf, w)
-#         res['erros'][a] = dict(surface_kind=_surface_kind(a), B_ref_T=x['B_ref'],
-#                                L1_A_T=x['L1_area'], L1_A_pct=x['L1_area_pct'],
-#                                L2_A_T=x['L2_area'], L2_A_pct=x['L2_area_pct'])
-#         res['runs'][a] = dict(run_dir=r['run_dir'], epoch=r['epoch'])
-#         print(f"  {a:22s} [{_surface_kind(a):7s}] L1_A={x['L1_area']:.4f} T ({x['L1_area_pct']:.2f}%)  "
-#               f"L2_A={x['L2_area']:.4f} T ({x['L2_area_pct']:.2f}%)")
-#     nodes, elems = _mesh(sample_idx)
-#     stem = f'sample_{sample_idx:06d}_{loss}'
-#     (data_dir / f'{stem}.json').write_text(json.dumps(res, indent=1))
-#     np.savez_compressed(data_dir / f'{stem}.npz', xy=nodes[:, :2], elems=elems[:, :3],
-#                         **{f'e_tri_{a}': E[a] for a in E})
-#     save_fig(fig_surface_error(res, nodes[:, :2], elems[:, :3], E, [a for a in ARCHS if a in E]),
-#              fig_dir / stem, pdf=False, dpi=150)
-#     print(f'figura: {fig_dir / stem}.png')
-
-
 def _floor_tri_idx(kind, lay):
     """Triângulo do FEMM de cada ponto de _floor_points(kind, lay) (mesma ordem)."""
     if kind == 'grade':
@@ -1012,38 +564,25 @@ def _torque_runs(loss, archs):
     return {k: r for k, r in runs.items() if archs is None or r['arch'] in archs}
 
 
-# [REMOVIDO 2026-10-21] pasta de trabalho fixa em TORQUE_TMP (C3: --work-dir)
-# def _torque_sweep_dir(idx):
-#     root = TORQUE_TMP / 'torque_theta_e'
 def _torque_sweep_dir(idx, work_dir=TORQUE_TMP):
     """Pasta da varredura θe de 1 amostra (amostra 15 na raiz, como nos JSONs antigos)."""
     root = Path(work_dir) / 'torque_theta_e'
     return root if idx == 15 else root / f'sample_{idx:06d}'
 
 
-# [REMOVIDO 2026-10-21] def _femm_batch_one(idx, k, th, row):  (TORQUE_TMP fixo; C3: --work-dir)
-#     d = TORQUE_TMP / 'torque_theta_e_batch' / f'sample_{idx:06d}'
 def _femm_batch_one(idx, k, th, row, work_dir=TORQUE_TMP):
     d = Path(work_dir) / 'torque_theta_e_batch' / f'sample_{idx:06d}'
     gz, js = d / f'theta_{k:02d}.ans.gz', d / f'theta_{k:02d}.json'
-    # [REMOVIDO 2026-10-21] reaproveitava qualquer cache, inclusive os de [Depth] = 1 (C2)
-    # if gz.exists() and js.exists():
-    #     return
     if gz.exists() and js.exists() and femm_ref_ok(json.loads(js.read_text()), row):
         return
-    # [REMOVIDO 2026-10-21] tmp = TORQUE_TMP / 'torque_theta_e_batch' / 'tmp' / f'{idx}_{k}'
     tmp = Path(work_dir) / 'torque_theta_e_batch' / 'tmp' / f'{idx}_{k}'
     try:
         t22 = femm_solve(row, th, tmp, gz)
-        # [REMOVIDO 2026-10-21] js.write_text(json.dumps(dict(theta_e_deg=float(th), T22_sector=t22)))
         js.write_text(json.dumps(femm_ref(row, th, t22)))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-# [REMOVIDO 2026-10-21] sem raw_dir/work_dir (C3)
-# def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=False,
-#                idxs=(15,), n_theta=None, n_samples=80, n_per_chunk=8, limit=None):
 def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=False,
                idxs=(15,), n_theta=None, n_samples=80, n_per_chunk=8, limit=None,
                raw_dir=None, work_dir=None):
@@ -1054,7 +593,6 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
     raw_dir: raw de onde vêm valid_designs.csv e os .ans (None: samples.RAW_DIR, o do
     DatagenConfig); work_dir: soluções FEMM das varreduras e temporários (None: TORQUE_TMP)."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    # [REMOVIDO 2026-10-21] rows = design_rows()  (raw fixo do DatagenConfig; C3: --raw-dir)
     raw_dir = Path(raw_dir) if raw_dir is not None else RAW_DIR
     work_dir = Path(work_dir) if work_dir is not None else TORQUE_TMP
     rows = read_rows(raw_dir)
@@ -1067,16 +605,8 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
     if mode == 'theta-e':
         n_theta = n_theta or 24
         for idx in idxs:
-            # [REMOVIDO 2026-10-21] row, sw = rows[idx], _torque_sweep_dir(idx)
             row, sw = rows[idx], _torque_sweep_dir(idx, work_dir)
             th_all = torque_thetas(n_theta)
-            # [REMOVIDO 2026-10-21] cache lido sem conferir a profundidade (C2)
-            # if femm:
-            #     ref = [dict(theta_e_deg=float(th), T22_sector=femm_solve(
-            #         row, th, sw / 'tmp', sw / 'raw' / f'theta_{k:03d}.ans.gz'))
-            #         for k, th in enumerate(th_all)]
-            #     (sw / 'femm_ref.json').write_text(json.dumps(ref, indent=1))
-            # ref = json.loads((sw / 'femm_ref.json').read_text())[:limit]
             cache = sw / 'femm_ref.json'
             stale = cache.exists() and not all(femm_ref_ok(r, row) for r in json.loads(cache.read_text()))
             if stale:
@@ -1115,11 +645,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
     elif mode == 'batch':
         n_theta = n_theta or 16
         ids = select_batch_samples(split_run, rows, n_samples)
-        # [REMOVIDO 2026-10-21] root = TORQUE_TMP / 'torque_theta_e_batch'
         root = work_dir / 'torque_theta_e_batch'
-        # [REMOVIDO 2026-10-21] só ressolvia com --femm, e mesmo assim pulava caches existentes
-        # if femm:
-        #     tasks = [(i, k, th) for i in ids for k, th in enumerate(torque_thetas(n_theta))]
         # C2: com --femm, todos os ângulos (_femm_batch_one pula só os caches válidos); sem --femm,
         # só os caches existentes com outra profundidade (ou sem o campo) são descartados e ressolvidos
         tasks = [(i, k, th) for i in ids for k, th in enumerate(torque_thetas(n_theta))]
@@ -1131,7 +657,6 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
                 print(f'  {len(tasks)} cache(s) de T22 com outra profundidade -> ressolvendo', flush=True)
         if tasks:
             with ProcessPoolExecutor(TORQUE_FEMM_WORKERS) as ex:
-                # [REMOVIDO 2026-10-21] ex.submit(_femm_batch_one, i, k, th, rows[i])
                 for f in [ex.submit(_femm_batch_one, i, k, th, rows[i], work_dir) for i, k, th in tasks]:
                     f.result()
         res, rows_ = {}, {kk: [] for kk in pk}
@@ -1175,9 +700,6 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
         with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
             for b in range(0, len(ids), 32):
                 batch = ids[b:b + 32]
-                # [REMOVIDO 2026-10-21] sample_path(i) e TMP_ROOT fixos (C3: --raw-dir/--work-dir)
-                # futs = [ex.submit(parse_torque_sample, sample_path(i), rows[i],
-                #                   TMP_ROOT / 'torque_scatter' / str(i)) for i in batch]
                 futs = [ex.submit(parse_torque_sample, raw_dir / f'sample_{i:06d}.ans.gz', rows[i],
                                   work_dir / 'torque_scatter' / str(i)) for i in batch]
                 for i, f in zip(batch, futs):
@@ -1464,9 +986,6 @@ if __name__ == '__main__':
     p_fig.add_argument('--data', type=Path, default=OUT_ROOT / 'dados', help='saída do eval')
     p_fig.add_argument('--out', type=Path, default=OUT_ROOT / 'plots', help='diretório das figuras')
     p_sur = sp.add_parser('surface', help='mapa de erro de superfície dos 5 modelos em 1 amostra')
-    # [REMOVIDO 2026-10-20] IDX obrigatório -- opcional com --pct (P4)
-    # p_sur.add_argument('idx', type=int, help='índice da amostra no raw')
-    # p_sur.add_argument('loss', nargs='?', default='mae', choices=('mse', 'mae'))
     p_sur.add_argument('idx', nargs='?', default=None,
                        help='índice da amostra no raw (com --pct: omitir; pode receber a LOSS)')
     p_sur.add_argument('loss', nargs='?', default=None, choices=('mse', 'mae'))
@@ -1525,8 +1044,6 @@ if __name__ == '__main__':
     elif a.cmd == 'figures':
         run_figures(a.data, a.out)
     elif a.cmd == 'surface':
-        # [REMOVIDO 2026-10-20] sem --pct (P4)
-        # run_surface(a.idx, a.loss, a.data, a.out)
         if a.pct is not None and a.idx in ('mse', 'mae'):
             a.idx, a.loss = None, a.idx
         if a.pct is None and a.idx is None:
@@ -1536,9 +1053,6 @@ if __name__ == '__main__':
     elif a.cmd == 'regions':
         run_regions(a.out, a.fig, a.n, a.d_int, a.d_canto, a.ang_canto)
     elif a.cmd == 'torque':
-        # [REMOVIDO 2026-10-21] sem raw_dir/work_dir (C3)
-        # run_torque(a.mode, a.out, a.loss, a.archs, a.frame, a.femm, a.idx, a.n_theta,
-        #            a.n_samples, a.n_per_chunk, a.limit)
         run_torque(a.mode, a.out, a.loss, a.archs, a.frame, a.femm, a.idx, a.n_theta,
                    a.n_samples, a.n_per_chunk, a.limit, a.raw_dir, a.work_dir)
     elif a.cmd == 'saturation':

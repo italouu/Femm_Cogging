@@ -11,35 +11,8 @@ from src.neural_op.monitor import TrainingMonitor
 from src.training.model_manager import ModelManager
 
 # ── Configuração ───────────────────────────────────────────────────────────────
-# [REMOVIDO 2026-10-20] DivBLossCfg (graph_div_b_loss removida -- feature sem uso)
-# from src.configs.training import FNOConfig, DivBLossCfg
 from src.configs.training import FNOConfig
 from src.configs.monitor import MonitorCfg
-
-# [REMOVIDO] _nn construído em nível de módulo — rodava (detecção de dims +
-# Normalizer.fit) como efeito colateral de QUALQUER import deste arquivo, ex:
-# scripts/run_best_configs.py importando `run` daqui só pra reaproveitar o
-# pipeline. Movido para dentro do if __name__ abaixo, onde só roda quando o
-# script é executado diretamente (python -m scripts.train).
-#
-# Parâmetros/loss reconstruídos da run_0015 (mesh_ans_138x276_B/FNO_BipartiteGNN,
-# ver config.json da run) — mesmo dataset/batch_size/n_epochs/scheduler do default
-# de NnCfg, então só o que difere é passado explicitamente. loss_cfg precisa de
-# override manual porque o default de DivBLossCfg (lambda_div=0.3) não bate com o
-# valor usado na run_0015 (lambda_div=5e-12). monitor_cfg fica no default de NnCfg
-# (gl_threshold=5.0 ativo) — critério novo, não existia na run_0015.
-# _nn = NnCfg(
-#     arch='FNO_BipartiteGNN',
-#     loss='graph_div_b_loss',
-#     loss_cfg=DivBLossCfg(lambda_div=5e-12),
-#     lr=0.01,
-# )
-
-# [REMOVIDO] DEVICE em nível de módulo — torch.cuda.is_available() inicializa o
-# contexto CUDA imediatamente, antes de qualquer print. Após crash de OOM, o
-# driver NVIDIA pode ficar em estado inconsistente e travar aqui sem nenhum
-# output visível no console. Movido para dentro do if __name__ abaixo.
-# DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def run(_nn):
     """
@@ -79,15 +52,6 @@ def run(_nn):
     # abaixo — não de loss_fn (que pode virar um partial).
     loss_obj = LOSS_REGISTRY[_nn.loss]
     loss_fn  = loss_obj
-    # [REMOVIDO 2026-10-20] termo de cauda top-k (tail_alpha/tail_k_frac) -- feature sem uso
-    # if getattr(_nn.loss_cfg, 'tail_alpha', 0.0) > 0:
-    #     # Só MseLossCfg tem tail_alpha/tail_k_frac — getattr evita AttributeError
-    #     # em outras configs de loss.
-    #     loss_fn = functools.partial(
-    #         loss_fn,
-    #         tail_alpha=_nn.loss_cfg.tail_alpha,
-    #         tail_k_frac=_nn.loss_cfg.tail_k_frac,
-    #     )
 
     # ── Modelo, optimizer, scheduler ───────────────────────────────────────
     if _nn.resume_run:
@@ -119,6 +83,8 @@ def run(_nn):
 
     model.normalizer = normalizer
 
+    # DEVICE dentro de run (não em nível de módulo): is_available() inicializa o CUDA, e após
+    # um crash de OOM o driver pode travar aqui sem nenhum print -- só depois do log inicial.
     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Device: {DEVICE}", flush=True)
 
@@ -152,8 +118,6 @@ def run(_nn):
         status = 'stopped'
         stop_reason = 'keyboard_interrupt'
     finally:
-        # [REMOVIDO 2026-10-03, B4] close sem resumo da run
-        # mgr.close(status, monitor.last_epoch, model, optimizer, scheduler)
         mgr.close(status, monitor.last_epoch, model, optimizer, scheduler,
                   stop_reason=stop_reason, best_epoch=monitor.best_epoch,
                   best_test_loss=monitor.best_loss, n_epochs_cfg=_nn.n_epochs)
@@ -161,15 +125,9 @@ def run(_nn):
 
 
 if __name__ == '__main__':
-    # [REMOVIDO 2026-10-13] reconstrução da run_0015 (dataset mesh_ans_138x276_B removido;
-    # arch/loss por string não existem mais em NnCfg)
-    # _nn = NnCfg(
-    #     arch='FNO_BipartiteGNN',
-    #     loss='graph_div_b_loss',
-    #     loss_cfg=DivBLossCfg(lambda_div=5e-12),
-    #     lr=0.01,
-    # )
     # Execução avulsa = defaults de src/configs (melhor run da bateria smooth).
+    # NnCfg só aqui (não em nível de módulo): o __post_init__ detecta dims e roda
+    # Normalizer.fit -- não pode ser efeito colateral de importar `run` (run_battery).
     _nn = NnCfg()
     run(_nn)
 

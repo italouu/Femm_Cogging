@@ -38,8 +38,6 @@ Modos
 import torch
 import torch.nn.functional as F
 
-# [REMOVIDO 2026-10-05, B1b] sem 'cell_centered_border'
-# INTERP_MODES = ('legacy', 'cell_centered')
 INTERP_MODES = ('legacy', 'cell_centered', 'cell_centered_border')
 
 

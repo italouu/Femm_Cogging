@@ -36,8 +36,6 @@ from pathlib import Path
 
 import numpy as np
 
-# [REMOVIDO 2026-10-21] L fixo de 1 mm -- agora o stack length do design (stack_length_m)
-# DEPTH_M = 1e-3
 MU0 = 4e-7 * np.pi
 
 
@@ -107,7 +105,6 @@ def femm_solve(row, theta_e, work_dir: Path, gz_out: Path):
     try:
         model = BLDC_FEMM_Model_Sym120_Annular(motor_params=p, phase=p['rotor_phase']['value'])
         femm.openfemm('bHide'); femm.main_resize(1000, 1000); femm.newdocument(0)
-        # [REMOVIDO 2026-10-21] femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, 0, 200)
         femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, stack_length_m(row) * 1e3, 200)
         model.draw_motor(); femm.mi_zoomnatural(); femm.mi_saveas(str(work_dir / 'model.fem'))
         femm.mi_createmesh(); femm.mi_analyze(); femm.mi_loadsolution()
@@ -128,7 +125,6 @@ def femm_solve(row, theta_e, work_dir: Path, gz_out: Path):
 # --------------------------------------------------------------------------- #
 # torque pelo campo
 # --------------------------------------------------------------------------- #
-# [REMOVIDO 2026-10-21] def band_torque(B, cen, area, mat, r1, r2):  (L = DEPTH_M fixo)
 def band_torque(B, cen, area, mat, r1, r2, depth_m):
     """Torque no rotor (×3, N·m): média do tensor de Maxwell na faixa de ar do entreferro.
     B [M,2] = (Bx, By) por elemento; cen [M,2] mm; area [M] mm²; depth_m = stack length [m]
@@ -142,7 +138,6 @@ def band_torque(B, cen, area, mat, r1, r2, depth_m):
     bt = -bx * np.sin(th) + by * np.cos(th)
     s = (r[sel] * 1e-3 * br * bt * area[sel] * 1e-6).sum()
     # torque no conteúdo do círculo (estator) = +L/μ0/(r2−r1)·Σ; no rotor externo é o oposto
-    # [REMOVIDO 2026-10-21] return -3 * DEPTH_M / (MU0 * (r2 - r1) * 1e-3) * s, int(sel.sum())
     return -3 * depth_m / (MU0 * (r2 - r1) * 1e-3) * s, int(sel.sum())
 
 
@@ -195,7 +190,6 @@ def sample_torques(lay, row, runs, frame='polar'):
     from src.postprocess.inference import to_torch_sample
     tq = lay['torque']
     r1, r2 = gap(row)
-    # [REMOVIDO 2026-10-21] g = lambda B: band_torque(B, tq['cen'], tq['area'], tq['mat'], r1, r2)[0]
     g = lambda B: band_torque(B, tq['cen'], tq['area'], tq['mat'], r1, r2, stack_length_m(row))[0]
     out = dict(gt=g(tq['gt']), smooth=g(tq['smooth']))
     ts = to_torch_sample(lay)

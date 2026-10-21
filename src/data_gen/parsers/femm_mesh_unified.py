@@ -88,11 +88,6 @@ def parse_ans_gzip_sample_unified(ans_gz_path: Path, r_in: float, r_ext: float,
 
     # --- layout v1 (grafo único de vértices com material votado) ---
     lines, nodes, elems = _read_ans_gz(ans_gz_path, tmp_dir)
-    # [REMOVIDO 2026-10-05] mesmo motivo de femm_mesh_v2.py (ver _parse_label_materials)
-    # block_material_id, block_mu = _parse_block_materials(lines)
-    # block_M = _block_magnet_polarity(block_material_id, _N_POLES_SECTOR)
-    # elem_material_id = block_material_id[elems[:, 3]]
-    # elem_M = block_M[elems[:, 3]]
     label_material_id, _, label_M = _parse_label_materials(lines)
     elem_material_id = label_material_id[elems[:, 3]]
     elem_M = label_M[elems[:, 3]]

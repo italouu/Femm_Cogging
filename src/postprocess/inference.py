@@ -18,8 +18,6 @@ from src.neural_op.normalization import Normalizer
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 INTERP_MODE = 'cell_centered_border'   # mesmo modo grade -> nós dos modelos da bateria smooth
 
-# [REMOVIDO 2026-10-20] sem a Elem -- agora parte da bateria oficial (eval integrado)
-# ARCHS     = ('FNO2d', 'FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN')
 ARCHS     = ('FNO2d', 'FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN', 'FNO_BipartiteGNN_Elem')
 RUN_ORDER = [(a, l) for a in ARCHS for l in ('mse', 'mae')]
 
@@ -125,15 +123,9 @@ def predict(arch, model, normalizer, ts):
     FNO_BipartiteGNN_Elem: usa ts['elem'] e y_nodes é POR ELEMENTO [M,2]
     (levar aos nós com fields.elem_to_nodes; contrato do layout Elem: docstring de src/data_gen/parsers/femm_mesh_elem.py)."""
     if arch in ('FNO_BipartiteGNN', 'FNO_BipartiteGNN_Elem'):
-        # [REMOVIDO 2026-10-20] a Elem recebia o layout bipartite (grafo errado para ela)
-        # d = ts['bip']
         d = ts['elem'] if arch == 'FNO_BipartiteGNN_Elem' else ts['bip']
         if arch == 'FNO_BipartiteGNN_Elem':
             check_elem_layout(d)
-        # [REMOVIDO 2026-10-21] arestas cruas no modelo (R2: edge_attr/cross_edge_attr
-        # normalizados; runs antigas sem stats de aresta -> _enc é identidade)
-        #     d['edge_index'].to(DEVICE), d['edge_attr'].to(DEVICE),
-        #     d['cross_edge_index'].to(DEVICE), d['cross_edge_attr'].to(DEVICE),
         out_hw, y_nodes = model(
             _enc(normalizer, d['x_hw'], 'x_hw').to(DEVICE),
             _enc(normalizer, d['node_x'], 'node_x').to(DEVICE),
@@ -151,8 +143,6 @@ def predict(arch, model, normalizer, ts):
         y_nodes = interpolate_grid_to_nodes(out_hw, nx[:, 3], nx[:, 4], d['L'].to(DEVICE),
                                             mode=getattr(model, 'interp_mode', 'legacy'))
         return out_hw[0], y_nodes
-    # [REMOVIDO 2026-10-21] arestas cruas no modelo (R2)
-    #                         d['edge_index'].to(DEVICE), d['edge_attr'].to(DEVICE),
     out_hw, y_nodes = model(x_in, _enc(normalizer, d['node_x'], 'node_x').to(DEVICE),
                             d['edge_index'].to(DEVICE),
                             _enc(normalizer, d['edge_attr'], 'edge_attr').to(DEVICE),

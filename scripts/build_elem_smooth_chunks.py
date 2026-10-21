@@ -30,10 +30,14 @@ from pathlib import Path
 from scripts.build_smooth_ans_chunks_direct import (
     RAW_DIR, CHUNKS_ROOT, N_R, N_A, ANG_1, ANG_2, CHUNK_SIZE, MAX_WORKERS, MAX_SAMPLES,
 )
-from scripts.build_unified_ans_chunks_direct import _sample_idx
+# [REMOVIDO 2026-10-21] helpers dos scripts do protótipo/unificado (gravação pelo _flush de
+# build_data_chunks_femm_mesh_v2 com a global de saída trocada) -- agora src/data_gen/chunks.py (G1)
+# from scripts.build_unified_ans_chunks_direct import _sample_idx
+from src.data_gen.chunks import sample_idx as _sample_idx, write_chunk
 # [REMOVIDO 2026-10-14] N_RAW_EXPECTED do protótipo (4000 fixo) — agora o nº do DatagenConfig
 # from scripts.build_elem_proto_chunks import _write_chunk, N_RAW_EXPECTED, MIN_FREE_GB
-from scripts.build_elem_proto_chunks import _write_chunk, MIN_FREE_GB
+# [REMOVIDO 2026-10-21] from scripts.build_elem_proto_chunks import _write_chunk, MIN_FREE_GB
+MIN_FREE_GB = 55   # valor de scripts/build_elem_proto_chunks.py (chunks de 4000 amostras ~47 GB)
 from src.configs.datagen import DatagenConfig
 N_RAW_EXPECTED = DatagenConfig().n_samples   # precheck com max_samples=None: raw completo
 from src.data_gen.parsers.femm_mesh_elem_smooth import parse_ans_gzip_sample_elem_smooth
@@ -78,7 +82,8 @@ def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, out_name=OUT_NAME):
                                       float(row['outer_diameter [mm]']) / 2,
                                       TMP_PARSE))
             samples = [f.result() for f in futs]   # ordem preservada
-        _write_chunk(chunk_idx, samples, out_dir)
+        # [REMOVIDO 2026-10-21] _write_chunk(chunk_idx, samples, out_dir)
+        write_chunk(out_dir, chunk_idx, samples, 'bipartite')
         del samples
         feitos += 1
         print(f"  chunk {chunk_idx + 1}/{len(groups)} ok  ({time.time() - t:.0f}s, "

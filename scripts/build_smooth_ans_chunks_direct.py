@@ -23,7 +23,10 @@ from pathlib import Path
 
 from src.configs.datagen import DatagenConfig
 from src.data_gen.parsers.femm_mesh_smooth import parse_ans_gzip_sample_smooth, SMOOTH_ARCHS
-from scripts.build_unified_ans_chunks_direct import _sample_idx, _dim, _builders
+# [REMOVIDO 2026-10-21] helpers do script unificado (que gravava pelos _flush dos scripts
+# antigos trocando a global de saída deles) -- agora src/data_gen/chunks.py (G1)
+# from scripts.build_unified_ans_chunks_direct import _sample_idx, _dim, _builders
+from src.data_gen.chunks import LAYOUT_BY_ARCH, sample_idx as _sample_idx, write_chunk
 
 _dg = DatagenConfig()
 
@@ -66,20 +69,22 @@ def _parse_one(path: Path, r_in: float, r_ext: float, tmp_dir: Path) -> dict:
                                          n_r=N_R, n_a=N_A, tmp_dir=tmp_dir)
 
 
-def _write_chunk(chunk_idx: int, arch: str, samples: list, builders: dict, chunks_root: Path):
-    make_bufs, mod, out_attr = builders[arch]
-    final_dir = chunks_root / arch
-    tmp_dir = final_dir / ".tmp"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    name = f"data_chunk_{chunk_idx:04d}.pt"
-
-    orig = getattr(mod, out_attr)
-    setattr(mod, out_attr, tmp_dir)
-    try:
-        mod._flush(chunk_idx, make_bufs(samples), _dim(samples[0]))
-    finally:
-        setattr(mod, out_attr, orig)
-    (tmp_dir / name).replace(final_dir / name)
+# [REMOVIDO 2026-10-21] gravação pelo _flush de outro módulo com a global de saída trocada
+# (monkeypatch) -- agora src/data_gen/chunks.write_chunk, com o destino como argumento (G1)
+# def _write_chunk(chunk_idx: int, arch: str, samples: list, builders: dict, chunks_root: Path):
+#     make_bufs, mod, out_attr = builders[arch]
+#     final_dir = chunks_root / arch
+#     tmp_dir = final_dir / ".tmp"
+#     tmp_dir.mkdir(parents=True, exist_ok=True)
+#     name = f"data_chunk_{chunk_idx:04d}.pt"
+#
+#     orig = getattr(mod, out_attr)
+#     setattr(mod, out_attr, tmp_dir)
+#     try:
+#         mod._flush(chunk_idx, make_bufs(samples), _dim(samples[0]))
+#     finally:
+#         setattr(mod, out_attr, orig)
+#     (tmp_dir / name).replace(final_dir / name)
 
 
 def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, chunks_root=CHUNKS_ROOT,
@@ -93,7 +98,7 @@ def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, chunks_root=CHUNKS_ROOT,
         rows = list(csv.DictReader(f))
 
     groups = [ans_paths[i:i + chunk_size] for i in range(0, len(ans_paths), chunk_size)]
-    builders = _builders()
+    # [REMOVIDO 2026-10-21] builders = _builders()   (G1: src/data_gen/chunks.py)
 
     print(f"\n=== Chunks com B suavizado do FEMM, direto do raw ===")
     print(f"  origem  : {RAW_DIR}  ({len(ans_paths)} amostras)")
@@ -121,7 +126,9 @@ def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, chunks_root=CHUNKS_ROOT,
 
         for arch in SMOOTH_ARCHS:
             if not (chunks_root / arch / name).exists():
-                _write_chunk(chunk_idx, arch, [l[arch] for l in layouts], builders, chunks_root)
+                # [REMOVIDO 2026-10-21] _write_chunk(chunk_idx, arch, [l[arch] for l in layouts], builders, chunks_root)
+                write_chunk(chunks_root / arch, chunk_idx, [l[arch] for l in layouts],
+                            LAYOUT_BY_ARCH[arch])
         del layouts
 
         feitos += 1

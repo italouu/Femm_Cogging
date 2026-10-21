@@ -127,8 +127,12 @@ from src.postprocess.plots.saturation import MU_LABEL, fig_bh, fig_steel_map
 from src.postprocess.timing import (ARCH_STAGES, DEVICE, LAYOUT, check_mesh_vs_raw,
                                     check_preprocess, collate, encode_timed, femm_solve_timed,
                                     hardware_info, iqr_stats, preprocess_timed, time_batch)
-from src.postprocess.torque import (batch_summary, curve_row, femm_solve, gap, parse_torque_sample,
-                                    sample_torques, scatter_ids, scatter_stats, select_batch_samples)
+# [REMOVIDO 2026-10-21] sem femm_ref/femm_ref_ok (C2: profundidade gravada nos caches de T22)
+# from src.postprocess.torque import (batch_summary, curve_row, femm_solve, gap, parse_torque_sample,
+#                                     sample_torques, scatter_ids, scatter_stats, select_batch_samples)
+from src.postprocess.torque import (batch_summary, curve_row, femm_ref, femm_ref_ok, femm_solve, gap,
+                                    parse_torque_sample, sample_torques, scatter_ids, scatter_stats,
+                                    select_batch_samples)
 from src.postprocess.torque import thetas as torque_thetas
 from src.postprocess.train_table import train_table
 # [REMOVIDO 2026-10-20] sem sample_path/TMP_ROOT (usados pelas figuras)
@@ -1010,12 +1014,16 @@ def _torque_sweep_dir(idx):
 def _femm_batch_one(idx, k, th, row):
     d = TORQUE_TMP / 'torque_theta_e_batch' / f'sample_{idx:06d}'
     gz, js = d / f'theta_{k:02d}.ans.gz', d / f'theta_{k:02d}.json'
-    if gz.exists() and js.exists():
+    # [REMOVIDO 2026-10-21] reaproveitava qualquer cache, inclusive os de [Depth] = 1 (C2)
+    # if gz.exists() and js.exists():
+    #     return
+    if gz.exists() and js.exists() and femm_ref_ok(json.loads(js.read_text()), row):
         return
     tmp = TORQUE_TMP / 'torque_theta_e_batch' / 'tmp' / f'{idx}_{k}'
     try:
         t22 = femm_solve(row, th, tmp, gz)
-        js.write_text(json.dumps(dict(theta_e_deg=float(th), T22_sector=t22)))
+        # [REMOVIDO 2026-10-21] js.write_text(json.dumps(dict(theta_e_deg=float(th), T22_sector=t22)))
+        js.write_text(json.dumps(femm_ref(row, th, t22)))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -1039,12 +1047,23 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
         for idx in idxs:
             row, sw = rows[idx], _torque_sweep_dir(idx)
             th_all = torque_thetas(n_theta)
-            if femm:
-                ref = [dict(theta_e_deg=float(th), T22_sector=femm_solve(
-                    row, th, sw / 'tmp', sw / 'raw' / f'theta_{k:03d}.ans.gz'))
-                    for k, th in enumerate(th_all)]
-                (sw / 'femm_ref.json').write_text(json.dumps(ref, indent=1))
-            ref = json.loads((sw / 'femm_ref.json').read_text())[:limit]
+            # [REMOVIDO 2026-10-21] cache lido sem conferir a profundidade (C2)
+            # if femm:
+            #     ref = [dict(theta_e_deg=float(th), T22_sector=femm_solve(
+            #         row, th, sw / 'tmp', sw / 'raw' / f'theta_{k:03d}.ans.gz'))
+            #         for k, th in enumerate(th_all)]
+            #     (sw / 'femm_ref.json').write_text(json.dumps(ref, indent=1))
+            # ref = json.loads((sw / 'femm_ref.json').read_text())[:limit]
+            cache = sw / 'femm_ref.json'
+            stale = cache.exists() and not all(femm_ref_ok(r, row) for r in json.loads(cache.read_text()))
+            if stale:
+                print(f'  s{idx}: femm_ref.json com outra profundidade (ou sem stack_length_mm) '
+                      f'-> descartado, ressolvendo', flush=True)
+            if femm or stale:
+                ref = [femm_ref(row, th, femm_solve(row, th, sw / 'tmp', sw / 'raw' / f'theta_{k:03d}.ans.gz'))
+                       for k, th in enumerate(th_all)]
+                cache.write_text(json.dumps(ref, indent=1))
+            ref = json.loads(cache.read_text())[:limit]
             T = {'femm_T22': [3 * r['T22_sector'] for r in ref], 'gt': [], 'gt_smooth': [],
                  **{k: [] for k in pk}}
             with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
@@ -1074,8 +1093,19 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
         n_theta = n_theta or 16
         ids = select_batch_samples(split_run, rows, n_samples)
         root = TORQUE_TMP / 'torque_theta_e_batch'
-        if femm:
-            tasks = [(i, k, th) for i in ids for k, th in enumerate(torque_thetas(n_theta))]
+        # [REMOVIDO 2026-10-21] só ressolvia com --femm, e mesmo assim pulava caches existentes
+        # if femm:
+        #     tasks = [(i, k, th) for i in ids for k, th in enumerate(torque_thetas(n_theta))]
+        # C2: com --femm, todos os ângulos (_femm_batch_one pula só os caches válidos); sem --femm,
+        # só os caches existentes com outra profundidade (ou sem o campo) são descartados e ressolvidos
+        tasks = [(i, k, th) for i in ids for k, th in enumerate(torque_thetas(n_theta))]
+        if not femm:
+            jsons = {(i, k): root / f'sample_{i:06d}' / f'theta_{k:02d}.json' for i, k, _ in tasks}
+            tasks = [(i, k, th) for i, k, th in tasks if jsons[i, k].exists()
+                     and not femm_ref_ok(json.loads(jsons[i, k].read_text()), rows[i])]
+            if tasks:
+                print(f'  {len(tasks)} cache(s) de T22 com outra profundidade -> ressolvendo', flush=True)
+        if tasks:
             with ProcessPoolExecutor(TORQUE_FEMM_WORKERS) as ex:
                 for f in [ex.submit(_femm_batch_one, i, k, th, rows[i]) for i, k, th in tasks]:
                     f.result()

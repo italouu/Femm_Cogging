@@ -47,6 +47,20 @@ def stack_length_m(row):
     return float(row.get('stack_length [mm]', STACK_LENGTH_MM)) * 1e-3
 
 
+def femm_ref(row, theta_e, t22):
+    """Registro de cache de 1 solução FEMM (C2, 2026-10-21): T22 do setor + a profundidade
+    (stack length) com que foi resolvido -- a mesma de femm_solve(row, ...)."""
+    return dict(theta_e_deg=float(theta_e), T22_sector=float(t22),
+                stack_length_mm=stack_length_m(row) * 1e3)
+
+
+def femm_ref_ok(ref, row):
+    """True se o cache foi resolvido com o stack length de `row` (sem o campo: caches
+    anteriores a 2026-10-21, resolvidos com [Depth] = 1 -> inválido)."""
+    sl = ref.get('stack_length_mm')
+    return sl is not None and abs(float(sl) - stack_length_m(row) * 1e3) <= 1e-9 * max(1.0, abs(float(sl)))
+
+
 # --------------------------------------------------------------------------- #
 # designs / geometria
 # --------------------------------------------------------------------------- #

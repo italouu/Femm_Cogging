@@ -220,4 +220,6 @@ def fno_bipartite_gnn_metric_fn(batch, model, device):
 # def femm_mesh_v2_eval_fn(model, chunk_data, eval_cfg):
 #     """[NÃO IMPLEMENTADO] ..."""
 #     raise NotImplementedError(...)
-from src.neural_op.archs.eval import femm_mesh_v2_eval_fn
+# [REMOVIDO 2026-10-21] reexportação para o ARCH_REGISTRY (contorno de import circular) -- eval_fn
+# saiu do registro
+# from src.neural_op.archs.eval import femm_mesh_v2_eval_fn

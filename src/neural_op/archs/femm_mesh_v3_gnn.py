@@ -37,9 +37,12 @@ from src.neural_op.archs.fno import FNO2d
 # from src.neural_op.archs.femm_mesh_v2_gnn import (make_fno_bipartite_gnn_step,
 #                                                    fno_bipartite_gnn_metric_fn,
 #                                                    femm_mesh_v2_eval_fn)
+# [REMOVIDO 2026-10-21] femm_mesh_v2_eval_fn (eval_fn saiu do ARCH_REGISTRY)
+# from src.neural_op.archs.femm_mesh_v2_gnn import (fno_bipartite_gnn_step,
+#                                                    fno_bipartite_gnn_metric_fn,
+#                                                    femm_mesh_v2_eval_fn)
 from src.neural_op.archs.femm_mesh_v2_gnn import (fno_bipartite_gnn_step,
-                                                   fno_bipartite_gnn_metric_fn,
-                                                   femm_mesh_v2_eval_fn)
+                                                   fno_bipartite_gnn_metric_fn)
 
 # 8 vizinhos (3x3 ao redor da célula do nó, sem o centro) -- (delta_r, delta_c);
 # linha = radial (sem wrap), coluna = angular (com wrap, periodicidade θ=0/120°)
@@ -169,5 +172,7 @@ class FNO_BipartiteGNN_v3(torch.nn.Module):
 # femm_mesh_v2_gnn.py reimportar femm_mesh_v2_eval_fn de eval.py) -- nenhum
 # deles assume largura fixa de node_x, só repassam pro forward do model.
 # [REMOVIDO 2026-10-20] __all__ = ['FNO_BipartiteGNN_v3', 'make_fno_bipartite_gnn_step',
-__all__ = ['FNO_BipartiteGNN_v3', 'fno_bipartite_gnn_step',
-           'fno_bipartite_gnn_metric_fn', 'femm_mesh_v2_eval_fn']
+# [REMOVIDO 2026-10-21] __all__ com femm_mesh_v2_eval_fn
+# __all__ = ['FNO_BipartiteGNN_v3', 'fno_bipartite_gnn_step',
+#            'fno_bipartite_gnn_metric_fn', 'femm_mesh_v2_eval_fn']
+__all__ = ['FNO_BipartiteGNN_v3', 'fno_bipartite_gnn_step', 'fno_bipartite_gnn_metric_fn']

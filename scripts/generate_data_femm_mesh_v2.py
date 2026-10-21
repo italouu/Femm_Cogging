@@ -1,28 +1,14 @@
 """
 generate_data_femm_mesh_v2.py
 -------------------------------
-Gera dados via a malha real do FEMM (src/data_gen/femm_mesh.py) -- variante
-"v2" de generate_data_femm_mesh.py que só faz a etapa de geração BRUTA:
-desenha + malha + mi_analyze() e salva o `.ans` INTEIRO (texto puro do
-FEMM, sem nenhuma extração/derivação) comprimido em gzip direto em
-data/raw/<dataset>/sample_XXXXXX.ans.gz -- ver
-src/data_gen/femm_mesh.py::save_ans_gzip_sample.
+Gera o raw: sorteia as geometrias (BLDC_Process.generate_samples) e as correntes de fase
+(add_phase_currents), grava valid_designs.csv e, para cada amostra, desenha + malha +
+mi_analyze() e salva o `.ans` INTEIRO (texto puro do FEMM, sem extração/derivação)
+comprimido em gzip em data/raw/<dataset>/sample_XXXXXX.ans.gz -- ver
+src/data_gen/femm_mesh.py::save_ans_gzip_sample. Sem pós-processamento COM (sem
+mi_loadsolution/mo_*). Retomável: amostras já presentes são puladas.
 
-Corrige a lacuna encontrada em 2026-08-07 (ver CLAUDE.md, "Extração de
-dados direto do arquivo .ans"): mode='femm_mesh' (generate_data_femm_mesh.py)
-deriva node_x/edge_index/etc. na hora e descarta a malha original (elems)
--- sem ela, não dá pra recalcular nada (ex: B exato por elemento, validado
-nesta sessão -- bate com mo_getb(smooth='off') a 1e-14 T) sem resimular.
-Guardando o .ans inteiro, qualquer derivação futura parte só do arquivo,
-sem FEMM.
-
-Sem chamada de pós-processamento COM nenhuma (sem mi_loadsolution/mo_*) --
-só o solve (mi_analyze) e cópia do arquivo, mais rápido que
-generate_data_femm_mesh.py (que ainda faz o loop de mo_getb por nó).
-
-Etapas de parser/chunk (gen_npz_structures.py/build_data_chunks.py) que leem
-esse .ans.gz ainda NÃO existem -- fora do escopo desta mudança, ver
-"Pendências conhecidas" no CLAUDE.md.
+Os chunks de treino saem desse raw por scripts/build_smooth_datasets.py.
 
 Execução (a partir da raiz do projeto):
     python -m scripts.generate_data_femm_mesh_v2
@@ -45,14 +31,7 @@ MAX_WORKERS = _dg.femm_mesh_max_workers
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TEMP_DIR     = PROJECT_ROOT / "data" / "temp"          # só workdirs tmp_femm_mesh_v2_*/ (scratch por amostra)
-OUT_DIR      = PROJECT_ROOT / "data" / "raw" / DATASET  # mesma pasta-base de mode='femm_mesh' (raw = fonte única)
-
-_SAMPLE_METHODS = {
-    'constrained':     BLDC_Process.generate_samples_constrained,
-    'legacy':          BLDC_Process.generate_samples,
-    'fixed_geometry':  BLDC_Process.generate_samples_fixed_geometry,
-    'constrained_lhs': BLDC_Process.generate_samples_constrained_lhs_filtered,
-}
+OUT_DIR      = PROJECT_ROOT / "data" / "raw" / DATASET
 
 
 def _generate_one_ans_sample(idx, motor_params_list, out_dir):
@@ -87,9 +66,9 @@ def multi_process(indices, motor_params_list, out_dir, max_workers):
         return ex.submit(_generate_one_ans_sample, idx, motor_params_list, out_dir)
 
     while pending:
-        # max_tasks_per_child=1: recicla o worker a cada amostra -- mesma
+        # max_tasks_per_child=1: recicla o worker a cada amostra --
         # mitigação do vazamento de memória do ciclo openfemm()/closefemm()
-        # via COM (pywin32) usada em generate_data.py/generate_data_femm_mesh.py
+        # via COM (pywin32)
         ex = ProcessPoolExecutor(max_workers=num_workers, max_tasks_per_child=1)
         fut2meta = {}
         try:
@@ -167,8 +146,7 @@ def _check_existing_raw(motor_params_list):
 def run():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    gen = _SAMPLE_METHODS[_dg.sample_method]
-    motor_params_list = gen(num_samples=N_SAMPLES, seed=_dg.datagen_seed)
+    motor_params_list = BLDC_Process.generate_samples(num_samples=N_SAMPLES, seed=_dg.datagen_seed)
     # correntes de fase (2026-10-14) — sorteio próprio, não altera a geometria
     if _dg.current_peak > 0:
         BLDC_Process.add_phase_currents(motor_params_list, i_peak=_dg.current_peak,

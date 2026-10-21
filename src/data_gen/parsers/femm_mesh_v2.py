@@ -91,12 +91,11 @@ import matplotlib.tri as mtri
 from scipy.spatial import cKDTree
 
 from src.data_gen.parsers.ans_parsing import (
-    _parse_solution, _parse_block_materials, _block_magnet_polarity,
+    _parse_solution,
     _build_edges, _element_areas, _wrap_edge_pairs, _grid_polar_xy,
     _element_b_from_A, _node_mean_of_elements, _parse_label_materials,
     _parse_label_currents,
 )
-from src.data_gen.motor_constants import N_POLES_SECTOR as _N_POLES_SECTOR
 
 
 # ---------------------------------------------------------------------------

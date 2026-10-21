@@ -48,7 +48,7 @@ from pathlib import Path
 import numpy as np
 
 from src.data_gen.parsers.ans_parsing import (
-    _parse_solution, _parse_block_materials, _block_magnet_polarity,
+    _parse_solution,
     _build_edges, _element_areas, _node_material_stats, _node_magnet_polarity,
     _wrap_edge_pairs, _build_bidirectional_edge_attrs, _MU_BY_ID,
     _parse_label_materials,
@@ -57,7 +57,6 @@ from src.data_gen.parsers.femm_mesh_v2 import (
     parse_ans_gzip_sample, _build_trifinder, _grid_barycentric,
 )
 from src.data_gen.parsers.ans_parsing import _grid_polar_xy
-from src.data_gen.motor_constants import N_POLES_SECTOR as _N_POLES_SECTOR
 
 UNIFIED_ARCHS = ('FNO2d', 'FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN')
 

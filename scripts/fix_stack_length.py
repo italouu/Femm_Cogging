@@ -49,9 +49,6 @@ def _read(path: Path):
 
 def _expected_rows(dg: DatagenConfig):
     """CSV que o gerador atual escreveria (export_params num diretório temporário)."""
-    if dg.sample_method != 'legacy':
-        sys.exit(f"ABORTADO: DatagenConfig.sample_method={dg.sample_method!r}; a conferência 2 "
-                 f"usa BLDC_Process.generate_samples ('legacy')")
     params = BLDC_Process.generate_samples(num_samples=dg.n_samples, seed=dg.datagen_seed)
     if dg.current_peak > 0:
         BLDC_Process.add_phase_currents(params, i_peak=dg.current_peak, seed=dg.datagen_seed)

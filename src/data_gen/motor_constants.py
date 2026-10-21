@@ -16,13 +16,11 @@ src/data_gen/parsers/femm_mesh_v2.py de rodar 100% sem FEMM (ver docstring
 desses módulos e CLAUDE.md "Raw -- malha real do FEMM v2") -- eles usavam
 BLDC_Process/BLDC_FEMM_Model_Sym120_Annular só por essas constantes.
 
-motor_model.py continua sendo a fonte de definição (BLDC_Process.MATERIAL_ID
-etc. e BLDC_FEMM_Model_Sym120.N_POLES_SECTOR seguem existindo, com o mesmo
-valor, pra não quebrar nada que já lê por ali) -- só importa esses valores
-daqui em vez de literais duplicados, pra manter fonte única.
+motor_model.py importa daqui (BLDC_FEMM_Model_Sym120.N_POLES_SECTOR,
+WINDING_SECTOR, STACK_LENGTH_MM) em vez de literais duplicados -- fonte única.
 """
 
-# Propriedades de materiais — fonte única (BLDC_Process reimporta essas 3).
+# Propriedades de materiais — fonte única.
 MAGNETIZATION = {'iron_1008': 0,      'N35p': 1,    'N35n': -1,  'copper': 0,     'vacuum': 0  }
 PERMEABILITY  = {'iron_1008': 5000.0, 'N35p': 1.05, 'N35n': 1.05,'copper': 0.999, 'vacuum': 1.0}
 # N35p e N35n unificados como ima=2; ferro=0, ar=1, bobina=3

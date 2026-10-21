@@ -2,28 +2,12 @@
 ans_parsing.py
 ---------------
 Funções puras de parsing/geometria sobre o `.ans` do FEMM (nós, elementos,
-materiais, arestas, grade H×W) -- SEM `import femm` (COM), sem sessão FEMM
-aberta, só numpy/matplotlib.tri sobre dados já em memória/disco.
-
-Extraído de src/data_gen/femm_mesh.py em 2026-08-13: essas funções eram
-reaproveitadas por src/data_gen/parsers/femm_mesh_v2.py (parse_ans_gzip_sample,
-pipeline mode='femm_mesh_v2' -- roda sem FEMM aberto, só sobre o .ans.gz já
-salvo), mas femm_mesh.py tem `import femm` no topo (necessário só pras
-funções que abrem o FEMM de verdade -- generate_mesh_sample,
-save_ans_gzip_sample, _query_grid_pointvalues). Importar qualquer coisa de
-femm_mesh.py arrastava esse import junto, mesmo pro caminho 100% numpy --
-dependência desnecessária (módulo `femm`/pywin32) pra um código que o
-próprio projeto documenta como "deve rodar sem FEMM, possivelmente em
-Linux depois" (ver CLAUDE.md, "Raw -- malha real do FEMM v2").
-
-femm_mesh.py reimporta essas funções de volta (`from
-src.data_gen.parsers.ans_parsing import ...`) pra continuar funcionando sem
-duplicação -- generate_mesh_sample (mode='femm_mesh', v1) ainda usa todas
-elas internamente, só que agora como orquestrador (desenha+malha+mi_analyze
-via COM, depois chama essas funções puras sobre o resultado).
+materiais, correntes, arestas, grade H×W) -- SEM `import femm` (COM), sem
+sessão FEMM aberta, só numpy sobre dados já em memória/disco. Usadas pelos
+parsers smooth (femm_mesh_v2/femm_mesh_smooth/femm_mesh_elem*) e pelo
+pós-processamento (src/postprocess/), que rodam sem FEMM (Linux).
 """
 import numpy as np
-import matplotlib.tri as mtri
 
 from src.data_gen.motor_constants import MATERIAL_ID, PERMEABILITY, MAGNETIZATION
 
@@ -101,46 +85,12 @@ def _parse_block_materials(lines):
     return material_id, mu_const
 
 
-def _block_magnet_polarity(block_material_id, n_poles_sector):
-    """Polaridade (MAGNETIZATION, +-1) de cada bloco de ímã, derivada só da
-    ORDEM DE CRIAÇÃO dos blocos no FEMM — sem Shapely.
-
-    Depende de uma invariante estrutural do desenho
-    (BLDC_FEMM_Model_Sym120.draw_motor): os n_poles_sector polos são
-    criados em um laço sequencial, cada _create_sec chamando
-    mi_getmaterial(material_mag) uma vez — o que gera uma entrada NOVA em
-    [BlockProps] por polo, na MESMA ordem em que os polos são desenhados
-    (índice crescente = polo 0, 1, 2, ...). Combinado com a paridade
-    conhecida do código (direction = 0 se pole%2==0 senão 180), dá pra
-    recuperar a polaridade de cada bloco só pela posição dele na lista
-    ordenada de blocos classificados como ímã.
-
-    Se esse laço de criação mudar (ordem, número de polos, chamadas
-    intercaladas de outro material 'ímã'), essa correspondência quebra —
-    por isso o assert de contagem abaixo falha alto em vez de silenciosamente
-    dar polaridade errada.
-    """
-    magnet_block_idx = np.where(block_material_id == _MAGNET_ID)[0]
-    if len(magnet_block_idx) != n_poles_sector:
-        raise ValueError(
-            f"esperava {n_poles_sector} blocos de ímã (1 por polo do setor), "
-            f"achei {len(magnet_block_idx)} — invariante de ordem de criação "
-            f"quebrada (ver docstring de _block_magnet_polarity), não dá pra "
-            f"recuperar polaridade só do FEMM.")
-
-    block_M = np.zeros(len(block_material_id), dtype=np.float32)
-    for pole_i, block_idx in enumerate(magnet_block_idx):
-        name = 'N35p' if pole_i % 2 == 0 else 'N35n'
-        block_M[block_idx] = MAGNETIZATION[name]
-    return block_M
-
-
 def _parse_label_materials(lines):
     """Por RÓTULO DE BLOCO ([BlockLabels], 0-based) — o índice que o campo
     `label` de cada elemento do .ans de fato referencia: material_id, mu_r
     constante e M (polaridade do ímã, MAGNETIZATION +-1). 2026-10-05.
 
-    Substitui o par _parse_block_materials + _block_magnet_polarity indexado
+    Substitui o par _parse_block_materials + polaridade por ordem de bloco indexado
     direto pelo label do elemento, que só funcionava por coincidência (cada
     _create_sec chama mi_getmaterial logo antes de criar o rótulo, então
     [BlockProps] e [BlockLabels] saem com a mesma ordem/tamanho) e exigia
@@ -279,7 +229,7 @@ def _node_magnet_polarity(nodes: np.ndarray, elems: np.ndarray, area: np.ndarray
     (+-MAGNETIZATION) de maior área somada. Nós que não tocam nenhum ímã
     ficam com M=0 (ferro/ar/cobre já têm MAGNETIZATION=0 em toda a área).
 
-    100% dados do FEMM (elem_M vem de _block_magnet_polarity) — sem
+    100% dados do FEMM (elem_M vem de _parse_label_materials) — sem
     Shapely. A ambiguidade só existiria num nó exatamente na borda entre
     dois ímãs de polaridade diferente — como cada polo é fisicamente
     separado por ar, isso não acontece na prática; o voto cobre o caso
@@ -453,9 +403,8 @@ def _node_mean_of_elements(elems: np.ndarray, elem_field: np.ndarray, n_nodes: i
 def _grid_polar_xy(r_in: float, r_ext: float, ang_1_rad: float, ang_2_rad: float,
                     n_r: int, n_a: int):
     """Coordenadas (x,y) do centro de cada pixel da grade H×W (flattened,
-    ordem row-major r depois c) -- fatorado pra ser reaproveitado tanto por
-    _assign_mesh_to_grid (Mu_r/M) quanto por femm_mesh.py::_query_grid_pointvalues
-    (A/Bx/By) e src/data_gen/parsers/femm_mesh_v2.py::parse_ans_gzip_sample."""
+    ordem row-major r depois c) -- usado pelos parsers (femm_mesh_v2,
+    femm_mesh_smooth, femm_mesh_elem_smooth) e pelo pós-processamento."""
     dr = (r_ext - r_in) / n_r
     da = (ang_2_rad - ang_1_rad) / n_a
     r_vals = r_in + (np.arange(n_r) + 0.5) * dr
@@ -472,55 +421,3 @@ def _to_polar(bx: np.ndarray, by: np.ndarray, x: np.ndarray, y: np.ndarray):
     c, s = np.cos(th), np.sin(th)
     bx, by = np.asarray(bx, np.float64), np.asarray(by, np.float64)
     return (bx * c + by * s).astype(np.float32), (-bx * s + by * c).astype(np.float32)
-
-
-def _assign_mesh_to_grid(nodes: np.ndarray, elems: np.ndarray,
-                          elem_mu: np.ndarray, elem_M: np.ndarray,
-                          node_mu: np.ndarray, node_M: np.ndarray,
-                          r_in: float, r_ext: float, ang_1_rad: float, ang_2_rad: float,
-                          n_r: int, n_a: int):
-    """Projeta Mu_r/M da malha real na grade H×W regular -- SEM Shapely, SEM
-    chamada COM ao FEMM (só os dados já extraídos do .ans). Promovido de
-    tests/proto_femm_mesh_plot.py::_assign_mesh_to_grid. 2026-07-23.
-
-    Mu_r/M: PIECEWISE-CONSTANT por elemento -- localiza o triângulo que
-    contém o centro do pixel via trifinder e copia o valor CONSTANTE desse
-    elemento. Preserva fronteiras nítidas (sem blending).
-
-    # [REMOVIDO 2026-07-23, mesmo dia] regime 2 (Bx/By/A via interpolação
-    # baricêntrica/LinearTriInterpolator) -- revertido pra point-query ao
-    # vivo (mo_getpointvalues) a pedido do usuário, ver
-    # femm_mesh.py::_query_grid_pointvalues e nota no topo daquele arquivo.
-    # Mu_r/M continuam aqui (via malha) porque point-query NÃO tem como
-    # recuperar essas duas colunas corretamente (cobre vira ar por Mu1,
-    # magnetização não é consultável — Jm sempre 0 mesmo em ímãs, testado
-    # empiricamente).
-
-    Pixels fora da triangulação (trifinder retorna -1 -- esperado raro, só
-    arredondamento de ponto flutuante na borda do setor, já que a malha foi
-    gerada na MESMA janela r_in/r_ext/ang_1/ang_2 da grade) caem no valor do
-    NÓ MAIS PRÓXIMO (fallback via cKDTree, calculado só se necessário).
-    """
-    tri = mtri.Triangulation(nodes[:, 0], nodes[:, 1], triangles=elems[:, :3])
-    trifinder = tri.get_trifinder()
-
-    Xg, Yg = _grid_polar_xy(r_in, r_ext, ang_1_rad, ang_2_rad, n_r, n_a)
-
-    elem_idx = trifinder(Xg, Yg)
-    valid = elem_idx >= 0
-    n_invalid = int((~valid).sum())
-    if n_invalid:
-        from scipy.spatial import cKDTree
-        nearest = cKDTree(nodes[:, :2]).query(
-            np.stack([Xg[~valid], Yg[~valid]], axis=1))[1]
-
-    def _assign_const(elem_field, node_fallback):
-        out = np.empty(n_r * n_a, dtype=np.float32)
-        out[valid] = elem_field[elem_idx[valid]]
-        if n_invalid:
-            out[~valid] = node_fallback[nearest]
-        return out.reshape(n_r, n_a)
-
-    Mu_hw = _assign_const(elem_mu, node_mu)
-    M_hw  = _assign_const(elem_M, node_M)
-    return Mu_hw, M_hw

@@ -130,7 +130,7 @@ class Normalizer:
         self.train_chunks = train_chunks or {}
 
     @classmethod
-    def fit(cls, dataset: str, arch: str, train_split: float, split_seed=None, test_split=None,
+    def fit(cls, dataset: str, arch: str, train_split: float, val_split: float, split_seed=None,
             force_recompute: bool = False) -> 'Normalizer':
         """Stats só dos chunks de TREINO -- mesmo split de build_loaders
         (split_chunk_paths sobre sorted(glob), como scripts/train.py). Cache por split:
@@ -143,7 +143,7 @@ class Normalizer:
         all_paths = sorted(glob.glob(f'data/torch/data_chunks/{dataset}/data_chunk_*.pt'))
         if not all_paths:
             raise FileNotFoundError(f"Normalizer.fit: nenhum chunk encontrado em '{chunk_dir}'.")
-        chunk_paths, _ = split_chunk_paths(all_paths, train_split, split_seed, test_split)
+        chunk_paths, _, _ = split_chunk_paths(all_paths, train_split, val_split, split_seed)
         names = sorted(Path(p).name for p in chunk_paths)
         tag = hashlib.sha1('\n'.join(names).encode()).hexdigest()[:10]
 

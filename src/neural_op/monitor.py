@@ -9,9 +9,11 @@ class TrainingMonitor:
     patience conta em heartbeats, não em épocas individuais:
         patience=3, checkpoint_every=50 → para após 150 épocas sem melhora.
 
-    gl_threshold (critério ativo por padrão, Prechelt 1998): para quando o test_loss do
-    heartbeat atual fica gl_threshold% (ou mais) pior que o melhor test_loss já visto —
-    GL(t) = 100·(test_loss(t)/melhor_test_loss - 1). Dimensionless (independe da escala
+    Os critérios usam a loss de VALIDAÇÃO (val_loss); o teste não entra no treino.
+
+    gl_threshold (critério ativo por padrão, Prechelt 1998): para quando o val_loss do
+    heartbeat atual fica gl_threshold% (ou mais) pior que o melhor val_loss já visto —
+    GL(t) = 100·(val_loss(t)/melhor_val_loss - 1). Dimensionless (independe da escala
     da loss), ao contrário de early_stop_min_delta. Os dois critérios (patience e GL)
     podem coexistir; cada um só age se seu campo não for None.
 
@@ -41,7 +43,7 @@ class TrainingMonitor:
         self.best_epoch      = None
         self.stop_reason     = None   # 'gl' | 'early_stop_patience' | None (não parou cedo)
 
-    def step(self, epoch, train_losses, test_losses, model, optimizer, scheduler,
+    def step(self, epoch, train_losses, val_losses, model, optimizer, scheduler,
              *, lr=0.0, train_time_s=0.0, eval_time_s=0.0, samples_per_s=0.0,
              mae_hw=None, mae_graph=None) -> bool:
         """
@@ -51,16 +53,16 @@ class TrainingMonitor:
         mae_hw/mae_graph : MAE bruto opcional (ver fit()/ArchEntry.metric_fn);
                             None quando a run não passou metric_fn a fit().
         """
-        test_loss = test_losses[-1]
-        improved  = test_loss < self._best_loss - self.cfg.early_stop_min_delta
+        val_loss = val_losses[-1]
+        improved = val_loss < self._best_loss - self.cfg.early_stop_min_delta
 
         if improved:
-            self._best_loss      = test_loss
+            self._best_loss      = val_loss
             self._patience_count = 0
             self.best_epoch      = epoch
             if self.cfg.save_best:
                 save_checkpoint(str(self.best_path), epoch, model, optimizer, scheduler)
-                print(f"  best -> {self.best_path.name}  (test {test_loss:.4e})")
+                print(f"  best -> {self.best_path.name}  (val {val_loss:.4e})")
         else:
             self._patience_count += 1
 
@@ -68,14 +70,14 @@ class TrainingMonitor:
         print(f"  ckpt -> {self.checkpoint_path.name}")
 
         if self.mgr is not None:
-            self.mgr.log(epoch, train_losses[-1], test_losses[-1], lr,
+            self.mgr.log(epoch, train_losses[-1], val_losses[-1], lr,
                          train_time_s, eval_time_s, samples_per_s,
                          mae_hw=mae_hw, mae_graph=mae_graph)
 
         # GL calculado sempre (mesmo antes de min_epochs), pra contagem consecutiva
         # refletir o estado real ao sair do warm-up
         if self.cfg.gl_threshold is not None:
-            gl = 100.0 * (test_loss / self._best_loss - 1.0)
+            gl = 100.0 * (val_loss / self._best_loss - 1.0)
             self._gl_count = self._gl_count + 1 if gl > self.cfg.gl_threshold else 0
 
         # warm-up: nenhum critério de parada age antes de min_epochs (ruído do início)
@@ -95,7 +97,7 @@ class TrainingMonitor:
             if self._gl_count >= gl_patience:
                 print(f"  early stop: generalization loss {gl:.2f}% > {self.cfg.gl_threshold}% "
                       f"por {self._gl_count} heartbeats consecutivos "
-                      f"(best test={self._best_loss:.4e}, atual={test_loss:.4e})")
+                      f"(best val={self._best_loss:.4e}, atual={val_loss:.4e})")
                 self.stopped_early = True
                 self.stop_reason   = 'gl'
                 return True

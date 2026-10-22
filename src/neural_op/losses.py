@@ -32,8 +32,8 @@ class BaseLoss:
     def __call__(self, *args, **kwargs):
         return self.fn(*args, **kwargs)
 
-    def log_epoch(self, ep, train_loss, test_loss, train_time_s, eval_time_s, samples_per_s):
-        print(f"epoch {ep:>4d}  train {train_loss:.4e}  test {test_loss:.4e}"
+    def log_epoch(self, ep, train_loss, val_loss, train_time_s, eval_time_s, samples_per_s):
+        print(f"epoch {ep:>4d}  train {train_loss:.4e}  val {val_loss:.4e}"
               f"  [{train_time_s:.1f}s + {eval_time_s:.1f}s eval]  {samples_per_s:.0f} samp/s")
 
 

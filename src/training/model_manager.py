@@ -12,7 +12,7 @@ from src.neural_op.training_utils import count_params, count_params_real
 
 
 # B4 (2026-10-03) — colunas de epochs.csv (uma linha por época)
-EPOCH_CSV_FIELDS = ('epoch', 'train_loss', 'test_loss', 'mae_hw', 'mae_graph', 'lr',
+EPOCH_CSV_FIELDS = ('epoch', 'train_loss', 'val_loss', 'mae_hw', 'mae_graph', 'lr',
                     'epoch_time_s', 'train_time_s', 'eval_time_s', 'metric_time_s')
 
 
@@ -62,14 +62,14 @@ class ModelManager:
 
     Cria data/logs/{problem}/{arch}/run_XXXX/ com:
       config.json   — hiperparâmetros + metadados (autossuficiente para reconstrução)
-      split.json    — nomes dos chunks de treino/teste desta run (fonte de verdade;
+      split.json    — nomes dos chunks de treino/validação/teste desta run (fonte de verdade;
                       evita reconstruir o split via seed sobre um dataset que pode
                       ter mudado desde o treino)
       metrics.jsonl — uma linha por heartbeat
       status.txt    — running → done / stopped / failed
       notes.txt     — vazio; edição manual pós-treino
       checkpoints/
-          best.pth      — melhor test_loss
+          best.pth      — melhor val_loss
           latest.pth    — último heartbeat (para resume)
       model_final.pth   — pesos ao fim do treino
     """
@@ -104,7 +104,7 @@ class ModelManager:
         Escreve config.json e status=running. Deve ser chamado antes de fit().
 
         split : dict|None
-            {'train': [...paths...], 'test': [...paths...]} usados nesta run.
+            {'train': [...], 'val': [...], 'test': [...]} (caminhos) desta run.
             Gravado em split.json (só os nomes dos arquivos, não o caminho completo,
             para não depender do dataset continuar no mesmo local) — lido pelo
             pós-processamento (src/postprocess/samples.py) para reproduzir o split.
@@ -139,6 +139,7 @@ class ModelManager:
         if split is not None:
             split_dict = {
                 'train': [Path(p).name for p in split['train']],
+                'val':   [Path(p).name for p in split['val']],
                 'test':  [Path(p).name for p in split['test']],
             }
             self._split_path.write_text(json.dumps(split_dict, indent=2))
@@ -146,13 +147,13 @@ class ModelManager:
         suffix = f"  (retomado de {Path(resumed_from).name})" if resumed_from else ""
         print(f"  run -> {self.run_dir}{suffix}")
 
-    def log(self, epoch, train_loss, test_loss, lr,
+    def log(self, epoch, train_loss, val_loss, lr,
             train_time_s, eval_time_s, samples_per_s,
             mae_hw=None, mae_graph=None):
         """
         Append de uma linha em metrics.jsonl. Chamado pelo TrainingMonitor no heartbeat.
 
-        mae_hw/mae_graph : MAE bruto (Tesla) sobre o test set, calculado só no
+        mae_hw/mae_graph : MAE bruto (Tesla) sobre a validação, calculado só no
         heartbeat via ArchEntry.metric_fn — mae_hw compara sempre a saída em grade
         H×W do FNO; mae_graph compara a saída final em grafo/nós (None se o arch
         não produz saída em grafo, ex: FNO2d, ou se a run não passou
@@ -161,7 +162,7 @@ class ModelManager:
         entry = {
             'epoch':         epoch,
             'train_loss':    train_loss,
-            'test_loss':     test_loss,
+            'val_loss':      val_loss,
             'lr':            lr,
             'train_time_s':  round(train_time_s, 3),
             'eval_time_s':   round(eval_time_s, 3),
@@ -187,33 +188,33 @@ class ModelManager:
         -------
         ckpt        : dict com model_state_dict, optimizer_state_dict,
                       scheduler_state_dict, epoch
-        prev_losses : {'train': list[float], 'test': list[float]}
+        prev_losses : {'train': list[float], 'val': list[float]}
                       uma entrada por heartbeat registrado em metrics.jsonl
         """
         run_path  = Path(run_dir)
         ckpt_path = run_path / 'checkpoints' / f'{checkpoint}.pth'
         ckpt      = torch.load(ckpt_path, map_location='cpu')
 
-        prev_losses  = {'train': [], 'test': []}
+        prev_losses  = {'train': [], 'val': []}
         metrics_path = run_path / 'metrics.jsonl'
         if metrics_path.exists():
             for line in metrics_path.read_text().splitlines():
                 if line.strip():
                     entry = json.loads(line)
                     prev_losses['train'].append(entry['train_loss'])
-                    prev_losses['test'].append(entry['test_loss'])
+                    prev_losses['val'].append(entry['val_loss'])
 
         print(f"  checkpoint carregado: {ckpt_path}  (epoch {ckpt['epoch']})"
               f"  |  {len(prev_losses['train'])} heartbeats anteriores")
         return ckpt, prev_losses
 
     def close(self, status: str, epoch, model, optimizer, scheduler,
-              stop_reason=None, best_epoch=None, best_test_loss=None, n_epochs_cfg=None):
+              stop_reason=None, best_epoch=None, best_val_loss=None, n_epochs_cfg=None):
         """Salva model_final.pth e atualiza status.txt. Deve ser chamado no finally do script.
 
         B4 (2026-10-03): grava também run_summary.json — pico de memória da GPU
         (max_memory_allocated desde open()), parâmetros reais/treináveis, tempo
-        de parede total, época/test_loss do best, motivo da parada e hash git."""
+        de parede total, época/val_loss do best, motivo da parada e hash git."""
         sd = {k: v for k, v in model.state_dict().items() if k != '_metadata'}
         torch.save({
             'model_state_dict':     sd,
@@ -232,7 +233,7 @@ class ModelManager:
             'last_epoch':             epoch,
             'n_epochs_cfg':           n_epochs_cfg,
             'best_epoch':             best_epoch,
-            'best_test_loss':         best_test_loss,
+            'best_val_loss':          best_val_loss,
             'wall_time_s':            (round(time.perf_counter() - self._t_open, 1)
                                        if self._t_open is not None else None),
             'gpu_peak_mem_bytes':     peak,

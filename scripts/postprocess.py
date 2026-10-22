@@ -7,9 +7,9 @@ Nada aqui treina; lê as runs em data/logs/ e grava em resultados/<dataset>/:
   plots/  — figuras, fora do git.
 
 Subcomandos:
-  eval [N_AMOSTRAS] — os 10 runs da bateria (5 archs × mse/mae, best.pth) nos chunks fora
-      do treino ('teste'/'fora' — 'fora' vazio no split 70/30; N -> dividido entre os subsets
-      não vazios). ERRO DE SUPERFÍCIE OFICIAL (2026-10-20): superfície discreta do modelo ×
+  eval [N_AMOSTRAS] [--subset test|val] — os 10 runs da bateria (5 archs × mse/mae, best.pth)
+      nos chunks do subset (padrão 'test', nunca visto no treino; 'val' = conjunto da parada e
+      do best.pth; N -> as N primeiras amostras). ERRO DE SUPERFÍCIE OFICIAL (2026-10-20): superfície discreta do modelo ×
       superfície do FEMM (B suavizado P1 descontínuo), L1_A / L2_A / B_ref:
         FNO2d  -> grade (constante na célula) por interseção célula ∩ triângulo;
         Elem   -> P0 (constante no elemento) na própria malha;
@@ -65,8 +65,11 @@ Subcomandos:
       conferido × parsers); inferência best.pth lote 1 e lote máx. (mediana/IQR, com
       desnormalização). Saída: dados/timing.json (hardware, tabelas, acelerações).
 
+Subset: eval, regions, saturation, timing e torque usam o 'test' por padrão e aceitam
+  --subset val; figures e surface --pct usam o subset gravado pelo eval.
+
 Execução (raiz do projeto):
-  python -m scripts.postprocess eval [N_AMOSTRAS] [--out DIR]
+  python -m scripts.postprocess eval [N_AMOSTRAS] [--subset test|val] [--out DIR]
   python -m scripts.postprocess figures [--data DIR] [--out DIR]
   python -m scripts.postprocess surface IDX [LOSS]
   python -m scripts.postprocess surface --pct 50 [LOSS]
@@ -203,7 +206,7 @@ def _nodal_mag(arch, lay, yn):
     return _mag_np(yp)
 
 
-def run_eval(out_dir: Path, max_samples=None):
+def run_eval(out_dir: Path, max_samples=None, subset='test'):
     """Erro de superfície oficial (CLAUDE.md, "Convenção de erro"): superfície discreta de
     cada modelo × superfície do FEMM (B suavizado P1 descontínuo); L1_A, L2_A, B_ref.
     Secundário (P1, 2026-10-20): erro de |B| ponto a ponto nos nós (gabarito node_y do
@@ -214,7 +217,7 @@ def run_eval(out_dir: Path, max_samples=None):
     NODAL_COLS em T)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = design_rows()
-    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], max_samples, N_SAMPLES)
+    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], subset, max_samples, N_SAMPLES)
     runs = load_set(ROOT_S)
     for k, r in runs.items():
         print(f"  {k:26s} {r['run']} best ép.{r['epoch']}  superfície {_surface_kind(r['arch'])}"
@@ -345,7 +348,7 @@ def run_eval(out_dir: Path, max_samples=None):
 
 def run_figures(data_dir: Path, fig_dir: Path):
     """Curvas de treino, barras do erro de superfície (+ piso de cada representação) e
-    campo P50/P95 do L1_A de superfície da REF_RUN no subset 'fora' (ou 'teste', se vazio).
+    campo P50/P95 do L1_A de superfície da REF_RUN no subset avaliado pelo eval.
     O mapa de campo (3_campo) é só visualização de |B| nos nós."""
     import matplotlib.tri as mtri
     apply_style()
@@ -354,7 +357,7 @@ def run_figures(data_dir: Path, fig_dir: Path):
     save_fig(fig_training(find_runs(ROOT_S), ARCHS), fig_dir / '1_curvas_treino')
     save_fig(fig_bars(res, RUN_ORDER), fig_dir / '2_barras_erro')
 
-    sub_name = 'fora' if (per['subset'] == 'fora').any() else 'teste'
+    sub_name = _eval_subset(per)
     sub = per['subset'] == sub_name
     l1 = per[REF_RUN][:, 0]
     rows = design_rows()
@@ -396,10 +399,18 @@ def _floor_tri_idx(kind, lay):
     return np.repeat(np.arange(M), K)
 
 
+def _eval_subset(per):
+    """O subset ('test' ou 'val') avaliado pelo eval cujo .npz é `per` (um só por eval)."""
+    subs = sorted(set(per['subset'].tolist()))
+    if len(subs) != 1:
+        raise ValueError(f'eval_smooth_per_sample.npz com subsets {subs} (esperado um só)')
+    return subs[0]
+
+
 def _pick_by_pct(per, q, ref_run=REF_RUN):
     """Amostra do percentil q do L1_A de superfície de ref_run no .npz do eval (mesma regra
-    de run_figures: subset 'fora', ou 'teste' se vazio; method='lower') -> (idx, seleção)."""
-    sub_name = 'fora' if (per['subset'] == 'fora').any() else 'teste'
+    de run_figures: subset do eval; method='lower') -> (idx, seleção)."""
+    sub_name = _eval_subset(per)
     cand = np.flatnonzero(per['subset'] == sub_name)
     l1 = per[ref_run][:, 0]
     target = np.percentile(l1[cand], q, method='lower')
@@ -471,7 +482,7 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
 
 
 def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_int=None, d_canto=None,
-                ang_canto=30.0):
+                ang_canto=30.0, subset='test'):
     """Estratificação espacial do erro de superfície (P5): cada triângulo do FEMM em
     interior / interface / canto (regions.classify_triangles) e o erro de superfície de
     cada run e de cada piso acumulado por região (pontos de quadratura -> triângulo).
@@ -485,7 +496,7 @@ def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_int=None, d_ca
                   material='por rótulo (lay[elem_mat])')
     print('parâmetros:', params)
     rows = design_rows()
-    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], max_samples, N_SAMPLES)
+    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], subset, max_samples, N_SAMPLES)
     runs = load_set(ROOT_S)
     acc = {k: RegionAccum() for k in runs}
     acc_floor = {kd: RegionAccum() for kd in SURF_KINDS}
@@ -585,10 +596,11 @@ def _femm_batch_one(idx, k, th, row, work_dir=TORQUE_TMP):
 
 def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=False,
                idxs=(15,), n_theta=None, n_samples=80, n_per_chunk=8, limit=None,
-               raw_dir=None, work_dir=None):
-    """Torque (P6): theta-e (varredura θe de amostras), batch (n_samples amostras de teste
+               raw_dir=None, work_dir=None, subset='test'):
+    """Torque (P6): theta-e (varredura θe de amostras), batch (n_samples amostras do subset
     estratificadas por corrente × n_theta ângulos, resumo da fundamental) ou scatter (torque
-    de cada amostra de teste do raw). FEMM T22 × gt × smooth × modelos da loss escolhida.
+    das n_per_chunk primeiras amostras de cada chunk do subset). FEMM T22 × gt × smooth ×
+    modelos da loss escolhida. subset: 'test' (padrão) ou 'val'.
     limit: só os primeiros `limit` ângulos (theta-e/batch) ou amostras (scatter) -- smoke.
     raw_dir: raw de onde vêm valid_designs.csv e os .ans (None: samples.RAW_DIR, o do
     DatagenConfig); work_dir: soluções FEMM das varreduras e temporários (None: TORQUE_TMP)."""
@@ -598,7 +610,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
     rows = read_rows(raw_dir)
     runs = _torque_runs(loss, archs)
     split_run = find_runs(ROOT_S)[('FNO_BipartiteGNN_Elem', loss)]   # mesmo split em todas
-    meta = dict(loss=loss, frame=frame, split_run=str(split_run),
+    meta = dict(loss=loss, frame=frame, split_run=str(split_run), subset=subset,
                 runs={r['arch']: dict(run_dir=r['run_dir'], best_epoch=r['epoch']) for r in runs.values()})
     pk = [f"pred_{r['arch']}" for r in runs.values()]
     mNm = lambda v: np.asarray(v) * 1e3
@@ -644,7 +656,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
             print(json.dumps(res['rms_err_vs_femm_mNm'], indent=1))
     elif mode == 'batch':
         n_theta = n_theta or 16
-        ids = select_batch_samples(split_run, rows, n_samples)
+        ids = select_batch_samples(split_run, rows, n_samples, subset=subset)
         root = work_dir / 'torque_theta_e_batch'
         # C2: com --femm, todos os ângulos (_femm_batch_one pula só os caches válidos); sem --femm,
         # só os caches existentes com outra profundidade (ou sem o campo) são descartados e ressolvidos
@@ -695,7 +707,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
             json.dumps(dict(**meta, summary=summ, per_sample={kk[5:]: v for kk, v in rows_.items()}), indent=1))
         print(json.dumps(summ, indent=1))
     elif mode == 'scatter':
-        ids = scatter_ids(split_run, n_per_chunk)[:limit]
+        ids = scatter_ids(split_run, n_per_chunk, subset=subset)[:limit]
         out = dict(idx=[], T_gt=[], T_smooth=[], I=[], theta_e=[], rotor_phase=[], **{f'T_{kk}': [] for kk in pk})
         with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
             for b in range(0, len(ids), 32):
@@ -720,7 +732,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
 
 
 def run_saturation(out_dir: Path, fig_dir: Path, max_samples=None, knee_fracs=(0.5,),
-                   check_femm=False):
+                   check_femm=False, subset='test'):
     """Saturação do aço (P7), só sobre o gabarito: curva B-H do .ans (conferida igual em todas
     as amostras), pontos de operação dos elementos de aço (|B| suavizado no centróide) e
     μ_eff; figura A (curva + distribuição) e B (|B| no aço nas amostras P50 e de maior |B|
@@ -728,7 +740,7 @@ def run_saturation(out_dir: Path, fig_dir: Path, max_samples=None, knee_fracs=(0
     out_dir.mkdir(parents=True, exist_ok=True)
     apply_style()
     rows = design_rows()
-    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], max_samples, N_SAMPLES)
+    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], subset, max_samples, N_SAMPLES)
     edges = np.linspace(0, 2.8, 141)
     hist = np.zeros(len(edges) - 1)
     all_b, all_w = [], []
@@ -811,12 +823,12 @@ def _merge_json(path: Path, key, value):
     path.write_text(json.dumps(d, indent=2))
 
 
-def _timing_femm(out_json, n_femm, runs):
+def _timing_femm(out_json, n_femm, runs, subset='test'):
     """FEMM (só mi_analyze) + pré-processamento por etapa + codificação, em n_femm amostras do
     conjunto do eval igualmente espaçadas; confere malha/A × raw e entradas × parsers."""
     import gzip as _gz
     rows = design_rows()
-    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], None, N_SAMPLES)
+    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], subset, None, N_SAMPLES)
     pick = [samples[i] for i in np.linspace(0, len(samples) - 1, n_femm).round().astype(int)]
     rec, checks = [], []
     for n, (_, _, idx, raw_gz) in enumerate(pick):
@@ -858,11 +870,11 @@ def _timing_femm(out_json, n_femm, runs):
     _merge_json(out_json, 'femm_preproc', res)
 
 
-def _timing_infer(out_json, runs, n_samples, n_warmup, n_reps, max_batch):
+def _timing_infer(out_json, runs, n_samples, n_warmup, n_reps, max_batch, subset='test'):
     """best.pth das runs, lote 1 (amostra de nº de nós mediano) e potências de 2 até OOM ou
-    max_batch (amostras do 1º chunk de teste repetidas ciclicamente)."""
+    max_batch (amostras do 1º chunk do subset repetidas ciclicamente)."""
     rows = design_rows()
-    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], None, N_SAMPLES)
+    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], subset, None, N_SAMPLES)
     first = [x for x in samples if x[0] == samples[0][0]][:n_samples]
     with ProcessPoolExecutor(max_workers=min(N_WORKERS, len(first))) as ex:
         lays = list(ex.map(parse_smooth, [x[3] for x in first], [rows[x[2]] for x in first],
@@ -938,15 +950,15 @@ def _timing_table(out_json):
 
 
 def run_timing(what, out_dir: Path, n_femm=50, n_warmup=10, n_reps=100, max_batch=512,
-               n_infer_samples=32):
+               n_infer_samples=32, subset='test'):
     """Custo computacional (P8): FEMM (só mi_analyze) | pré-processamento | inferência."""
     out_dir.mkdir(parents=True, exist_ok=True)
     out_json = out_dir / 'timing.json'
     runs = load_set(ROOT_S)
     if what in ('femm', 'all'):
-        _timing_femm(out_json, n_femm, runs)
+        _timing_femm(out_json, n_femm, runs, subset)
     if what in ('infer', 'all'):
-        _timing_infer(out_json, runs, n_infer_samples, n_warmup, n_reps, max_batch)
+        _timing_infer(out_json, runs, n_infer_samples, n_warmup, n_reps, max_batch, subset)
     _merge_json(out_json, 'hardware', hardware_info())
     _timing_table(out_json)
     print(f'salvo em {out_json}')
@@ -979,9 +991,12 @@ def run_train_table(out_dir: Path):
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[3])
     sp = ap.add_subparsers(dest='cmd', required=True)
+    SUBSET_ARG = dict(default='test', choices=SUBSETS,
+                      help="chunks avaliados: 'test' (padrão, fora do treino) ou 'val' (parada/best.pth)")
     p_eval = sp.add_parser('eval', help='bateria bldc × gabarito smooth (+ pisos)')
     p_eval.add_argument('n', nargs='?', type=int, default=None, help='nº de amostras (default: todas)')
     p_eval.add_argument('--out', type=Path, default=OUT_ROOT / 'dados', help='diretório de saída')
+    p_eval.add_argument('--subset', **SUBSET_ARG)
     p_fig = sp.add_parser('figures', help='curvas de treino, barras de erro, campo P50/P95 (após eval)')
     p_fig.add_argument('--data', type=Path, default=OUT_ROOT / 'dados', help='saída do eval')
     p_fig.add_argument('--out', type=Path, default=OUT_ROOT / 'plots', help='diretório das figuras')
@@ -1000,6 +1015,7 @@ if __name__ == '__main__':
     p_rg.add_argument('--d-int', type=float, default=None, help='mm (default: 1 passo radial da grade)')
     p_rg.add_argument('--d-canto', type=float, default=None, help='mm (default: 2 passos radiais)')
     p_rg.add_argument('--ang-canto', type=float, default=30.0, help='graus (default: 30)')
+    p_rg.add_argument('--subset', **SUBSET_ARG)
     p_rg.add_argument('--out', type=Path, default=OUT_ROOT / 'dados', help='diretório de saída')
     p_rg.add_argument('--fig', type=Path, default=OUT_ROOT / 'plots', help='diretório da figura')
     p_tq = sp.add_parser('torque', help='torque FEMM × gabarito × modelos (theta-e/batch/scatter)')
@@ -1013,7 +1029,8 @@ if __name__ == '__main__':
     p_tq.add_argument('--femm', action='store_true', help='resolve as varreduras no FEMM antes')
     p_tq.add_argument('--n-theta', type=int, default=None, help='default: 24 (theta-e) / 16 (batch)')
     p_tq.add_argument('--n-samples', type=int, default=80, help='batch: nº de amostras')
-    p_tq.add_argument('--n-per-chunk', type=int, default=8, help='scatter: amostras por chunk de teste')
+    p_tq.add_argument('--n-per-chunk', type=int, default=8, help='scatter: amostras por chunk do subset')
+    p_tq.add_argument('--subset', **SUBSET_ARG)
     p_tq.add_argument('--limit', type=int, default=None, help='smoke: ângulos/amostras limitados')
     p_tq.add_argument('--out', type=Path, default=OUT_ROOT / 'dados' / 'torque')
     p_tq.add_argument('--raw-dir', type=Path, default=RAW_DIR,
@@ -1026,6 +1043,7 @@ if __name__ == '__main__':
                        help='joelho: μ_eff = frac·máx (default 0.5; vários -> vários contornos)')
     p_sat.add_argument('--check-femm', action='store_true',
                        help='confere μ_eff × mo_getpointvalues do FEMM na 1ª amostra (Windows)')
+    p_sat.add_argument('--subset', **SUBSET_ARG)
     p_sat.add_argument('--out', type=Path, default=OUT_ROOT / 'dados')
     p_sat.add_argument('--fig', type=Path, default=OUT_ROOT / 'plots')
     p_tm = sp.add_parser('timing', help='custo: FEMM (mi_analyze) × pré-processamento + inferência')
@@ -1034,13 +1052,14 @@ if __name__ == '__main__':
     p_tm.add_argument('--warmup', type=int, default=10)
     p_tm.add_argument('--reps', type=int, default=100)
     p_tm.add_argument('--max-batch', type=int, default=512, help='maior lote tentado (potências de 2)')
-    p_tm.add_argument('--n-infer-samples', type=int, default=32, help='amostras do 1º chunk de teste')
+    p_tm.add_argument('--n-infer-samples', type=int, default=32, help='amostras do 1º chunk do subset')
+    p_tm.add_argument('--subset', **SUBSET_ARG)
     p_tm.add_argument('--out', type=Path, default=OUT_ROOT / 'dados')
     p_tt = sp.add_parser('train-table', help='tabela de treinamento a partir dos logs das runs')
     p_tt.add_argument('--out', type=Path, default=OUT_ROOT / 'dados', help='diretório de saída')
     a = ap.parse_args()
     if a.cmd == 'eval':
-        run_eval(a.out, a.n)
+        run_eval(a.out, a.n, a.subset)
     elif a.cmd == 'figures':
         run_figures(a.data, a.out)
     elif a.cmd == 'surface':
@@ -1051,13 +1070,14 @@ if __name__ == '__main__':
         run_surface(None if a.idx is None else int(a.idx), a.loss or 'mae', a.data, a.out,
                     pct=a.pct, eval_dir=a.eval_data)
     elif a.cmd == 'regions':
-        run_regions(a.out, a.fig, a.n, a.d_int, a.d_canto, a.ang_canto)
+        run_regions(a.out, a.fig, a.n, a.d_int, a.d_canto, a.ang_canto, a.subset)
     elif a.cmd == 'torque':
         run_torque(a.mode, a.out, a.loss, a.archs, a.frame, a.femm, a.idx, a.n_theta,
-                   a.n_samples, a.n_per_chunk, a.limit, a.raw_dir, a.work_dir)
+                   a.n_samples, a.n_per_chunk, a.limit, a.raw_dir, a.work_dir, a.subset)
     elif a.cmd == 'saturation':
-        run_saturation(a.out, a.fig, a.n, tuple(a.knee_frac), a.check_femm)
+        run_saturation(a.out, a.fig, a.n, tuple(a.knee_frac), a.check_femm, a.subset)
     elif a.cmd == 'timing':
-        run_timing(a.what, a.out, a.n_femm, a.warmup, a.reps, a.max_batch, a.n_infer_samples)
+        run_timing(a.what, a.out, a.n_femm, a.warmup, a.reps, a.max_batch, a.n_infer_samples,
+                   a.subset)
     elif a.cmd == 'train-table':
         run_train_table(a.out)

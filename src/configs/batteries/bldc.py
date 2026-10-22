@@ -1,23 +1,16 @@
 """
-Bateria BLDC_138x276 (2026-10-14) — gabarito B suavizado do FEMM COM correntes de fase
-(1 canal de entrada a mais, J [A/mm²], último canal de x_hw/elem_x/node_x; ver CLAUDE.md
-"Correntes nas bobinas"). Mesmas 10 runs e hiperparâmetros da antiga bateria smooth
-(5 archs × mse/mae, 500 épocas, 70/30; removida em 2026-10-21), só trocando
-dataset/problem. Cada run escrita por inteiro.
+Bateria BLDC_138x276 — 10 runs (5 archs × mse/mae, 500 épocas), alvo polar (Br, Bθ) do
+gabarito B suavizado do FEMM, entrada com correntes de fase (J [A/mm²], último canal de
+x_hw/elem_x/node_x). Cada run escrita por inteiro.
 
 Raw: data/raw/BLDC_138x276/ (6000 amostras, I_pico = 10 A) — scripts.generate_raw.
 Chunks: data/torch/data_chunks/BLDC_138x276/<arch>/ (188 chunks: 187×32 + 1×16) —
-python -m scripts.build_datasets. Split 70/30: train_split=0.70 → int(131,6) = 131
-chunks de treino; test_split=None → teste = complemento (57 chunks).
+python -m scripts.build_datasets. Split 60/30/10 por chunk (split_seed=12):
+round(188·0.6) = 113 treino, round(188·0.3) = 56 validação, 19 teste (complemento).
 Logs: data/logs/BLDC_138x276/<arch>/run_XXXX/.
 
-Alvo POLAR (2026-10-17): os chunks foram regerados com node_y/y_hw = (Br, Bθ) (parsers smooth,
-ans_parsing._to_polar); hiperparâmetros inalterados, ordem nova: Elem → Bipartite → FNO_GNN →
-FNO2d → GNN_PostBase (por último; depende do FNO2d). Substitui a bateria xy: o manifesto
-data/logs/_batteries/bldc/ e as runs xy de data/logs/BLDC_138x276/ precisavam sair do caminho antes
-(configs idênticas -> mesmo hash -> o runner pularia as runs como já concluídas).
-[2026-10-21] As runs atuais de data/logs/BLDC_138x276/ (run_0001/0002 de cada arch, 2026-10-19) já
-são desta bateria polar (alvo Br, Bθ; conferido no torque: frame='polar' bate com o FEMM).
+Ordem: Elem → Bipartite → FNO_GNN → FNO2d → GNN_PostBase (por último; usa o best.pth do
+FNO2d da mesma loss como base congelada).
 
     python -m scripts.run_battery bldc [--dry-run]
 """
@@ -35,7 +28,7 @@ def fno2d_mse(runs):
         problem='BLDC_138x276',
         lr=0.005, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.7,
-        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
+        batch_size=32, train_split=0.60, val_split=0.30, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -57,7 +50,7 @@ def fno2d_mae(runs):
         problem='BLDC_138x276',
         lr=0.005, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.7,
-        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
+        batch_size=32, train_split=0.60, val_split=0.30, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -80,7 +73,7 @@ def fno_gnn_mse(runs):
         problem='BLDC_138x276',
         lr=0.003, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.8,
-        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
+        batch_size=32, train_split=0.60, val_split=0.30, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -102,7 +95,7 @@ def fno_gnn_mae(runs):
         problem='BLDC_138x276',
         lr=0.003, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.8,
-        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
+        batch_size=32, train_split=0.60, val_split=0.30, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -125,7 +118,7 @@ def postbase_mse(runs):
         problem='BLDC_138x276',
         lr=0.001, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.6,
-        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
+        batch_size=32, train_split=0.60, val_split=0.30, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -146,7 +139,7 @@ def postbase_mae(runs):
         problem='BLDC_138x276',
         lr=0.001, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.6,
-        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
+        batch_size=32, train_split=0.60, val_split=0.30, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -168,7 +161,7 @@ def bipartite_mse(runs):
         problem='BLDC_138x276',
         lr=0.01, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.6,
-        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
+        batch_size=32, train_split=0.60, val_split=0.30, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -190,7 +183,7 @@ def bipartite_mae(runs):
         problem='BLDC_138x276',
         lr=0.01, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.6,
-        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
+        batch_size=32, train_split=0.60, val_split=0.30, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -212,7 +205,7 @@ def elem_mse(runs):
         problem='BLDC_138x276',
         lr=0.01, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.6,
-        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
+        batch_size=32, train_split=0.60, val_split=0.30, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,
@@ -234,7 +227,7 @@ def elem_mae(runs):
         problem='BLDC_138x276',
         lr=0.01, n_epochs=500,
         scheduler='step', scheduler_step=100, scheduler_gamma=0.6,
-        batch_size=32, train_split=0.70, test_split=None, split_seed=12,
+        batch_size=32, train_split=0.60, val_split=0.30, split_seed=12,
         buffer_size=64, num_workers=2, prefetch_factor=2,
         resume_run=None, resume_checkpoint='latest', resume_modified=False,
         normalize=True,

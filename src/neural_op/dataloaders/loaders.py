@@ -598,57 +598,53 @@ def vertex_collate(samples):
     }
 
 
-def split_chunk_paths(chunk_paths, train_split, seed=None, test_split=None):
+def split_chunk_paths(chunk_paths, train_split, val_split, seed=None):
     """
-    Divide chunk_paths em treino/teste ao nível de chunk — mesmo shuffle
+    Divide chunk_paths em treino/validação/teste ao nível de chunk — mesmo shuffle
     determinístico (via seed) usado por build_loaders, exposto separadamente
-    para que o pós-processamento (src/postprocess/samples.py) reproduza o split
-    de uma run sem duplicar a lógica.
+    para que o pós-processamento (src/postprocess/samples.py) e o Normalizer
+    reproduzam o split de uma run sem duplicar a lógica.
 
-    test_split : float|None
-        None       → teste = complemento de train_split (comportamento padrão).
-        float      → fração fixa (sobre o total de chunks) usada como teste;
-                     o restante entre train_split e test_split fica de fora
-                     da época (nem treino nem teste) — útil para agilizar
-                     avaliação quando train_split é pequeno (ex: testes rápidos).
+    n_train = round(n·train_split), n_val = round(n·val_split), teste = complemento.
+      treino    : ajuste dos pesos e stats da normalização;
+      validação : parada antecipada (GL/paciência) e escolha do best.pth;
+      teste     : só avaliação final (pós-processamento), nunca visto no treino.
 
     Returns
     -------
-    train_paths, test_paths : list[str]
+    train_paths, val_paths, test_paths : list[str]
     """
     paths = list(chunk_paths)
     rng = random.Random(seed)
     rng.shuffle(paths)
 
-    n_train = int(len(paths) * train_split)
-    n_train = max(n_train, 1) if len(paths) >= 2 else len(paths)  # 1 chunk → tudo para treino, sem test
+    n_train = round(len(paths) * train_split)
+    n_val   = round(len(paths) * val_split)
+    if n_train < 1 or n_val < 1 or n_train + n_val >= len(paths):
+        raise ValueError(f"split {train_split}/{val_split} de {len(paths)} chunks deixa treino, "
+                         f"validação ou teste vazio ({n_train}/{n_val}/{len(paths) - n_train - n_val})")
     train_paths = paths[:n_train]
-    remaining   = paths[n_train:]
-
-    if test_split is None:
-        test_paths = remaining
-    else:
-        n_test = min(int(len(paths) * test_split), len(remaining))
-        n_test = max(n_test, 1) if remaining else 0
-        test_paths = remaining[:n_test]
-
-    return train_paths, test_paths
+    val_paths   = paths[n_train:n_train + n_val]
+    test_paths  = paths[n_train + n_val:]
+    return train_paths, val_paths, test_paths
 
 
-def build_loaders(chunk_paths, batch_size, train_split,
+def build_loaders(chunk_paths, batch_size, train_split, val_split,
                   buffer_size, num_workers, prefetch_factor,
-                  seed=None, mode='grid', test_split=None):
+                  seed=None, mode='grid'):
     """
-    Divide chunk_paths em treino/teste ao nível de chunk, cria um dataset
-    para cada split e retorna os DataLoaders.
+    Divide chunk_paths em treino/validação/teste ao nível de chunk (split_chunk_paths)
+    e retorna os DataLoaders de treino e validação. O teste não tem loader aqui: só o
+    pós-processamento o lê.
 
     Nenhum chunk é lido aqui — apenas as listas de caminhos são particionadas.
 
     Parameters
     ----------
-    chunk_paths    : list[str]       caminhos dos quad_chunk_*.pt
+    chunk_paths    : list[str]       caminhos dos data_chunk_*.pt
     batch_size     : int             amostras por mini-lote
     train_split    : float           fração de chunks para treino
+    val_split      : float           fração de chunks para validação (teste = complemento)
     buffer_size    : int             amostras no reservatório de shuffle
     num_workers    : int             workers paralelos de I/O
     prefetch_factor: int             batches pré-buscados por worker
@@ -657,13 +653,10 @@ def build_loaders(chunk_paths, batch_size, train_split,
                                      'vertex' usa ChunkVertexDataset + vertex_collate;
                                      'bipartite' usa ChunkBipartiteDataset +
                                      bipartite_collate
-    test_split     : float|None      None → teste = complemento de train_split;
-                                     float → fração fixa de chunks para teste
-                                     (ver split_chunk_paths)
 
     Returns
     -------
-    train_loader, test_loader, train_paths, test_paths
+    train_loader, val_loader, train_paths, val_paths, test_paths
     """
     if mode == 'grid':
         cls, collate_fn = ChunkStreamDataset, None
@@ -693,10 +686,10 @@ def build_loaders(chunk_paths, batch_size, train_split,
             "python -m scripts.build_datasets"
         )
 
-    train_paths, test_paths = split_chunk_paths(paths, train_split, seed, test_split)
+    train_paths, val_paths, test_paths = split_chunk_paths(paths, train_split, val_split, seed)
 
     train_ds = cls(train_paths, buffer_size, prefetch_chunks=2)
-    test_ds  = cls(test_paths,  buffer_size, prefetch_chunks=2)
+    val_ds   = cls(val_paths,   buffer_size, prefetch_chunks=2)
 
     pin = torch.cuda.is_available()
 
@@ -708,13 +701,11 @@ def build_loaders(chunk_paths, batch_size, train_split,
         loader_kw['persistent_workers'] = True
 
     train_loader = DataLoader(train_ds, **loader_kw)
-    test_loader  = DataLoader(test_ds,  **loader_kw)
+    val_loader   = DataLoader(val_ds,   **loader_kw)
 
-    n_unused = len(paths) - len(train_paths) - len(test_paths)
-    unused_str = f" / {n_unused} não usados" if n_unused > 0 else ""
     print(f"Chunks: {len(paths)} total  "
-          f"({len(train_paths)} treino / {len(test_paths)} teste{unused_str})  "
+          f"({len(train_paths)} treino / {len(val_paths)} validação / {len(test_paths)} teste)  "
           f"| buffer {buffer_size} amostras  "
           f"| workers {num_workers}  "
           f"| mode '{mode}'", flush=True)
-    return train_loader, test_loader, train_paths, test_paths
+    return train_loader, val_loader, train_paths, val_paths, test_paths

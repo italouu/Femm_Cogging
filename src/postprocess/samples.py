@@ -1,21 +1,13 @@
 """
 Amostras do raw (data/raw/<DatagenConfig.dataset>/): designs válidos, caminhos,
-subsets teste/fora (split_seed=12), parse do gabarito smooth.
+subsets do split de uma run, parse do gabarito smooth (alvo polar Br, Bθ).
 
-Origem: tests/resultados/common.py (2026-10-13), sem mudança de lógica; a run
-de referência do split passa a ser argumento (antes fixa em ROOT_S/FNO2d/run_0001).
-
-Subsets: os chunks fora do treino, reconstruídos com o mesmo split do treino
-(split_chunk_paths com train_split/test_split/split_seed do config.json da run):
-  - 'teste' : os chunks de teste (parada / escolha do best.pth);
-  - 'fora'  : os chunks nem de treino nem de teste (avaliação independente) — vazio quando
-              test_split=None (teste = complemento do treino, ex.: 70/30 da bateria de 2000).
-O nº de chunks do dataset não é fixo: é o que reproduz o split.json da run (2026-10-13;
-antes N_CHUNKS=125 e subsets 'teste37'/'fora51', bateria de 4000 amostras com 30/30/40).
-
-Referencial (2026-10-17): o parse smooth entrega node_y/y_hw POLARES (Br, Bθ). Runs
-treinadas antes disso (alvo cartesiano Bx, By) só são comparáveis por |B|; por
-componente, girar a saída delas pelo ângulo do ponto (ans_parsing._to_polar).
+Subsets: os chunks fora do treino, reconstruídos com o split da run
+(split_chunk_paths com train_split/val_split/split_seed do config.json, conferido
+contra o split.json):
+  - 'test' : só avaliação final, nunca visto no treino (padrão do pós-processamento);
+  - 'val'  : parada antecipada e escolha do best.pth (só por opção explícita).
+O nº de chunks do dataset é o que reproduz o split.json da run.
 """
 import csv
 import json
@@ -40,7 +32,7 @@ N_R, N_A     = _dg.n_r, _dg.n_a
 ANG_1, ANG_2 = _dg.ang_1, _dg.ang_2
 CHUNK_SIZE   = _dg.chunk_size
 
-SUBSETS  = ('teste', 'fora')
+SUBSETS  = ('val', 'test')
 
 
 def _sample_idx(path: Path) -> int:
@@ -57,43 +49,38 @@ def sample_path(idx):
 
 
 def _n_chunks(cfg, split, n_max):
-    """Nº de chunks do dataset da run: o n (entre treino+teste e n_max) cujo shuffle
-    reproduz o split.json — o shuffle depende de n, então só o n correto bate."""
-    n_min = len(split['train']) + len(split['test'])
+    """Nº de chunks do dataset da run: o n (entre treino+validação+teste e n_max) cujo
+    shuffle reproduz o split.json — o shuffle depende de n, então só o n correto bate."""
+    n_min = len(split['train']) + len(split['val']) + len(split['test'])
     for n in range(n_min, n_max + 1):
         names = [f'data_chunk_{i:04d}.pt' for i in range(n)]
-        train, test = split_chunk_paths(names, cfg['train_split'], seed=cfg['split_seed'],
-                                        test_split=cfg.get('test_split'))
-        if train == split['train'] and test == split['test']:
+        try:
+            parts = split_chunk_paths(names, cfg['train_split'], cfg['val_split'], cfg['split_seed'])
+        except ValueError:
+            continue
+        if all(p == split[k] for p, k in zip(parts, ('train', 'val', 'test'))):
             return n
     raise AssertionError(f'nenhum nº de chunks em [{n_min}, {n_max}] reproduz o split.json')
 
 
-def samples_with_subset(split_run_dir: Path, max_samples=None, n_samples=None):
-    """[(chunk_name, subset, sample_idx, ans_path)] dos chunks fora do treino, na
-    ordem do split de `split_run_dir` (config.json + split.json de uma run da
-    bateria); max_samples -> dividido igualmente entre os subsets não vazios.
-    n_samples: nº de amostras do raw usadas no dataset da run (as n_samples primeiras,
-    como MAX_SAMPLES em scripts/build_chunks_main.py); None = todas."""
+def samples_with_subset(split_run_dir: Path, subset='test', max_samples=None, n_samples=None):
+    """[(chunk_name, subset, sample_idx, ans_path)] dos chunks do subset ('test' ou 'val'),
+    na ordem do split de `split_run_dir` (config.json + split.json de uma run da bateria);
+    max_samples -> as max_samples primeiras. n_samples: nº de amostras do raw usadas no
+    dataset da run (as n_samples primeiras, como MAX_SAMPLES em
+    scripts/build_chunks_main.py); None = todas."""
+    if subset not in SUBSETS:
+        raise ValueError(f'subset {subset!r} (esperado um de {SUBSETS})')
     cfg = json.loads((split_run_dir / 'config.json').read_text())
     split = json.loads((split_run_dir / 'split.json').read_text())
     ans = sorted(RAW_DIR.glob('sample_*.ans.gz'), key=_sample_idx)[:n_samples]
-    n = _n_chunks(cfg, split, math.ceil(len(ans) / CHUNK_SIZE))   # já confere o split.json
-    names = [f'data_chunk_{i:04d}.pt' for i in range(n)]
-    _, rest = split_chunk_paths(names, cfg['train_split'], seed=cfg['split_seed'])
-    test = set(split['test'])
+    _n_chunks(cfg, split, math.ceil(len(ans) / CHUNK_SIZE))   # confere o split.json
     out = []
-    for name in rest:
+    for name in split[subset]:
         ci = int(name.split('_')[-1].split('.')[0])
-        sub = 'teste' if name in test else 'fora'
         for p in ans[ci * CHUNK_SIZE:(ci + 1) * CHUNK_SIZE]:
-            out.append((name, sub, _sample_idx(p), p))
-    if max_samples is not None:
-        present = [sub for sub in SUBSETS if any(x[1] == sub for x in out)]
-        quota = [max_samples // len(present) + (i < max_samples % len(present))
-                 for i in range(len(present))]
-        out = [x for sub, q in zip(present, quota) for x in [y for y in out if y[1] == sub][:q]]
-    return out
+            out.append((name, subset, _sample_idx(p), p))
+    return out[:max_samples]
 
 
 def parse_smooth(path, row, with_elem=False, with_overlay=False, ans=None):

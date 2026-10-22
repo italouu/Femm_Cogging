@@ -1,8 +1,6 @@
 """
-Curvas de treino a partir de data/logs/.../run_XXXX/metrics.jsonl.
-
-Origem: tests/resultados/figures_smooth.fig_training (2026-10-20); 4 -> N archs
-(painéis), nº de chunks de teste lido do split.json em vez de fixo (37).
+Curvas de treino a partir de data/logs/.../run_XXXX/metrics.jsonl (MAE na validação,
+o conjunto que escolhe o best.pth e a parada).
 """
 import json
 
@@ -12,7 +10,7 @@ from src.postprocess.plots.primitives import MODEL_COLOR
 
 
 def fig_training(runs, archs):
-    """runs: {(arch, loss): run_dir} (inference.find_runs). Erro no teste por época
+    """runs: {(arch, loss): run_dir} (inference.find_runs). Erro na validação por época
     (mae_graph; FNO2d: mae_hw), mse × mae, best.pth (○) e parada na legenda."""
     import matplotlib.pyplot as plt
     fig, axs = plt.subplots(1, len(archs), figsize=(3.25 * len(archs), 3.6))
@@ -34,9 +32,9 @@ def fig_training(runs, archs):
         ax.set_xlabel('época')
         ax.set_ylim(bottom=0, top=np.percentile(np.concatenate([l.get_ydata() for l in ax.get_lines()]), 97) * 1.15)
         ax.legend(frameon=False, loc='upper center', bbox_to_anchor=(0.5, -0.22), fontsize=7.2)
-    axs[0].set_ylabel('MAE no teste (mT)\nFNO2d: grade; Elem: elementos; demais: nós')
-    n_test = len(json.loads((next(iter(runs.values())) / 'split.json').read_text())['test'])
-    fig.suptitle(f'Erro no teste ({n_test} chunks) por época (pico inicial cortado); ○ = best.pth',
+    axs[0].set_ylabel('MAE na validação (mT)\nFNO2d: grade; Elem: elementos; demais: nós')
+    n_val = len(json.loads((next(iter(runs.values())) / 'split.json').read_text())['val'])
+    fig.suptitle(f'Erro na validação ({n_val} chunks) por época (pico inicial cortado); ○ = best.pth',
                  y=1.02)
     fig.tight_layout()
     return fig

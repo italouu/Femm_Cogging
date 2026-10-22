@@ -11,7 +11,7 @@ from pathlib import Path
 # run_summary.json (fallback: config.json) -- nomes como gravados pelo treino
 SUMMARY_FIELDS = ('n_params_real', 'n_params_trainable_real', 'gpu_peak_mem_gib', 'wall_time_s',
                   'best_epoch', 'last_epoch', 'n_epochs_cfg', 'stop_reason', 'status')
-# colunas de epochs.csv (s por época): total, treino, avaliação (test_loss), métricas B
+# colunas de epochs.csv (s por época): total, treino, avaliação (val_loss), métricas B
 EPOCH_COLS = ('epoch_time_s', 'train_time_s', 'eval_time_s', 'metric_time_s')
 # hardware registrado na run (o treino hoje só grava 'device')
 HW_FIELDS = ('device', 'gpu_name', 'hostname', 'cpu', 'cuda_version', 'torch_version')
@@ -66,6 +66,6 @@ def train_table(runs):
             missing[k] = miss
     return dict(source='config.json + run_summary.json + epochs.csv (nada recalculado)',
                 epoch_cols=dict(epoch_time_s='época inteira', train_time_s='treino',
-                                eval_time_s='avaliação (test_loss)',
+                                eval_time_s='avaliação (val_loss)',
                                 metric_time_s='métricas de monitoramento (2º forward)'),
                 runs=table, missing=missing)

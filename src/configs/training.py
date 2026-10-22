@@ -317,10 +317,10 @@ class NnCfg:
 
     # Dataloader
     batch_size: int = 32
-    train_split: float = 0.70
-    test_split: Optional[float] = None  # None → complemento de train_split (1 - train_split);
-                                         # valor explícito → fração fixa de chunks para teste,
-                                         # útil para agilizar épocas com train_split pequeno
+    # Split por chunk (split_chunk_paths): treino = pesos + stats da normalização;
+    # validação = parada antecipada e best.pth; teste = complemento, só avaliação final.
+    train_split: float = 0.60
+    val_split: float = 0.30
     buffer_size: int = 64
     num_workers: int = 2
     prefetch_factor: int = 2
@@ -409,7 +409,7 @@ class NnCfg:
         if self.normalize:
             from src.neural_op.normalization import Normalizer
             self.norm_stats = Normalizer.fit(self.dataset, self.arch, self.train_split,
-                                             self.split_seed, self.test_split).to_dict()
+                                             self.val_split, self.split_seed).to_dict()
         if self.resume_run is not None and not Path(self.resume_run).exists():
             resolved = Path('data/logs') / self.problem / self.arch / self.resume_run
             self.resume_run = str(resolved)

@@ -22,16 +22,16 @@ def run(_nn):
         f'data/torch/data_chunks/{_nn.dataset}/data_chunk_*.pt'
     ))
 
-    train_loader, test_loader, train_paths, test_paths = build_loaders(
+    train_loader, val_loader, train_paths, val_paths, test_paths = build_loaders(
         chunk_paths,
         batch_size      = _nn.batch_size,
         train_split     = _nn.train_split,
+        val_split       = _nn.val_split,
         buffer_size     = _nn.buffer_size,
         num_workers     = _nn.num_workers,
         prefetch_factor = _nn.prefetch_factor,
         seed            = _nn.split_seed,
         mode            = entry.loader_mode,
-        test_split      = _nn.test_split,
     )
 
     # normalizer : None se _nn.normalize=False; senão reconstruído das stats já
@@ -83,18 +83,18 @@ def run(_nn):
     print(f"Device: {DEVICE}", flush=True)
 
     train_loader = CUDAPrefetcher(train_loader, DEVICE, normalizer=normalizer)
-    test_loader  = CUDAPrefetcher(test_loader,  DEVICE, normalizer=normalizer)
+    val_loader   = CUDAPrefetcher(val_loader,   DEVICE, normalizer=normalizer)
 
     mgr     = ModelManager(_nn)
     mgr.open(model, DEVICE, resumed_from=_nn.resume_run,
-             split={'train': train_paths, 'test': test_paths})
+             split={'train': train_paths, 'val': val_paths, 'test': test_paths})
     monitor = TrainingMonitor(cfg=_nn.monitor_cfg, mgr=mgr)
 
     status = 'failed'
     stop_reason = 'exception'   # B4 — sobrescrito abaixo se o fit terminar/parar normalmente
     try:
         model, losses = fit(
-            model, train_loader, test_loader,
+            model, train_loader, val_loader,
             optimizer, scheduler, loss_fn,
             device=DEVICE, n_epochs=_nn.n_epochs,
             step_fn=step_fn,
@@ -114,7 +114,7 @@ def run(_nn):
     finally:
         mgr.close(status, monitor.last_epoch, model, optimizer, scheduler,
                   stop_reason=stop_reason, best_epoch=monitor.best_epoch,
-                  best_test_loss=monitor.best_loss, n_epochs_cfg=_nn.n_epochs)
+                  best_val_loss=monitor.best_loss, n_epochs_cfg=_nn.n_epochs)
     return status
 
 

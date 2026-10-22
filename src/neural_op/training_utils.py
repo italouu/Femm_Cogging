@@ -120,11 +120,11 @@ def compute_mae_metrics(model, loader, device, metric_fn):
     return (total_hw / n_batches) if has_hw else None, mae_graph_avg
 
 
-def _default_log_epoch(ep, train_loss, test_loss, train_time_s, eval_time_s, samples_per_s):
+def _default_log_epoch(ep, train_loss, val_loss, train_time_s, eval_time_s, samples_per_s):
     """log_epoch padrão -- usado se fit() for chamado sem log_fn (ex: scripts
     antigos/testes) ou por qualquer BaseLoss que não sobrescreva log_epoch
     (src/neural_op/losses.py). Mesmo texto que já era hardcoded aqui."""
-    print(f"epoch {ep:>4d}  train {train_loss:.4e}  test {test_loss:.4e}"
+    print(f"epoch {ep:>4d}  train {train_loss:.4e}  val {val_loss:.4e}"
           f"  [{train_time_s:.1f}s + {eval_time_s:.1f}s eval]  {samples_per_s:.0f} samp/s")
 
 
@@ -142,7 +142,7 @@ def save_checkpoint(path, epoch, model, optimizer, scheduler
     }, path)
 
 
-def fit(model, train_loader, test_loader,
+def fit(model, train_loader, val_loader,
         optimizer, scheduler, loss_fn, device, n_epochs, step_fn,
         *, start_epoch=0, prev_losses=None, monitor=None, metric_fn=None, log_fn=None,
         epoch_log_fn=None):
@@ -152,21 +152,21 @@ def fit(model, train_loader, test_loader,
     Parameters
     ----------
     start_epoch : epoch absoluto inicial (0 = treino novo).
-    prev_losses : {'train': [...], 'test': [...]} de run anterior; None = vazio.
+    prev_losses : {'train': [...], 'val': [...]} de run anterior; None = vazio.
     monitor     : TrainingMonitor | None — gerencia checkpoint, best e early stop.
     metric_fn   : (batch, model, device) -> (mae_hw, mae_graph|None) | None
-                  Se fornecido, calcula MAE bruto sobre test_loader a cada heartbeat
+                  Se fornecido, calcula MAE bruto sobre val_loader a cada heartbeat
                   (mesmo ritmo de checkpoint_every) e grava mae_hw/mae_graph no log
                   via monitor. mae_hw compara sempre a saída em grade H×W do FNO;
                   mae_graph compara a saída final em grafo/nós (None se o arch não
                   produzir saída em grafo).
-    log_fn      : (ep, train_loss, test_loss, train_time_s, eval_time_s, samples_per_s) -> None | None
+    log_fn      : (ep, train_loss, val_loss, train_time_s, eval_time_s, samples_per_s) -> None | None
                   Print de época — propriedade da loss (BaseLoss.log_epoch,
                   src/neural_op/losses.py), passado por scripts/train.py como
                   `loss_obj.log_epoch`. None usa _default_log_epoch (mesmo texto
                   de sempre) — mantém fit() utilizável sem essa peça.
     epoch_log_fn: (B4, 2026-10-03) callable(**row) | None — chamado em TODA época
-                  com epoch/train_loss/test_loss/lr (lr usado NA época, antes do
+                  com epoch/train_loss/val_loss/lr (lr usado NA época, antes do
                   scheduler.step)/train_time_s/eval_time_s/metric_time_s/
                   epoch_time_s/mae_hw/mae_graph. mae_* só vêm preenchidos em toda
                   época se monitor.cfg.metrics_every_epoch=True (senão só nos
@@ -175,7 +175,7 @@ def fit(model, train_loader, test_loader,
     Returns
     -------
     model : nn.Module
-    losses : {'train': list[float], 'test': list[float]}
+    losses : {'train': list[float], 'val': list[float]}
     """
     log_fn = log_fn or _default_log_epoch
     model = model.to(device)
@@ -190,7 +190,7 @@ def fit(model, train_loader, test_loader,
         print(f"Retomando do epoch {start_epoch} — treinando {n_epochs} épocas adicionais")
 
     train_losses = list(prev_losses['train']) if prev_losses else []
-    test_losses  = list(prev_losses['test'])  if prev_losses else []
+    val_losses   = list(prev_losses['val'])   if prev_losses else []
 
     metrics_every_epoch = (metric_fn is not None and monitor is not None
                            and getattr(monitor.cfg, 'metrics_every_epoch', False))
@@ -201,13 +201,13 @@ def fit(model, train_loader, test_loader,
         t0 = time.perf_counter()
         train_loss, n_train_samples = train_epoch(model, train_loader, optimizer, loss_fn, device, step_fn)
         t1 = time.perf_counter()
-        test_loss = eval_epoch(model, test_loader, loss_fn, device, step_fn)
+        val_loss = eval_epoch(model, val_loader, loss_fn, device, step_fn)
         t2 = time.perf_counter()
         is_heartbeat = monitor is not None and (i + 1) % monitor.cfg.checkpoint_every == 0
         # B4 — mae_hw/mae_graph: toda época (metrics_every_epoch) ou só no
         # heartbeat (antigo); calculado 1x e reaproveitado pelo monitor abaixo
         if metric_fn is not None and (metrics_every_epoch or is_heartbeat):
-            mae_hw, mae_graph = compute_mae_metrics(model, test_loader, device, metric_fn)
+            mae_hw, mae_graph = compute_mae_metrics(model, val_loader, device, metric_fn)
         else:
             mae_hw, mae_graph = None, None
         t3 = time.perf_counter()
@@ -217,10 +217,10 @@ def fit(model, train_loader, test_loader,
         eval_time_s   = t2 - t1
         samples_per_s = n_train_samples / train_time_s if train_time_s > 0 else 0.0
         train_losses.append(train_loss)
-        test_losses.append(test_loss)
-        log_fn(ep, train_loss, test_loss, train_time_s, eval_time_s, samples_per_s)
+        val_losses.append(val_loss)
+        log_fn(ep, train_loss, val_loss, train_time_s, eval_time_s, samples_per_s)
         if epoch_log_fn is not None:
-            epoch_log_fn(epoch=ep, train_loss=train_loss, test_loss=test_loss, lr=epoch_lr,
+            epoch_log_fn(epoch=ep, train_loss=train_loss, val_loss=val_loss, lr=epoch_lr,
                          train_time_s=train_time_s, eval_time_s=eval_time_s,
                          metric_time_s=t3 - t2, epoch_time_s=t3 - t0,
                          mae_hw=mae_hw, mae_graph=mae_graph)
@@ -230,7 +230,7 @@ def fit(model, train_loader, test_loader,
             if is_heartbeat:
                 current_lr = optimizer.param_groups[0]['lr']
                 should_stop = monitor.step(
-                    ep, train_losses, test_losses, model, optimizer, scheduler,
+                    ep, train_losses, val_losses, model, optimizer, scheduler,
                     lr=current_lr, train_time_s=train_time_s,
                     eval_time_s=eval_time_s, samples_per_s=samples_per_s,
                     mae_hw=mae_hw, mae_graph=mae_graph,
@@ -238,4 +238,4 @@ def fit(model, train_loader, test_loader,
                 if should_stop:
                     break
 
-    return model, {'train': train_losses, 'test': test_losses}
+    return model, {'train': train_losses, 'val': val_losses}

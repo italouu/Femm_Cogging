@@ -1,10 +1,8 @@
 """
 Figuras de erro: barras por arch/loss, mapas de erro de superfície.
 
-Origem: tests/resultados/figures_smooth.fig_bars e surface_error_smooth.plot
-(2026-10-20). Mudanças: rótulos de subset genéricos ('teste'/'fora', 'fora' pode
-estar vazio), N archs.
-fig_surface_error_map (P4, 2026-10-20): escala comum, contornos dos materiais, painel do piso.
+fig_bars: rótulo com o nº de amostras de cada subset avaliado ('test' ou 'val').
+fig_surface_error_map: escala comum, contornos dos materiais, painel do piso.
 """
 import numpy as np
 

@@ -201,14 +201,17 @@ def sample_torques(lay, row, runs, frame='polar'):
 # --------------------------------------------------------------------------- #
 # amostras e resumos (batch / scatter)
 # --------------------------------------------------------------------------- #
-def test_chunks(split_run_dir: Path):
+def subset_chunks(split_run_dir: Path, subset='test'):
+    """Índices dos chunks do subset ('test' ou 'val') no split.json da run."""
     split = json.loads((Path(split_run_dir) / 'split.json').read_text())
-    return sorted(int(s.split('_')[-1][:4]) for s in split['test'])
+    return sorted(int(s.split('_')[-1][:4]) for s in split[subset])
 
 
-def select_batch_samples(split_run_dir, rows, n_samples=80, seed=0, chunk_size=32):
-    """n_samples amostras de teste estratificadas por corrente (n/5 por faixa de 2 A)."""
-    pool = np.array([c * chunk_size + j for c in test_chunks(split_run_dir) for j in range(chunk_size)])
+def select_batch_samples(split_run_dir, rows, n_samples=80, seed=0, chunk_size=32, subset='test'):
+    """n_samples amostras do subset estratificadas por corrente (n/5 por faixa de 2 A).
+    Índices além do raw (último chunk incompleto) ficam fora do sorteio."""
+    pool = np.array([c * chunk_size + j for c in subset_chunks(split_run_dir, subset)
+                     for j in range(chunk_size) if c * chunk_size + j < len(rows)])
     I = np.array([float(rows[i]['current_amplitude [A]']) for i in pool])
     rng = np.random.default_rng(seed)
     per = n_samples // 5
@@ -216,8 +219,9 @@ def select_batch_samples(split_run_dir, rows, n_samples=80, seed=0, chunk_size=3
     return sorted(int(i) for i in np.concatenate(out))
 
 
-def scatter_ids(split_run_dir, n_per_chunk=8, chunk_size=32):
-    return [ch * chunk_size + j for ch in test_chunks(split_run_dir) for j in range(n_per_chunk)]
+def scatter_ids(split_run_dir, n_per_chunk=8, chunk_size=32, subset='test'):
+    """As n_per_chunk primeiras amostras de cada chunk do subset."""
+    return [ch * chunk_size + j for ch in subset_chunks(split_run_dir, subset) for j in range(n_per_chunk)]
 
 
 def fundamental(th_deg, T):

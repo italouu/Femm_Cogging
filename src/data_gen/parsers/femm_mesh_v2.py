@@ -54,8 +54,6 @@ essa função não abre FEMM nem instancia o modelo geométrico, só lê o
 arquivo; quem chama obtém r_in/r_ext de valid_designs.csv (colunas
 'inner_diameter [mm]'/'outer_diameter [mm]').
 """
-import gzip
-import shutil
 from pathlib import Path
 
 import numpy as np
@@ -63,7 +61,7 @@ import matplotlib.tri as mtri
 from scipy.spatial import cKDTree
 
 from src.data_gen.parsers.ans_parsing import (
-    AnsData, _parse_solution,
+    AnsData, read_ans,
     _build_edges, _element_areas, _wrap_edge_pairs, _grid_polar_xy,
     _parse_label_materials,
     _parse_label_currents,
@@ -102,33 +100,22 @@ def _grid_const_per_element(trifinder, elem_field: np.ndarray, centroids: np.nda
 def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
                            ang_1: float = 0.0, ang_2: float = 120.0,
                            n_r: int = 138, n_a: int = 276,
-                           tmp_dir: Path = None, ans: AnsData = None) -> dict:
+                           ans: AnsData = None) -> dict:
     """Estrutura do layout bipartido (os dois grafos + x_hw) de UMA amostra a partir do
     `sample_XXXXXX.ans.gz` bruto. Sem FEMM aberto, sem chamada COM -- só lê o arquivo e
     faz numpy/matplotlib.tri puro. `node_y`/`y_hw` saem como None, para o chamador
     preencher (parsers smooth: femm_mesh_smooth, femm_mesh_elem_smooth).
 
     `ans` (2026-10-22): `.ans` já lido (ans_parsing.read_ans) -- evita descomprimir/ler o
-    arquivo de novo; None = lê de `ans_gz_path` (descompactado em `tmp_dir`).
+    arquivo de novo; None = lê de `ans_gz_path` (read_ans, em memória).
 
     Retorna dict com todos os campos descritos na docstring do módulo, mais
     L/elem_L/E_L/C_L (contagens por amostra, pra agrupamento em chunks) e
     dim_H/dim_W.
     """
-    if ans is not None:
-        lines, nodes, elems = ans.lines, ans.nodes, ans.elems
-    else:
-        ans_gz_path = Path(ans_gz_path)
-        tmp_dir = Path(tmp_dir) if tmp_dir is not None else ans_gz_path.parent
-        stem = ans_gz_path.name.removesuffix('.ans.gz')
-        tmp_ans = tmp_dir / f"{stem}.tmp_parse.ans"
-
-        with gzip.open(ans_gz_path, 'rb') as f_in, open(tmp_ans, 'wb') as f_out:
-            shutil.copyfileobj(f_in, f_out)
-        try:
-            lines, nodes, elems = _parse_solution(str(tmp_ans))
-        finally:
-            tmp_ans.unlink(missing_ok=True)
+    if ans is None:
+        ans = read_ans(ans_gz_path)
+    lines, nodes, elems = ans.lines, ans.nodes, ans.elems
 
     # material/polaridade pelo rótulo de cada bloco (2026-10-05) -- indexar [BlockProps] pela
     # ordem de criação exigia 14 blocos de ímã e quebra com a fase do rotor aplicada

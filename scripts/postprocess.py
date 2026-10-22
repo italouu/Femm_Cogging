@@ -88,7 +88,7 @@ import torch
 
 from scripts.build_smooth_ans_chunks_direct import MAX_SAMPLES
 from src.configs.datagen import DatagenConfig
-from src.data_gen.parsers.ans_parsing import _read_ans_gz
+from src.data_gen.parsers.ans_parsing import read_ans
 from src.postprocess.fields import elem_to_nodes, gap_radius_mm, mag
 from src.postprocess.inference import (ARCHS, INTERP_MODE, RUN_ORDER, find_runs, floor_nodes,
                                        load_set, predict, to_torch_sample)
@@ -110,7 +110,7 @@ from src.postprocess.torque import (batch_summary, curve_row, femm_ref, femm_ref
                                     scatter_stats, select_batch_samples)
 from src.postprocess.torque import thetas as torque_thetas
 from src.postprocess.train_table import train_table
-from src.postprocess.samples import (ANG_1, ANG_2, N_A, N_R, RAW_DIR, SUBSETS, TMP_ROOT, design_rows,
+from src.postprocess.samples import (ANG_1, ANG_2, N_A, N_R, RAW_DIR, SUBSETS, design_rows,
                                      parse_smooth, sample_path, samples_with_subset)
 
 DATASET   = DatagenConfig().dataset
@@ -142,8 +142,8 @@ def _node_mags(runs, lay, ts):
 
 def _mesh(idx):
     """(nós [N,3], elementos [M,4]) do .ans da amostra."""
-    _, nodes, elems = _read_ans_gz(sample_path(idx), TMP_ROOT / 'parse')
-    return nodes, elems
+    ans = read_ans(sample_path(idx))
+    return ans.nodes, ans.elems
 
 
 def _surface_points(arch, lay, out_hw, yn):
@@ -620,8 +620,8 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
             T = {'femm_T22': [3 * r['T22_sector'] for r in ref], 'gt': [], 'gt_smooth': [],
                  **{k: [] for k in pk}}
             with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
-                futs = [ex.submit(parse_torque_sample, sw / 'raw' / f'theta_{k:03d}.ans.gz', row,
-                                  sw / 'tmp' / f'parse_{k}') for k in range(len(ref))]
+                futs = [ex.submit(parse_torque_sample, sw / 'raw' / f'theta_{k:03d}.ans.gz', row)
+                        for k in range(len(ref))]
                 for k, f in enumerate(futs):
                     t = sample_torques(f.result(), row, runs, frame)
                     T['gt'].append(t['gt']); T['gt_smooth'].append(t['smooth'])
@@ -664,8 +664,8 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
             for n, i in enumerate(ids, 1):
                 d = root / f'sample_{i:06d}'
                 ks = [k for k in range(n_theta) if (d / f'theta_{k:02d}.json').exists()][:limit]
-                futs = [ex.submit(parse_torque_sample, d / f'theta_{k:02d}.ans.gz', rows[i],
-                                  root / 'parse_tmp' / f'{i}_{k}') for k in ks]
+                futs = [ex.submit(parse_torque_sample, d / f'theta_{k:02d}.ans.gz', rows[i])
+                        for k in ks]
                 cur = dict(theta_e_deg=[], femm=[], gt=[], smooth=[], **{kk: [] for kk in pk})
                 for k, f in zip(ks, futs):
                     ref = json.loads((d / f'theta_{k:02d}.json').read_text())
@@ -700,8 +700,8 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
         with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
             for b in range(0, len(ids), 32):
                 batch = ids[b:b + 32]
-                futs = [ex.submit(parse_torque_sample, raw_dir / f'sample_{i:06d}.ans.gz', rows[i],
-                                  work_dir / 'torque_scatter' / str(i)) for i in batch]
+                futs = [ex.submit(parse_torque_sample, raw_dir / f'sample_{i:06d}.ans.gz', rows[i])
+                        for i in batch]
                 for i, f in zip(batch, futs):
                     t = sample_torques(f.result(), rows[i], runs, frame)
                     r = rows[i]
@@ -830,7 +830,7 @@ def _timing_femm(out_json, n_femm, runs):
         gz = d / 'model.ans.gz'
         with open(ans, 'rb') as fi, _gz.open(gz, 'wb') as fo:
             shutil.copyfileobj(fi, fo)
-        ref = parse_smooth(gz, row, tmp_dir=d / 'parse', with_elem=True)
+        ref = parse_smooth(gz, row, with_elem=True)
         eq = check_preprocess(arrays, ref)
         chk = dict(sample_idx=idx, **check_mesh_vs_raw(nodes, elems, raw_gz),
                    preproc_equal_parsers=all(eq.values()), preproc_equal_detail=eq)
@@ -866,7 +866,7 @@ def _timing_infer(out_json, runs, n_samples, n_warmup, n_reps, max_batch):
     first = [x for x in samples if x[0] == samples[0][0]][:n_samples]
     with ProcessPoolExecutor(max_workers=min(N_WORKERS, len(first))) as ex:
         lays = list(ex.map(parse_smooth, [x[3] for x in first], [rows[x[2]] for x in first],
-                           [TMP_ROOT / 'timing_parse'] * len(first), [True] * len(first)))
+                           [True] * len(first)))
     ts = [to_torch_sample(l) for l in lays]
     del lays
     n_nodes = np.array([t['v1']['node_x'].shape[0] for t in ts])

@@ -92,10 +92,9 @@ def _grid_smooth_b(mesh, B1, B2, b1, b2, trifinder, centroids, Xg, Yg):
 def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
                                   ang_1: float = 0.0, ang_2: float = 120.0,
                                   n_r: int = 138, n_a: int = 276,
-                                  tmp_dir: Path = None, ans: AnsData = None) -> dict:
+                                  ans: AnsData = None) -> dict:
     """Retorna {arch: dict_de_arrays} para as 4 archs de SMOOTH_ARCHS -- ver
-    docstring do módulo. `ans`: `.ans` já lido (read_ans); None = lê de `ans_gz_path`
-    (`tmp_dir` não é mais usado, 2026-10-22: leitura em memória)."""
+    docstring do módulo. `ans`: `.ans` já lido (read_ans); None = lê de `ans_gz_path`."""
     if ans is None:
         ans = read_ans(ans_gz_path)
     return _parse_smooth(ans, r_in, r_ext, ang_1, ang_2, n_r, n_a)[0]

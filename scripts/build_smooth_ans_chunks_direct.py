@@ -40,18 +40,16 @@ MAX_SAMPLES = None
 
 RAW_DIR     = Path("data/raw") / RAW_DATASET
 CHUNKS_ROOT = Path("data/torch/data_chunks") / OUT_DATASET
-TMP_PARSE   = Path("data/temp") / f"{OUT_DATASET}_parse"   # .ans descomprimido temporário
 
 
-def _parse_one(path: Path, r_in: float, r_ext: float, tmp_dir: Path) -> dict:
+def _parse_one(path: Path, r_in: float, r_ext: float) -> dict:
     """Worker: 1 .ans.gz -> {arch: dict de arrays}."""
     return parse_ans_gzip_sample_smooth(path, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2,
-                                         n_r=N_R, n_a=N_A, tmp_dir=tmp_dir)
+                                         n_r=N_R, n_a=N_A)
 
 
 def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, chunks_root=CHUNKS_ROOT,
         max_workers=MAX_WORKERS):
-    TMP_PARSE.mkdir(parents=True, exist_ok=True)
     ans_paths = sorted(RAW_DIR.glob("sample_*.ans.gz"), key=_sample_idx)
     if max_samples is not None:
         ans_paths = ans_paths[:max_samples]
@@ -80,8 +78,7 @@ def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, chunks_root=CHUNKS_ROOT,
                 row = rows[_sample_idx(p)]
                 futs.append(ex.submit(_parse_one, p,
                                       float(row['inner_diameter [mm]']) / 2,
-                                      float(row['outer_diameter [mm]']) / 2,
-                                      TMP_PARSE))
+                                      float(row['outer_diameter [mm]']) / 2))
             # ordem preservada (mesma ordem de amostras em todas as archs)
             layouts = [f.result() for f in futs]
 

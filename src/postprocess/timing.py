@@ -16,7 +16,6 @@ do FEMM (a malha é dada para os dois lados: geometria e malha ficam fora da com
   time_inference      — best.pth, torch.inference_mode, lote 1 e potências de 2 até OOM;
                         forward + desnormalização (+ grade -> nós no FNO2d).
 """
-import gzip
 import os
 import platform
 import shutil
@@ -32,7 +31,7 @@ from src.data_gen.parsers.ans_parsing import (
     _MAGNET_ID, _MU_BY_ID, _build_bidirectional_edge_attrs, _build_edges, _element_areas,
     _grid_polar_xy, _node_current_density, _node_magnet_polarity, _node_material_priority,
     _node_material_stats, _parse_label_currents, _parse_label_materials, _parse_solution,
-    _wrap_edge_pairs,
+    _wrap_edge_pairs, read_ans,
 )
 from src.data_gen.parsers.femm_mesh_elem import _build_dual_edges
 from src.data_gen.parsers.femm_mesh_v2 import _build_trifinder, _grid_const_per_element
@@ -151,23 +150,14 @@ def femm_solve_timed(row, work_dir: Path):
 
 def check_mesh_vs_raw(nodes, elems, raw_gz):
     """Malha (coordenadas, conectividade, rótulos) e A do .ans novo × o do raw."""
-    _, rn, re_ = _parse_solution_gz(raw_gz)
+    raw = read_ans(raw_gz)
+    rn, re_ = raw.nodes, raw.elems
     same = rn.shape == nodes.shape and re_.shape == elems.shape
     out = dict(mesh_equal_raw=bool(same and np.array_equal(rn[:, :2], nodes[:, :2])
                                    and np.array_equal(re_, elems)),
                n_nodes=int(nodes.shape[0]), n_elems=int(elems.shape[0]))
     out['max_abs_dA_vs_raw'] = float(np.abs(rn[:, 2] - nodes[:, 2]).max()) if same else None
     return out
-
-
-def _parse_solution_gz(gz):
-    tmp = Path(str(gz) + '.tmp_timing.ans')
-    with gzip.open(gz, 'rb') as fi, open(tmp, 'wb') as fo:
-        shutil.copyfileobj(fi, fo)
-    try:
-        return _parse_solution(str(tmp))
-    finally:
-        tmp.unlink(missing_ok=True)
 
 
 # --------------------------------------------------------------------------- #

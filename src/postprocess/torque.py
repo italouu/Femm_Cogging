@@ -149,19 +149,19 @@ def polar_to_xy(B, x, y):
     return np.stack([B[:, 0] * c - B[:, 1] * s, B[:, 0] * s + B[:, 1] * c], axis=1)
 
 
-def parse_torque_sample(path, row, tmp_dir):
+def parse_torque_sample(path, row):
     """1 .ans.gz -> layouts para os modelos (samples.parse_smooth com Elem) + o que o torque
-    usa: gt exato por elemento (xy), smooth no centróide (xy), material, centróide, área."""
+    usa: gt exato por elemento (xy), smooth no centróide (xy), material, centróide, área.
+    O `.ans` é lido uma vez (read_ans) e passado aos dois parsers."""
     from src.data_gen.parsers.femm_mesh_elem import parse_ans_gzip_sample_elem
-    from src.data_gen.parsers.ans_parsing import _read_ans_gz
+    from src.data_gen.parsers.ans_parsing import read_ans
     from src.postprocess.samples import ANG_1, ANG_2, N_A, N_R, parse_smooth
-    tmp_dir = Path(tmp_dir)
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    lay = parse_smooth(path, row, tmp_dir=tmp_dir, with_elem=True)
+    ans = read_ans(path)
+    lay = parse_smooth(path, row, with_elem=True, ans=ans)
     r_in, r_ext = float(row['inner_diameter [mm]']) / 2, float(row['outer_diameter [mm]']) / 2
     d_ex = parse_ans_gzip_sample_elem(path, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2, n_r=N_R,
-                                      n_a=N_A, tmp_dir=tmp_dir)
-    _, nodes, elems = _read_ans_gz(path, tmp_dir)
+                                      n_a=N_A, ans=ans)
+    nodes, elems = ans.nodes, ans.elems
     cen = nodes[elems[:, :3], :2].mean(axis=1).astype(np.float64)
     lay['torque'] = dict(gt=d_ex['node_y'].astype(np.float64),
                          smooth=polar_to_xy(lay['elem']['node_y'], cen[:, 0], cen[:, 1]),

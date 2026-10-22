@@ -129,7 +129,7 @@ def _build_dual_edges(nodes: np.ndarray, elems: np.ndarray, ang_1: float, ang_2:
 def parse_ans_gzip_sample_elem(ans_gz_path: Path, r_in: float, r_ext: float,
                                 ang_1: float = 0.0, ang_2: float = 120.0,
                                 n_r: int = 138, n_a: int = 276,
-                                tmp_dir: Path = None, target_field: str | None = 'B',
+                                target_field: str | None = 'B',
                                 ans: AnsData = None, bip: dict = None) -> dict:
     """1 `.ans.gz` -> layout com papéis trocados (ver docstring do módulo).
     Mesmo formato de dict de parse_ans_gzip_sample (dim_H/dim_W escalares).

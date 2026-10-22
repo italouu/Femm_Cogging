@@ -37,17 +37,15 @@ from src.data_gen.parsers.femm_mesh_elem_smooth import parse_ans_gzip_sample_ele
 MIN_FREE_GB = 55   # valor de scripts/build_elem_proto_chunks.py (chunks de 4000 amostras ~47 GB)
 N_RAW_EXPECTED = DatagenConfig().n_samples   # precheck com max_samples=None: raw completo
 OUT_NAME  = 'FNO_BipartiteGNN_Elem'
-TMP_PARSE = Path("data/temp") / f"{DatagenConfig().dataset}_elem_smooth_parse"
 
 
-def _parse_one(path: Path, r_in: float, r_ext: float, tmp_dir: Path) -> dict:
+def _parse_one(path: Path, r_in: float, r_ext: float) -> dict:
     return parse_ans_gzip_sample_elem_smooth(path, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2,
-                                             n_r=N_R, n_a=N_A, tmp_dir=tmp_dir)
+                                             n_r=N_R, n_a=N_A)
 
 
 def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, out_name=OUT_NAME):
     out_dir = CHUNKS_ROOT / out_name
-    TMP_PARSE.mkdir(parents=True, exist_ok=True)
     ans_paths = sorted(RAW_DIR.glob("sample_*.ans.gz"), key=_sample_idx)
     if max_samples is not None:
         ans_paths = ans_paths[:max_samples]
@@ -72,8 +70,7 @@ def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, out_name=OUT_NAME):
                 row = rows[_sample_idx(p)]
                 futs.append(ex.submit(_parse_one, p,
                                       float(row['inner_diameter [mm]']) / 2,
-                                      float(row['outer_diameter [mm]']) / 2,
-                                      TMP_PARSE))
+                                      float(row['outer_diameter [mm]']) / 2))
             samples = [f.result() for f in futs]   # ordem preservada
         write_chunk(out_dir, chunk_idx, samples, 'bipartite')
         del samples
@@ -91,7 +88,8 @@ def precheck(out_name=OUT_NAME, max_samples=MAX_SAMPLES) -> bool:
     """Raw, disco e parser da amostra 0. True = pode gerar."""
     import shutil
     import numpy as np
-    from src.data_gen.parsers.ans_b_smoothing import load_ans, element_b, nodal_b
+    from src.data_gen.parsers.ans_b_smoothing import element_b, nodal_b
+    from src.data_gen.parsers.ans_parsing import read_ans, _to_polar
     from src.data_gen.parsers.femm_mesh_elem import parse_ans_gzip_sample_elem
     from src.data_gen.parsers.femm_mesh_smooth import parse_ans_gzip_sample_smooth
 
@@ -116,18 +114,16 @@ def precheck(out_name=OUT_NAME, max_samples=MAX_SAMPLES) -> bool:
         row = next(csv.DictReader(f))
     p = RAW_DIR / "sample_000000.ans.gz"
     r_in, r_ext = float(row['inner_diameter [mm]']) / 2, float(row['outer_diameter [mm]']) / 2
-    TMP_PARSE.mkdir(parents=True, exist_ok=True)
-    kw = dict(ang_1=ANG_1, ang_2=ANG_2, n_r=N_R, n_a=N_A, tmp_dir=TMP_PARSE)
-    d = _parse_one(p, r_in, r_ext, TMP_PARSE)
+    kw = dict(ang_1=ANG_1, ang_2=ANG_2, n_r=N_R, n_a=N_A)
+    d = _parse_one(p, r_in, r_ext)
     e = parse_ans_gzip_sample_elem(p, r_in, r_ext, **kw)
     sb = parse_ans_gzip_sample_smooth(p, r_in, r_ext, **kw)['FNO_BipartiteGNN']
 
-    mesh = load_ans(p)
+    ans = read_ans(p)
+    mesh = ans.mesh
     B1, B2 = element_b(mesh)
     b1, b2 = nodal_b(mesh, B1, B2)
-    from src.data_gen.parsers.ans_parsing import _to_polar
-    from src.data_gen.parsers.ans_parsing import _read_ans_gz
-    _, nodes, elems = _read_ans_gz(p, TMP_PARSE)
+    nodes, elems = ans.nodes, ans.elems
     cen = nodes[elems[:, :3], :2].mean(axis=1)
     ref = np.stack(_to_polar(b1.mean(axis=1), b2.mean(axis=1), cen[:, 0], cen[:, 1]), axis=1)
     err = np.abs(d['node_y'] - ref).max()

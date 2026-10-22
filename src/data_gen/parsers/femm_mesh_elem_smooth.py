@@ -43,10 +43,10 @@ ELEM_ARCH = 'FNO_BipartiteGNN_Elem'
 def parse_ans_gzip_sample_elem_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
                                       ang_1: float = 0.0, ang_2: float = 120.0,
                                       n_r: int = 138, n_a: int = 276,
-                                      tmp_dir: Path = None, ans: AnsData = None) -> dict:
+                                      ans: AnsData = None) -> dict:
     """1 `.ans.gz` -> layout de femm_mesh_elem.py com node_y/y_hw suavizados
     (ver docstring do módulo). `ans`: `.ans` já lido (read_ans); None = lê de
-    `ans_gz_path` (`tmp_dir` não é mais usado, 2026-10-22: leitura em memória)."""
+    `ans_gz_path`."""
     if ans is None:
         ans = read_ans(ans_gz_path)
     d = parse_ans_gzip_sample_elem(None, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,

@@ -9,7 +9,6 @@ pós-processamento (src/postprocess/), que rodam sem FEMM (Linux).
 """
 import gzip
 import io
-import shutil
 from pathlib import Path
 from typing import NamedTuple
 
@@ -50,19 +49,6 @@ def _parse_solution_lines(lines):
     return lines, nodes, elems
 
 
-def _read_ans_gz(ans_gz_path: Path, tmp_dir: Path):
-    """Descomprime `sample_XXXXXX.ans.gz` num temporário em tmp_dir e devolve
-    _parse_solution dele: (linhas, nodes [S,3] x/y/A, elems [M,4] n1/n2/n3/label)."""
-    stem = ans_gz_path.name.removesuffix('.ans.gz')
-    tmp_ans = tmp_dir / f"{stem}.tmp_unified.ans"
-    with gzip.open(ans_gz_path, 'rb') as f_in, open(tmp_ans, 'wb') as f_out:
-        shutil.copyfileobj(f_in, f_out)
-    try:
-        return _parse_solution(str(tmp_ans))
-    finally:
-        tmp_ans.unlink(missing_ok=True)
-
-
 class AnsData(NamedTuple):
     """`.ans` de uma amostra lido uma vez (read_ans): saída de _parse_solution + AnsMesh do
     load_ans. Passado aos parsers (`ans=`) para não descomprimir/ler o arquivo de novo."""
@@ -73,12 +59,14 @@ class AnsData(NamedTuple):
 
 
 def read_ans(ans_gz_path: Path) -> AnsData:
-    """Descomprime o `.ans.gz` uma vez, em memória (2026-10-22). Cada leitor decodifica o
-    texto como antes: _parse_solution com o open() padrão (codificação do sistema, readlines),
-    load_ans com utf-8/errors='replace' -- arrays idênticos aos das leituras separadas."""
+    """Descomprime o `.ans.gz` uma vez, em memória (2026-10-22) -- leitura única do `.ans`
+    em todo o código (parsers, pós-processamento). Linhas em utf-8 explícito (antes: a
+    codificação padrão do sistema, cp1252 no Windows; os 6000 .ans do raw BLDC_138x276 são
+    ASCII puro -> linhas idênticas, conferido); o AnsMesh (load_ans_lines) com
+    utf-8/errors='replace', como o load_ans."""
     with gzip.open(ans_gz_path, 'rb') as f:
         raw = f.read()
-    lines = io.TextIOWrapper(io.BytesIO(raw)).readlines()
+    lines = io.TextIOWrapper(io.BytesIO(raw), encoding='utf-8').readlines()
     _, nodes, elems = _parse_solution_lines(lines)
     text = io.TextIOWrapper(io.BytesIO(raw), encoding='utf-8', errors='replace').read()
     return AnsData(lines, nodes, elems, load_ans_lines(text.splitlines()))

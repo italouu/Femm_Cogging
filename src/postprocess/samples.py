@@ -25,18 +25,17 @@ from pathlib import Path
 import numpy as np
 
 from src.configs.datagen import DatagenConfig
-from src.data_gen.parsers.ans_b_smoothing import element_b, load_ans, nodal_b
-from src.data_gen.parsers.ans_parsing import _node_material_priority, _parse_label_materials
+from src.data_gen.parsers.ans_b_smoothing import element_b, nodal_b
+from src.data_gen.parsers.ans_parsing import (_node_material_priority, _parse_label_materials,
+                                              read_ans)
 from src.data_gen.parsers.femm_mesh_elem_smooth import parse_ans_gzip_sample_elem_smooth
 from src.data_gen.parsers.femm_mesh_smooth import parse_ans_gzip_sample_smooth
-from src.data_gen.parsers.ans_parsing import _read_ans_gz
 from src.neural_op.dataloaders.grid_loader import split_chunk_paths
 from src.postprocess.metrics import grid_mesh_overlay, mesh_surface_quadrature
 
 _dg = DatagenConfig()
 
 RAW_DIR  = Path('data/raw') / _dg.dataset
-TMP_ROOT = Path('data/temp') / 'postprocess'
 N_R, N_A     = _dg.n_r, _dg.n_a
 ANG_1, ANG_2 = _dg.ang_1, _dg.ang_2
 CHUNK_SIZE   = _dg.chunk_size
@@ -97,7 +96,7 @@ def samples_with_subset(split_run_dir: Path, max_samples=None, n_samples=None):
     return out
 
 
-def parse_smooth(path, row, tmp_dir=TMP_ROOT / 'parse', with_elem=False, with_overlay=False):
+def parse_smooth(path, row, with_elem=False, with_overlay=False, ans=None):
     """1 .ans.gz -> layouts do gabarito smooth {'v1': FNO_GNN, 'bip': FNO_BipartiteGNN}.
     with_elem: acrescenta 'elem' (layout FNO_BipartiteGNN_Elem, gabarito por elemento) e a
     malha para as projeções elemento <-> nó: 'tri' [M,3], 'elem_mat' [M], 'node_mat' [S]
@@ -105,22 +104,25 @@ def parse_smooth(path, row, tmp_dir=TMP_ROOT / 'parse', with_elem=False, with_ov
     Origem do with_elem: tests/resultados/elem_smooth_eval.parse_worker (2026-10-20).
     with_overlay: acrescenta 'overlay' = metrics.grid_mesh_overlay (erro grade × malha por
     interseção célula ∩ triângulo, FEMM = B suavizado P1) -- ~8 s/amostra -- e 'mesh_quad' =
-    metrics.mesh_surface_quadrature (erro de superfície malha × malha) -- ~0,03 s/amostra."""
-    tmp_dir.mkdir(parents=True, exist_ok=True)
+    metrics.mesh_surface_quadrature (erro de superfície malha × malha) -- ~0,03 s/amostra.
+    ans: `.ans` já lido (ans_parsing.read_ans); None = lê de `path` -- uma leitura só por
+    amostra (2026-10-22)."""
+    if ans is None:
+        ans = read_ans(path)
     r_in = float(row['inner_diameter [mm]']) / 2
     r_ext = float(row['outer_diameter [mm]']) / 2
-    kw = dict(ang_1=ANG_1, ang_2=ANG_2, n_r=N_R, n_a=N_A, tmp_dir=tmp_dir)
+    kw = dict(ang_1=ANG_1, ang_2=ANG_2, n_r=N_R, n_a=N_A, ans=ans)
     s = parse_ans_gzip_sample_smooth(path, r_in, r_ext, **kw)
     out = dict(v1=s['FNO_GNN'], bip=s['FNO_BipartiteGNN'])
     if with_elem:
         out['elem'] = parse_ans_gzip_sample_elem_smooth(path, r_in, r_ext, **kw)
-        lines, nodes, elems = _read_ans_gz(path, tmp_dir)
+        lines, nodes, elems = ans.lines, ans.nodes, ans.elems
         label_material_id, _, _ = _parse_label_materials(lines)
         out['elem_mat'] = label_material_id[elems[:, 3]]
         out['node_mat'] = _node_material_priority(elems, out['elem_mat'], nodes.shape[0])
         out['tri'] = elems[:, :3].astype(np.int64)
     if with_overlay:
-        mesh = load_ans(path)
+        mesh = ans.mesh
         B1, B2 = element_b(mesh)
         b1, b2 = nodal_b(mesh, B1, B2)
         out['overlay'] = grid_mesh_overlay(np.stack([mesh.x, mesh.y], axis=1), mesh.p, b1, b2,

@@ -92,11 +92,12 @@ integrais (torque, energia, fluxo concatenado). Os `.ans` do raw atual registram
 torque usa $L$ do CSV.
 
 **Malha**: todo bloco é criado com `mi_setblockprop(..., automesh = 0, meshsize = 1, ...)`:
-com `automesh = 0` o gerador de malha do FEMM usa a restrição de tamanho `meshsize = 1`
-do bloco (registrada como 1 na coluna `MaxArea` dos rótulos do `.ans`). A malha é gerada
-pelo FEMM (`mi_createmesh`, seguido de `mi_analyze`). Mediana por amostra (512
-amostras): $S = 32\,270$ vértices (27 891–36 979) e $M = 63\,825$ triângulos
-(55 165–73 243). [VERIFICAR] o ângulo mínimo da malha (ver lista).
+`automesh = 0` (sem malha automática) e área máxima de elemento de 1 mm² por rótulo
+(coluna `MaxArea` = 1 nos rótulos do `.ans`). Ângulo mínimo efetivo dos triângulos: 30°,
+registrado em `[MinAngle]` do `.ans` (o código passa 200 como `minangle` ao `mi_probdef`, e o
+FEMM aplica 30). A malha é gerada pelo FEMM (`mi_createmesh`, seguido de `mi_analyze`).
+Mediana por amostra (512 amostras): $S = 32\,270$ vértices (27 891–36 979) e
+$M = 63\,825$ triângulos (55 165–73 243).
 
 ### 1.4 Correntes
 

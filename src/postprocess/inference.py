@@ -16,7 +16,7 @@ from src.neural_op.archs.interp import interpolate_grid_to_nodes
 from src.neural_op.normalization import Normalizer
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-INTERP_MODE = 'cell_centered_border'   # rótulo da interpolação grade -> nós (única, archs/interp.py)
+INTERP_MODE = 'cell_centered_circular_theta'   # rótulo da interpolação grade -> nós (única, archs/interp.py)
 
 ARCHS     = ('FNO2d', 'FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN', 'FNO_BipartiteGNN_Elem')
 RUN_ORDER = [(a, l) for a in ARCHS for l in ('mse', 'mae')]

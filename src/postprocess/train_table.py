@@ -13,8 +13,8 @@ SUMMARY_FIELDS = ('n_params_real', 'n_params_trainable_real', 'gpu_peak_mem_gib'
                   'best_epoch', 'last_epoch', 'n_epochs_cfg', 'stop_reason', 'status')
 # colunas de epochs.csv (s por época): total, treino, avaliação (val_loss), métricas B
 EPOCH_COLS = ('epoch_time_s', 'train_time_s', 'eval_time_s', 'metric_time_s')
-# hardware registrado na run pelo treino
-HW_FIELDS = ('device',)
+# hardware registrado em run_summary.json pelo treino (ModelManager._hardware_info)
+HW_FIELDS = ('device', 'gpu_name', 'torch_version', 'cuda_version', 'cudnn_version', 'hostname')
 
 
 def _read_epochs(path: Path):

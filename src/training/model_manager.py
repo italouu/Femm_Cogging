@@ -1,5 +1,6 @@
 import csv
 import json
+import socket
 import subprocess
 import time
 from dataclasses import asdict
@@ -54,6 +55,21 @@ def _postbase_base_info(arch_cfg):
                     base_repeat=base_cfg.get('repeat'),
                     base_git_commit=base_cfg.get('git_commit'))
     return info
+
+
+def _hardware_info(device: str) -> dict:
+    """GPU (nome), versões de torch/CUDA/cuDNN e hostname da máquina do treino."""
+    gpu = None
+    if str(device).startswith('cuda') and torch.cuda.is_available():
+        gpu = torch.cuda.get_device_name(torch.device(device))
+    cudnn = torch.backends.cudnn.version() if torch.backends.cudnn.is_available() else None
+    return {
+        'gpu_name':      gpu,
+        'torch_version': torch.__version__,
+        'cuda_version':  torch.version.cuda,
+        'cudnn_version': cudnn,
+        'hostname':      socket.gethostname(),
+    }
 
 
 class ModelManager:
@@ -237,6 +253,7 @@ class ModelManager:
             'gpu_peak_mem_bytes':     peak,
             'gpu_peak_mem_gib':       round(peak / 2**30, 3) if peak is not None else None,
             'device':                 self._device,
+            **_hardware_info(self._device),
             'checkpoints': {
                 'best':  self.best_path.as_posix() if self.best_path.exists() else None,
                 'final': self.final_path.as_posix(),

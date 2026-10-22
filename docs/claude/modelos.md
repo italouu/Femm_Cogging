@@ -189,7 +189,7 @@ Diretório: `data/logs/<problem>/<arch>/run_XXXX/`.
 | `split.json` | nomes dos chunks de treino / validação / teste (`train`, `val`, `test`) |
 | `metrics.jsonl` | 1 linha por heartbeat (`train_loss`, `val_loss`, lr, tempos, MAE) |
 | `epochs.csv` | 1 linha por época (perdas, lr, tempos de treino/avaliação/métricas, MAE) |
-| `run_summary.json` | status, motivo da parada, melhor época e `best_val_loss`, tempo de parede, pico de memória da GPU |
+| `run_summary.json` | status, motivo da parada, melhor época e `best_val_loss`, tempo de parede, pico de memória da GPU, hardware (`device`, `gpu_name`, `torch_version`, `cuda_version`, `cudnn_version`, `hostname`) |
 | `status.txt`, `notes.txt` | estado (`running`/`done`/`stopped`/`failed`) e notas manuais |
 | `checkpoints/{best,latest}.pth`, `model_final.pth` | `model_state_dict`, `optimizer`, `scheduler`, `epoch` |
 

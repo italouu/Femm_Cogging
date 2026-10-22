@@ -1,11 +1,10 @@
 """
-Custo computacional: FEMM × pré-processamento + inferência (P8, 2026-10-20).
+Custo computacional: FEMM × pré-processamento + inferência.
 
-Método de referência: scripts/pos_bateria_timing.py (git show d912dc3^:...) -- aquecimento,
-repetições com torch.cuda.synchronize, limite de memória da GPU no Windows (sem limite o
-driver WDDM transborda para a RAM em vez de dar OOM). Mudanças: gabarito/entradas dos
-parsers SMOOTH (com o canal J), as 5 archs (inclui a Elem) e só o mi_analyze no cronômetro
-do FEMM (a malha é dada para os dois lados: geometria e malha ficam fora da comparação).
+Método: aquecimento, repetições com torch.cuda.synchronize, limite de memória da GPU no
+Windows (sem limite o driver WDDM transborda para a RAM em vez de dar OOM); entradas dos
+parsers SMOOTH (com o canal J), as 5 archs, e só o mi_analyze no cronômetro do FEMM (a
+malha é dada para os dois lados: geometria e malha ficam fora da comparação).
 
   femm_solve_timed    — redesenha (fase do rotor, amplitude e ângulo da corrente do CSV), gera
                         a malha (fora do cronômetro) e cronometra só o mi_analyze.
@@ -63,7 +62,7 @@ def iqr_stats(x):
 
 
 # --------------------------------------------------------------------------- #
-# hardware / software (origem: pos_bateria_timing.hardware_info)
+# hardware / software
 # --------------------------------------------------------------------------- #
 def _femm_exe_version():
     try:
@@ -123,7 +122,7 @@ def femm_solve_timed(row, work_dir: Path):
     malha à parte (fora da comparação) e o mi_analyze (solução). Retorna (tempos s, .ans).
 
     O tempo "solve" é o do mi_analyze; se o mi_analyze refaz a malha, "solve" = malha +
-    solução. Teste: tests/check_analyze_remesh.py (resultado ainda não registrado)."""
+    solução (se o mi_analyze remalha ou não está em aberto: docs/claude/avaliacao.md §5)."""
     import femm
     from src.data_gen.motor_constants import stack_length_mm
     from src.data_gen.motor_model import BLDC_FEMM_Model_Sym120_Annular
@@ -321,7 +320,7 @@ def encode_timed(runs, arrays):
 
 
 # --------------------------------------------------------------------------- #
-# inferência (origem: pos_bateria_timing._collate/_prepare_inputs/_forward/_time_batch)
+# inferência
 # --------------------------------------------------------------------------- #
 def collate(samples, layout):
     """Concatena amostras (dicts de inference.to_torch_sample()[layout]) com offsets -- a

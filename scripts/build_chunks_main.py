@@ -2,13 +2,12 @@
 build_chunks_main.py
 --------------------
 Chunks dos 4 datasets com gabarito B SUAVIZADO do FEMM (node_y por prioridade
-de material, y_hw = point_b smooth, polares) -- raw -> chunks direto, sem
-staging .npz: pool novo por chunk, escrita atômica (src/data_gen/chunks.py),
-retomável. Parser: parse_smooth_layouts (src/data_gen/parsers/
-smooth_layouts.py; CLAUDE.md "Suavização de B do FEMM a partir do `.ans`").
+de material, y_hw = point_b smooth, polares) -- raw -> chunks direto: pool novo
+por chunk, escrita atômica (src/data_gen/chunks.py), retomável. Parser:
+parse_smooth_layouts (src/data_gen/parsers/smooth_layouts.py; docs/claude/dados.md §2).
 
 Raw de origem: data/raw/<DatagenConfig.dataset>/ -- chunking fixo (CHUNK_SIZE
-amostras, mesma ordem), então o split_seed=12 dá o mesmo split treino/teste.
+amostras, mesma ordem), então o split_seed=12 dá o mesmo split treino/validação/teste.
 Saída: data/torch/data_chunks/<DatagenConfig.dataset>/<arch>/data_chunk_XXXX.pt
 
 Execução (a partir da raiz do projeto):

@@ -91,7 +91,7 @@ def run(_nn):
     monitor = TrainingMonitor(cfg=_nn.monitor_cfg, mgr=mgr)
 
     status = 'failed'
-    stop_reason = 'exception'   # B4 — sobrescrito abaixo se o fit terminar/parar normalmente
+    stop_reason = 'exception'   # sobrescrito abaixo se o fit terminar/parar normalmente
     try:
         model, losses = fit(
             model, train_loader, val_loader,
@@ -103,10 +103,10 @@ def run(_nn):
             monitor=monitor,
             start_epoch=start_epoch,
             prev_losses=prev_losses,
-            epoch_log_fn=mgr.log_epoch,   # B4 — epochs.csv
+            epoch_log_fn=mgr.log_epoch,   # epochs.csv
         )
         status = 'stopped' if monitor.stopped_early else 'done'
-        # B4 — 'gl' | 'early_stop_patience' (monitor) ou 'n_epochs' (rodou até o fim)
+        # 'gl' | 'early_stop_patience' (monitor) ou 'n_epochs' (rodou até o fim)
         stop_reason = monitor.stop_reason or 'n_epochs'
     except KeyboardInterrupt:
         status = 'stopped'

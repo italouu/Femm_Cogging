@@ -1,10 +1,6 @@
 """
-Operações sobre o campo: |B| e raio do entreferro (posição das figuras).
-
-Origem: tests/resultados/common.py (2026-10-13), sem mudança de lógica
-(_mag -> mag, agora pública).
-Não migrados (sem uso desde a remoção do cogging): arc_theta_deg, _barycentric,
-arc_elements, arc_weights, arc_values_from_nodes, to_polar.
+Operações sobre o campo: |B|, raio do entreferro (posição das figuras) e projeções
+elemento <-> nó.
 """
 import numpy as np
 import torch
@@ -28,10 +24,10 @@ def gap_radius_mm(row):
 
 
 # --------------------------------------------------------------------------- #
-# Projeções elemento <-> nó (origem: tests/resultados/elem_smooth_eval.py, 2026-10-20).
+# Projeções elemento <-> nó.
 # Média componente a componente: com alvo polar (Br, Bθ) cada ponto tem o seu
-# referencial, mas vizinhos diferem de ~1° (tamanho da malha / raio) e |B| não muda
-# de forma apreciável -- mantida a lógica original.
+# referencial, mas vizinhos diferem de ~1° (tamanho da malha / raio), então a média
+# das componentes polares é uma aproximação da média vetorial (|B| quase igual).
 # --------------------------------------------------------------------------- #
 def elem_to_nodes(lay, B_elem):
     """[M,2] por elemento -> [S,2] por nó (média dos incidentes do material do nó).

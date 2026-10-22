@@ -1,5 +1,5 @@
 """
-Saturação do aço ligada à curva B-H -- só o gabarito, nenhum modelo (P7, 2026-10-20).
+Saturação do aço ligada à curva B-H -- só o gabarito, nenhum modelo.
 
 Curva B-H: lida do próprio .ans ([BlockProps], blocos com <BHPoints> > 0) e conferida
 igual em todas as amostras. Interpolação como o FEMM (porte de xfemm, REOptimize-Systems/

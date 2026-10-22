@@ -10,13 +10,11 @@ Saída: data/torch/data_chunks/<DatagenConfig.dataset>/<arch>/data_chunk_XXXX.pt
 Retomável: chunks já presentes são pulados (pode rodar de novo após interrupção).
 
 Ordem: precheck do parser Elem (amostra 0) + disco -> 5 datasets numa passada -> contagem final.
-Passada única (2026-10-22): cada amostra é lida e parseada UMA vez
-(elem_smooth.parse_all_layouts) e o chunk de cada arch que faltar é gravado
-(escrita atômica, src/data_gen/chunks.py) -- antes, os 4 datasets e a Elem eram duas passadas
-pelo raw (scripts.build_chunks_main + scripts.build_chunks_elem, que
-continuam executáveis sozinhos). Chunks idênticos aos das duas passadas (torch.equal).
-Medido em 2026-10-13 (Windows local, 6 workers): ~15 s/chunk nos 4 datasets e ~15 s/chunk
-na Elem; ~0,86 GB + ~0,36 GB por chunk -> 2000 amostras ≈ 32 min, ≈ 77 GB.
+Passada única: cada amostra é lida e parseada UMA vez (elem_smooth.parse_all_layouts)
+e o chunk de cada arch que faltar é gravado (escrita atômica, src/data_gen/chunks.py).
+scripts.build_chunks_main (4 datasets) e scripts.build_chunks_elem (Elem) geram os mesmos
+chunks separadamente (torch.equal). Windows, 6 workers: ~17 s/chunk nos 5 datasets;
+~0,86 GB + ~0,36 GB por chunk (188 chunks ≈ 230 GB).
 
 Execução (raiz do projeto):  python -m scripts.build_datasets
 """
@@ -33,7 +31,7 @@ from src.data_gen.chunks import LAYOUT_BY_ARCH, sample_idx as _sample_idx, write
 from src.data_gen.parsers.elem_smooth import parse_all_layouts
 from src.data_gen.parsers.smooth_layouts import SMOOTH_ARCHS
 
-GB_PER_CHUNK = 0.86 + 0.36   # 4 datasets + Elem, medido 2026-10-13
+GB_PER_CHUNK = 0.86 + 0.36   # 4 datasets + Elem (medido)
 ARCHS = (*SMOOTH_ARCHS, elem.OUT_NAME)
 
 
@@ -90,7 +88,7 @@ def run(max_samples=smooth.MAX_SAMPLES, chunk_size=smooth.CHUNK_SIZE,
 
 def main():
     n_samples = smooth.MAX_SAMPLES
-    if n_samples is None:   # todas (2026-10-14): o raw precisa estar completo (DatagenConfig.n_samples)
+    if n_samples is None:   # todas: o raw precisa estar completo (DatagenConfig.n_samples)
         n_raw = len(list(smooth.RAW_DIR.glob("sample_*.ans.gz")))
         if n_raw != DatagenConfig().n_samples:
             print(f"  ERRO: {smooth.RAW_DIR} tem {n_raw} .ans.gz, esperado "

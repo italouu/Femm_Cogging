@@ -1,22 +1,17 @@
 """
-Torque a partir do campo B: FEMM × gabarito × modelos (P6, 2026-10-20).
+Torque a partir do campo B: FEMM × gabarito × modelos.
 
-Origem (migrado sem mudar o método): scripts de scratchpad de sessões anteriores do
-Claude (não estavam em tests/) que geraram resultados/BLDC_138x276/dados/torque_*.json:
-  torque_theta_e.py        -> femm_solve, band_torque, torque_theta_e_s<IDX>.json
-  torque_theta_e_batch.py  -> select_batch_samples, fundamental, curve_row,
-                              torque_theta_e_batch{,_summary}.json (method_check)
-  torque_scatter.py        -> scatter_ids, scatter_stats, torque_scatter.json
-Não migrados: torque_theta_e_multi.py (só figura), torque_theta_e_batch_split.py (proto de
-redes Br/Bθ separadas, fora da bateria), cogging (cogging_elem.json).
+  theta-e : femm_solve, band_torque, curve_row (curvas T(θe) por amostra)
+  batch   : select_batch_samples, fundamental, curve_row, batch_summary (method_check)
+  scatter : scatter_ids, scatter_stats
 
-Método (inalterado):
+Método:
   FEMM   : T22 = mo_blockintegral(22) nos blocos do rotor (rótulos com r > r_m), × 3 setores.
   campo  : tensor de Maxwell médio na faixa de ar do entreferro, com B por elemento:
            T = −3·L/(μ0·(r2−r1)) · Σ_e r·Br·Bθ·A_e (elementos de ar com centróide em (r1, r2);
            sinal: torque no rotor externo), L = stack length do design (coluna stack_length do
            valid_designs.csv, fallback motor_constants.STACK_LENGTH_MM) -- a mesma profundidade
-           do mi_probdef em femm_solve (até 2026-10-21: L = 1 mm e profundidade 0).
+           do mi_probdef em femm_solve.
   gt     : B exato curl(A) por elemento (parse_elem_structure) -- o method_check é
            gt × FEMM T22 (mede o erro do próprio método da faixa, sem modelo).
   smooth : B suavizado no centróide (gabarito da Elem).
@@ -45,15 +40,15 @@ def stack_length_m(row):
 
 
 def femm_ref(row, theta_e, t22):
-    """Registro de cache de 1 solução FEMM (C2, 2026-10-21): T22 do setor + a profundidade
+    """Registro de cache de 1 solução FEMM: T22 do setor + a profundidade
     (stack length) com que foi resolvido -- a mesma de femm_solve(row, ...)."""
     return dict(theta_e_deg=float(theta_e), T22_sector=float(t22),
                 stack_length_mm=stack_length_m(row) * 1e3)
 
 
 def femm_ref_ok(ref, row):
-    """True se o cache foi resolvido com o stack length de `row` (sem o campo: caches
-    anteriores a 2026-10-21, resolvidos com [Depth] = 1 -> inválido)."""
+    """True se o cache foi resolvido com o stack length de `row` (cache sem o campo
+    stack_length_mm -> inválido)."""
     sl = ref.get('stack_length_mm')
     return sl is not None and abs(float(sl) - stack_length_m(row) * 1e3) <= 1e-9 * max(1.0, abs(float(sl)))
 

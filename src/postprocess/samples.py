@@ -88,12 +88,11 @@ def parse_smooth(path, row, with_elem=False, with_overlay=False, ans=None):
     with_elem: acrescenta 'elem' (layout FNO_BipartiteGNN_Elem, gabarito por elemento) e a
     malha para as projeções elemento <-> nó: 'tri' [M,3], 'elem_mat' [M], 'node_mat' [S]
     (material do nó por prioridade ferro>ímã>cobre>ar -- mesma regra do gabarito).
-    Origem do with_elem: tests/resultados/elem_smooth_eval.parse_worker (2026-10-20).
     with_overlay: acrescenta 'overlay' = metrics.grid_mesh_overlay (erro grade × malha por
     interseção célula ∩ triângulo, FEMM = B suavizado P1) -- ~8 s/amostra -- e 'mesh_quad' =
     metrics.mesh_surface_quadrature (erro de superfície malha × malha) -- ~0,03 s/amostra.
     ans: `.ans` já lido (ans_parsing.read_ans); None = lê de `path` -- uma leitura só por
-    amostra (2026-10-22)."""
+    amostra."""
     if ans is None:
         ans = read_ans(path)
     r_in = float(row['inner_diameter [mm]']) / 2

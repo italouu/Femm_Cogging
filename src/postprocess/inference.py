@@ -1,8 +1,6 @@
 """
 Reconstrução de uma run a partir do log (config.json + best.pth) e predição.
-
-Origem: tests/resultados/common.py (2026-10-13), sem mudança de lógica; a raiz
-da bateria passa a ser argumento de find_runs/load_set.
+A raiz da bateria é argumento de find_runs/load_set.
 """
 import json
 from pathlib import Path

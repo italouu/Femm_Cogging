@@ -1,8 +1,7 @@
 """
 Campo previsto × FEMM (ex.: amostras P50/P95), em malha e em grade.
 
-Origem: tests/resultados/figures_smooth.fig_field (2026-10-20), separado em
-cálculo (no executável) e figura (aqui); N archs.
+O cálculo fica no executável (scripts/postprocess.py); aqui só a figura, N archs.
 """
 import numpy as np
 

@@ -9,17 +9,16 @@ Nada aqui treina; lê as runs em data/logs/ e grava em resultados/<dataset>/:
 Subcomandos:
   eval [N_AMOSTRAS] [--subset test|val] — os 10 runs da bateria (5 archs × mse/mae, best.pth)
       nos chunks do subset (padrão 'test', nunca visto no treino; 'val' = conjunto da parada e
-      do best.pth; N -> as N primeiras amostras). ERRO DE SUPERFÍCIE OFICIAL (2026-10-20): superfície discreta do modelo ×
-      superfície do FEMM (B suavizado P1 descontínuo), L1_A / L2_A / B_ref:
+      do best.pth; N -> as N primeiras amostras). ERRO DE SUPERFÍCIE: superfície discreta
+      do modelo × superfície do FEMM (B suavizado P1 descontínuo), L1_A / L2_A / B_ref:
         FNO2d  -> grade (constante na célula) por interseção célula ∩ triângulo;
         Elem   -> P0 (constante no elemento) na própria malha;
         demais -> P1 contínuo dos valores nodais na própria malha.
       Pisos (o gabarito em cada representação): floor_surface (grade, P1_nos, P0_elem).
       Saída: dados/eval_smooth.json + eval_smooth_per_sample.npz
-      [2026-10-20: níveis antigos mesh/grid/grid_inter/elem e pisos elem<->nó removidos.]
-      Secundário (P1, 2026-10-20): erro de |B| ponto a ponto nos nós (MAE_pt, L2_pt,
-      L1_A, L2_A com área dual) -> runs[k]['nodal'], floor_nodal, npz nodal_*.
-      Malha (P2): n_nodes / n_elems por amostra no .npz; mesh_stats no JSON.
+      Secundário: erro de |B| ponto a ponto nos nós (MAE_pt, L2_pt, L1_A, L2_A com área
+      dual) -> runs[k]['nodal'], floor_nodal, npz nodal_*.
+      Malha: n_nodes / n_elems por amostra no .npz; mesh_stats no JSON.
 
   figures [--data DIR] [--out DIR] — depois do eval: 1_curvas_treino, 2_barras_erro
       (L1_A / L2_A de superfície dos 10 runs + piso da representação de cada um),
@@ -30,7 +29,7 @@ Subcomandos:
   surface IDX [LOSS] — erro de superfície dos 5 modelos (loss LOSS, default mae) em 1
       amostra: dados/surface_error/sample_XXXXXX_<loss>.{json,npz} + mapa da densidade do
       erro por triângulo em plots/surface_error/sample_XXXXXX_<loss>.png.
-  surface --pct P [LOSS] [--eval-data DIR] — (P4) a amostra do percentil P do L1_A de
+  surface --pct P [LOSS] [--eval-data DIR] — a amostra do percentil P do L1_A de
       superfície da REF_RUN no .npz do eval (mesma regra de figures); sufixo _P<P>.
       Mapa: mesma escala em todos os painéis, contornos dos materiais, painel extra com o
       piso da representação em grade.
@@ -40,25 +39,25 @@ Subcomandos:
       tempo mediano por época (treino / avaliação / métricas) e total, melhor/última época,
       motivo da parada, hardware registrado. Saída: dados/train_table.json.
 
-  regions [N] [--d-int MM] [--d-canto MM] [--ang-canto GRAUS] — (P5) erro de superfície
+  regions [N] [--d-int MM] [--d-canto MM] [--ang-canto GRAUS] — erro de superfície
       por região do triângulo do FEMM: canto (a até d_canto de um vértice de fronteira com
       mudança de direção > ang_canto, ramificação ou ≥ 3 materiais) > interface (a até d_int
       de uma aresta entre materiais) > interior. Por run e por piso: L1_A/L2_A (% do B_ref
       global), fração da área e da contribuição ao L1_A. Padrão: d_int = 1 passo radial da
       grade, d_canto = 2 passos, 30°. Saída: dados/regions.json + plots/regions_sample_*.png.
 
-  torque {theta-e,batch,scatter} [--loss L] [--archs ...] [--femm] — (P6) torque pelo tensor
-      de Maxwell na faixa do entreferro (B por elemento) × FEMM T22, migrado dos scripts que
-      geraram dados/torque_*.json, para as 5 archs da loss escolhida. Soluções FEMM em
-      data/temp/torque_theta_e{,_batch}/ (--femm resolve). Saída: dados/torque/.
+  torque {theta-e,batch,scatter} [--loss L] [--archs ...] [--femm] — torque pelo tensor
+      de Maxwell na faixa do entreferro (B por elemento) × FEMM T22, para as 5 archs da loss
+      escolhida. Soluções FEMM em data/temp/torque_theta_e{,_batch}/ (--femm resolve).
+      Saída: dados/torque/.
 
-  saturation [N] [--knee-frac F ...] [--check-femm] — (P7) só o gabarito: curva B-H do aço
+  saturation [N] [--knee-frac F ...] [--check-femm] — só o gabarito: curva B-H do aço
       lida do .ans (conferida igual em todas as amostras; interpolação do FEMM), |B| suavizado
       no centróide dos elementos de aço e μ_eff; figura A (curva + μ_eff + distribuição dos
       pontos de operação) e B (|B| no aço, amostras P50 e de maior |B| médio, contornos no
       joelho). Saída: dados/saturation.json + plots/saturacao_*.
 
-  timing [femm|infer|all] [--n-femm 50] — (P8, máquina Windows com FEMM e GPU) custo
+  timing [femm|infer|all] [--n-femm 50] — (máquina Windows com FEMM e GPU) custo
       computacional com a malha dada aos dois lados: FEMM = só o mi_analyze (redesenho com os
       parâmetros do CSV, malha fora do cronômetro; malha e A conferidos × raw); pré-
       processamento .ans -> entrada codificada por etapa (funções dos parsers smooth,
@@ -191,7 +190,7 @@ NODAL_COLS = ('MAE_pt', 'L2_pt', 'L1_area', 'L2_area')   # colunas nodal_* do .n
 
 
 def _count_stats(v):
-    """Mediana, mínimo, p5, p95 e máximo de uma contagem por amostra (P2)."""
+    """Mediana, mínimo, p5, p95 e máximo de uma contagem por amostra."""
     v = np.asarray(v)
     return dict(median=float(np.median(v)), min=int(v.min()), p5=float(np.percentile(v, 5)),
                 p95=float(np.percentile(v, 95)), max=int(v.max()), n=int(v.size))
@@ -207,9 +206,9 @@ def _nodal_mag(arch, lay, yn):
 
 
 def run_eval(out_dir: Path, max_samples=None, subset='test'):
-    """Erro de superfície oficial (CLAUDE.md, "Convenção de erro"): superfície discreta de
-    cada modelo × superfície do FEMM (B suavizado P1 descontínuo); L1_A, L2_A, B_ref.
-    Secundário (P1, 2026-10-20): erro de |B| ponto a ponto nos nós (gabarito node_y do
+    """Erro de superfície (docs/claude/avaliacao.md §1): superfície discreta de cada
+    modelo × superfície do FEMM (B suavizado P1 descontínuo); L1_A, L2_A, B_ref.
+    Secundário: erro de |B| ponto a ponto nos nós (gabarito node_y do
     layout v1, área dual) -> runs[k]['nodal'] e floor_nodal (piso da grade: y_hw
     interpolado nos nós, floor_nodes); não substitui a superfície.
     Saída: eval_smooth.json (runs + floor_surface + floor_nodal) e eval_smooth_per_sample.npz
@@ -232,7 +231,7 @@ def run_eval(out_dir: Path, max_samples=None, subset='test'):
     per_nodal = {k: [] for k in runs}
     per_floor_nodal = []
     ids, subs = [], []
-    n_nodes, n_elems = [], []          # estatística da malha (P2)
+    n_nodes, n_elems = [], []          # estatística da malha
 
     groups = {}
     for name, sub, idx, p in samples:
@@ -303,7 +302,7 @@ def run_eval(out_dir: Path, max_samples=None, subset='test'):
             surface_kind=_surface_kind(r['arch']),
             surface=reports(lambda ss, k=k: merge([acc[(k, s)] for s in ss])),
             per_sample_L1_A={sub: pstats(arr[subs_arr == sub, 0]) for sub in present})
-    # nível secundário (P1, 2026-10-20) -- chaves novas, as acima não mudam
+    # nível secundário: erro nodal
     for k in runs:
         res['runs'][k]['nodal'] = reports(lambda ss, k=k: merge([acc_nodal[(k, s)] for s in ss]))
     res['floor_nodal'] = reports(lambda ss: merge([acc_floor_nodal[s] for s in ss]))
@@ -311,7 +310,7 @@ def run_eval(out_dir: Path, max_samples=None, subset='test'):
                            'layout v1, área dual do nó; FNO2d interpolado nos nós (modo da '
                            'bateria), Elem -> nós por elem_to_nodes; piso = y_hw do gabarito '
                            f'interpolado nos nós ({INTERP_MODE})')
-    # estatística da malha (P2, 2026-10-20)
+    # estatística da malha
     res['mesh_stats'] = {name: _count_stats(v) for name, v in (('n_nodes', n_nodes),
                                                                ('n_elems', n_elems))}
 
@@ -423,7 +422,7 @@ def _pick_by_pct(per, q, ref_run=REF_RUN):
 def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_dir=None):
     """Erro de superfície oficial em 1 amostra: L1_A/L2_A de cada modelo e mapa da
     densidade do erro por triângulo do FEMM (surface_error_per_triangle), com o piso da
-    representação em grade como painel extra e contornos dos materiais (P4, 2026-10-20).
+    representação em grade como painel extra e contornos dos materiais.
     pct: escolhe a amostra pelo percentil do L1_A de superfície da REF_RUN no .npz do eval
     (eval_dir) -- sample_idx ignorado."""
     apply_style()
@@ -483,10 +482,10 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
 
 def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_int=None, d_canto=None,
                 ang_canto=30.0, subset='test'):
-    """Estratificação espacial do erro de superfície (P5): cada triângulo do FEMM em
+    """Estratificação espacial do erro de superfície: cada triângulo do FEMM em
     interior / interface / canto (regions.classify_triangles) e o erro de superfície de
     cada run e de cada piso acumulado por região (pontos de quadratura -> triângulo).
-    Mesmo conjunto do eval. Padrão: d_int = 1 passo radial da grade, d_canto = 2 passos."""
+    Subset como no eval. Padrão: d_int = 1 passo radial da grade, d_canto = 2 passos."""
     out_dir.mkdir(parents=True, exist_ok=True)
     dr = (R_EXT_MM - R_IN_MM) / N_R
     d_int = dr if d_int is None else d_int
@@ -566,7 +565,7 @@ def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_int=None, d_ca
     print(f"salvo em {out_dir / 'regions.json'}; figura em {fig_dir}")
 
 
-TORQUE_TMP = Path('data/temp')     # soluções FEMM das varreduras (as mesmas dos JSONs antigos)
+TORQUE_TMP = Path('data/temp')     # soluções FEMM das varreduras (torque_theta_e{,_batch}/)
 TORQUE_WORKERS, TORQUE_FEMM_WORKERS = 6, 8
 
 
@@ -576,9 +575,8 @@ def _torque_runs(loss, archs):
 
 
 def _torque_sweep_dir(idx, work_dir=TORQUE_TMP):
-    """Pasta da varredura θe de 1 amostra (amostra 15 na raiz, como nos JSONs antigos)."""
-    root = Path(work_dir) / 'torque_theta_e'
-    return root if idx == 15 else root / f'sample_{idx:06d}'
+    """Pasta da varredura θe de 1 amostra."""
+    return Path(work_dir) / 'torque_theta_e' / f'sample_{idx:06d}'
 
 
 def _femm_batch_one(idx, k, th, row, work_dir=TORQUE_TMP):
@@ -597,7 +595,7 @@ def _femm_batch_one(idx, k, th, row, work_dir=TORQUE_TMP):
 def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
                idxs=(15,), n_theta=None, n_samples=80, n_per_chunk=8, limit=None,
                raw_dir=None, work_dir=None, subset='test'):
-    """Torque (P6): theta-e (varredura θe de amostras), batch (n_samples amostras do subset
+    """Torque: theta-e (varredura θe de amostras), batch (n_samples amostras do subset
     estratificadas por corrente × n_theta ângulos, resumo da fundamental) ou scatter (torque
     das n_per_chunk primeiras amostras de cada chunk do subset). FEMM T22 × gt × smooth ×
     modelos da loss escolhida. subset: 'test' (padrão) ou 'val'.
@@ -658,8 +656,8 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
         n_theta = n_theta or 16
         ids = select_batch_samples(split_run, rows, n_samples, subset=subset)
         root = work_dir / 'torque_theta_e_batch'
-        # C2: com --femm, todos os ângulos (_femm_batch_one pula só os caches válidos); sem --femm,
-        # só os caches existentes com outra profundidade (ou sem o campo) são descartados e ressolvidos
+        # com --femm, todos os ângulos (_femm_batch_one pula só os caches válidos); sem --femm,
+        # só os caches existentes resolvidos com outra profundidade (femm_ref_ok) são ressolvidos
         tasks = [(i, k, th) for i in ids for k, th in enumerate(torque_thetas(n_theta))]
         if not femm:
             jsons = {(i, k): root / f'sample_{i:06d}' / f'theta_{k:02d}.json' for i, k, _ in tasks}
@@ -733,10 +731,10 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
 
 def run_saturation(out_dir: Path, fig_dir: Path, max_samples=None, knee_fracs=(0.5,),
                    check_femm=False, subset='test'):
-    """Saturação do aço (P7), só sobre o gabarito: curva B-H do .ans (conferida igual em todas
+    """Saturação do aço, só sobre o gabarito: curva B-H do .ans (conferida igual em todas
     as amostras), pontos de operação dos elementos de aço (|B| suavizado no centróide) e
     μ_eff; figura A (curva + distribuição) e B (|B| no aço nas amostras P50 e de maior |B|
-    médio no aço, com contornos no joelho). Mesmo conjunto do eval."""
+    médio no aço, com contornos no joelho). Subset como no eval."""
     out_dir.mkdir(parents=True, exist_ok=True)
     apply_style()
     rows = design_rows()
@@ -951,7 +949,7 @@ def _timing_table(out_json):
 
 def run_timing(what, out_dir: Path, n_femm=50, n_warmup=10, n_reps=100, max_batch=512,
                n_infer_samples=32, subset='test'):
-    """Custo computacional (P8): FEMM (só mi_analyze) | pré-processamento | inferência."""
+    """Custo computacional: FEMM (só mi_analyze) | pré-processamento | inferência."""
     out_dir.mkdir(parents=True, exist_ok=True)
     out_json = out_dir / 'timing.json'
     runs = load_set(ROOT_S)
@@ -965,7 +963,7 @@ def run_timing(what, out_dir: Path, n_femm=50, n_warmup=10, n_reps=100, max_batc
 
 
 def run_train_table(out_dir: Path):
-    """Tabela de treinamento (P3): só leitura dos logs das runs de find_runs(ROOT_S)."""
+    """Tabela de treinamento: só leitura dos logs das runs de find_runs(ROOT_S)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     res = train_table(find_runs(ROOT_S))
     (out_dir / 'train_table.json').write_text(json.dumps(res, indent=2))
@@ -1021,7 +1019,7 @@ if __name__ == '__main__':
     p_tq = sp.add_parser('torque', help='torque FEMM × gabarito × modelos (theta-e/batch/scatter)')
     p_tq.add_argument('mode', choices=('theta-e', 'batch', 'scatter'))
     p_tq.add_argument('--idx', type=int, nargs='+', default=[15, 128, 130, 142, 151],
-                      help='theta-e: amostras (default: as dos JSONs antigos)')
+                      help='theta-e: índices das amostras no raw')
     p_tq.add_argument('--loss', default='mae', choices=('mse', 'mae'))
     p_tq.add_argument('--archs', nargs='+', default=None, help='default: as 5 archs')
     p_tq.add_argument('--femm', action='store_true', help='resolve as varreduras no FEMM antes')

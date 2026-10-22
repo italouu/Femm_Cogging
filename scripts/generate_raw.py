@@ -111,9 +111,9 @@ def multi_process(indices, motor_params_list, out_dir, max_workers):
 
 
 def _check_existing_raw(motor_params_list):
-    """Recusa completar um raw já existente com parâmetros de outras colunas (2026-10-14):
-    ex. raw sem correntes + current_peak > 0 -> as amostras novas teriam corrente e as
-    antigas não, e o valid_designs.csv (reescrito abaixo) não descreveria as antigas."""
+    """Recusa completar um raw já existente com parâmetros de outras colunas: ex. raw sem
+    correntes + current_peak > 0 -> as amostras novas teriam corrente e as existentes não,
+    e o valid_designs.csv (reescrito abaixo) não descreveria as existentes."""
     csv_path = OUT_DIR / "valid_designs.csv"
     if not csv_path.exists() or not any(OUT_DIR.glob("sample_*.ans.gz")):
         return
@@ -126,8 +126,8 @@ def _check_existing_raw(motor_params_list):
             f"(faltando: {sorted(set(new_cols) - set(old_cols))}, sobrando: "
             f"{sorted(set(old_cols) - set(new_cols))}) — use outro DatagenConfig.dataset "
             f"ou confira DatagenConfig.current_peak")
-    # 2026-10-21: mesmas colunas não bastam (ex.: stack_length fixo muda a sequência do gerador
-    # e todas as geometrias, sem mudar nenhuma coluna) -- os VALORES sorteados também precisam
+    # mesmas colunas não bastam (uma mudança no sampler muda a sequência do gerador e todas
+    # as geometrias, sem mudar nenhuma coluna) -- os VALORES sorteados também precisam
     # bater com o valid_designs.csv existente, nas linhas em comum.
     with open(csv_path, newline='') as f:
         old_rows = list(csv.reader(f))[1:]
@@ -147,7 +147,7 @@ def run():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     motor_params_list = BLDC_Process.generate_samples(num_samples=N_SAMPLES, seed=_dg.datagen_seed)
-    # correntes de fase (2026-10-14) — sorteio próprio, não altera a geometria
+    # correntes de fase — sorteio próprio, não altera a geometria
     if _dg.current_peak > 0:
         BLDC_Process.add_phase_currents(motor_params_list, i_peak=_dg.current_peak,
                                         seed=_dg.datagen_seed)

@@ -1,9 +1,7 @@
 """
 Primitivas de plot reutilizadas por todas as figuras (recebem `ax`, não chamam plt.show).
 
-save_fig: origem tests/resultados/common.py (2026-10-13).
-Estilo (cores, B_VMAX, rcParams): origem tests/resultados/common.py e figures_smooth.py
-(2026-10-20); cor nova para a FNO_BipartiteGNN_Elem.
+save_fig + estilo comum (cores por arch, B_VMAX, rcParams).
 """
 from pathlib import Path
 

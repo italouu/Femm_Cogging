@@ -1,13 +1,10 @@
 """
-Métricas de erro de |B| (convenção do CLAUDE.md, "Convenção de erro dos resultados"):
+Métricas de erro de |B| (docs/claude/avaliacao.md §1):
   e = | |B|_pred - |B|_true | por ponto; L1_A = Σe·a/Σa, L2_A = √(Σe²·a/Σa);
   MAE_pt = média simples de e; % relativo a B_ref = √(Σ|B|_true²·a/Σa);
   a = área dual do nó (malha) / área do elemento / r·dr·dθ (grade).
-
-Origem: tests/resultados/common.py (2026-10-13), sem mudança de lógica.
-L2 ponto a ponto na Accum: 2026-10-15. Erro grade × malha por interseção célula ∩
-triângulo (célula = quadrilátero de lados retos, FEMM = B suavizado P1): grid_mesh_overlay
-+ Accum.add_surface, 2026-10-20.
+Erro de superfície grade × malha por interseção célula ∩ triângulo (célula = quadrilátero
+de lados retos, FEMM = B suavizado P1): grid_mesh_overlay + Accum.add_surface.
 """
 import math
 
@@ -25,7 +22,7 @@ class Accum:
     def __init__(self):
         self.num_l1 = self.num_l2 = self.den_area = self.num_ref = 0.0
         self.sum_abs = 0.0
-        self.sum_sq = 0.0          # Σe² sem peso -> L2 ponto a ponto (2026-10-15)
+        self.sum_sq = 0.0          # Σe² sem peso -> L2 ponto a ponto
         self.n_pts = 0
 
     def add(self, mag_pred, mag_true, area):
@@ -56,7 +53,7 @@ class Accum:
 
     def add_surface(self, mag_pred, mag_true, w):
         """Só as integrais de superfície (L1_A, L2_A, B_ref) -- pontos de quadratura
-        com peso w (grid_mesh_overlay); o ponto a ponto não se aplica (2026-10-20)."""
+        com peso w (grid_mesh_overlay); o ponto a ponto não se aplica."""
         e = np.abs(mag_pred - mag_true).astype(np.float64)
         w = np.asarray(w, np.float64)
         t = mag_true.astype(np.float64)
@@ -81,7 +78,7 @@ def pstats(v):
 
 def _cell_corners(r_in, r_ext, a1, a2, n_r, n_a):
     """Cantos (x,y) [n_r*n_a, 4, 2] das células da grade (row-major r, depois θ),
-    ligados por segmentos retos -- célula = quadrilátero, não setor (decisão 2026-10-10)."""
+    ligados por segmentos retos -- célula = quadrilátero, não setor."""
     r = np.linspace(r_in, r_ext, n_r + 1)
     a = np.linspace(a1, a2, n_a + 1)
     R0, A0 = np.meshgrid(r[:-1], a[:-1], indexing='ij')
@@ -94,8 +91,8 @@ def _cell_corners(r_in, r_ext, a1, a2, n_r, n_a):
 def grid_mesh_overlay(xy, tri, b1, b2, r_in, r_ext, n_r, n_a,
                       ang_1=ANG1_DEG, ang_2=ANG2_DEG, n_sub=1):
     """Sobreposição grade H×W ∩ malha do FEMM para o erro de superfície grade × malha
-    (CLAUDE.md, "Convenção de erro": interseção célula ∩ triângulo, célula de lados
-    retos; valor do FEMM = B suavizado P1 no triângulo -- decisão do usuário 2026-10-20).
+    (interseção célula ∩ triângulo, célula de lados retos; valor do FEMM = B suavizado
+    P1 no triângulo).
 
     xy [N,2] nós (mm), tri [M,3], b1/b2 [M,3] B suavizado por vértice de cada elemento
     (ans_b_smoothing.nodal_b, P1 descontínuo). Cada pedaço célula ∩ triângulo é
@@ -193,7 +190,7 @@ def _ref_quadrature(n_sub):
 
 def mesh_surface_quadrature(xy, tri, b1, b2, n_sub=2):
     """Quadratura da superfície do FEMM na PRÓPRIA malha (erro de superfície malha × malha,
-    sem interseção -- 2026-10-20). FEMM = B suavizado P1 descontínuo (b1/b2 [M,3] de
+    sem interseção). FEMM = B suavizado P1 descontínuo (b1/b2 [M,3] de
     nodal_b); cada triângulo dividido em 4^n_sub, 3 pontos médios por subtriângulo.
     Retorna bary [K,3], area [M] (mm²), mag [M,K] |B|_FEMM nos pontos.
     Superfície do modelo nos mesmos pontos: surface_values_p1 (saída por nó) ou o valor

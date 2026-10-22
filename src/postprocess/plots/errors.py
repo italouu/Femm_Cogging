@@ -48,7 +48,7 @@ def fig_bars(res, run_order):
 
 
 def fig_surface_error_map(res, xy, elems, E, archs, iface, floor):
-    """Mapa por triângulo do erro de superfície (P4, 2026-10-20): 1 painel por arch +
+    """Mapa por triângulo do erro de superfície: 1 painel por arch +
     1 painel com o piso da representação em grade (floor = (rótulo, E_piso [M], dict com
     L1_A/L2_A)); MESMA escala de cor em todos (corte no p99 de todos os painéis, piso
     incluído); contornos das fronteiras entre materiais (iface [K,2], regions.interface_edges)
@@ -106,7 +106,7 @@ def fig_surface_error_map(res, xy, elems, E, archs, iface, floor):
 
 
 def fig_regions(xy, elems, region, iface, corners, names, title, zoom=None):
-    """Verificação da estratificação espacial (P5): triângulos coloridos pela região
+    """Verificação da estratificação espacial: triângulos coloridos pela região
     (names[código]), fronteiras entre materiais e vértices de canto; zoom = (x, y, meia
     largura) mm opcional (2º painel)."""
     import matplotlib.pyplot as plt

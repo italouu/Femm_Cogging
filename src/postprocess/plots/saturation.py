@@ -1,5 +1,5 @@
 """
-Figuras de saturação do aço (P7, 2026-10-20): curva B-H × pontos de operação e mapa de |B|
+Figuras de saturação do aço: curva B-H × pontos de operação e mapa de |B|
 no aço com contornos no joelho.
 """
 import numpy as np

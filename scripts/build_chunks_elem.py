@@ -1,7 +1,7 @@
 """
 build_chunks_elem.py
 --------------------
-Chunks do FNO_BipartiteGNN_Elem com gabarito B SUAVIZADO do FEMM (2026-10-10):
+Chunks do FNO_BipartiteGNN_Elem com gabarito B SUAVIZADO do FEMM:
 raw -> chunks direto, pool novo por chunk, escrita atômica (src/data_gen/chunks.py),
 retomável. Parser: parse_elem_smooth
 (src/data_gen/parsers/elem_smooth.py). O scripts.build_datasets gera
@@ -14,8 +14,8 @@ Saída: data/torch/data_chunks/<DatagenConfig.dataset>/FNO_BipartiteGNN_Elem/
 
 Precheck (amostra 0, pular com --no-precheck): x_hw/y_hw idênticos ao layout
 smooth da bipartite; node_y == média dos 3 valores nodais suavizados do
-elemento; estrutura (grafo dual, vértices, arestas cruzadas) idêntica à do
-protótipo sem smooth.
+elemento; estrutura (grafo dual, vértices, arestas cruzadas) idêntica à de
+parse_elem_structure (layout Elem com o curl(A) exato do torque).
 
 Execução (raiz do projeto; Windows ou VM Linux):
     python -m scripts.build_chunks_elem
@@ -34,7 +34,7 @@ from src.configs.datagen import DatagenConfig
 from src.data_gen.chunks import sample_idx as _sample_idx, write_chunk
 from src.data_gen.parsers.elem_smooth import parse_elem_smooth
 
-MIN_FREE_GB = 55   # valor de scripts/build_elem_proto_chunks.py (chunks de 4000 amostras ~47 GB)
+MIN_FREE_GB = 55   # espaço livre mínimo [GB] exigido antes de gerar a Elem
 N_RAW_EXPECTED = DatagenConfig().n_samples   # precheck com max_samples=None: raw completo
 OUT_NAME  = 'FNO_BipartiteGNN_Elem'
 
@@ -134,8 +134,8 @@ def precheck(out_name=OUT_NAME, max_samples=MAX_SAMPLES) -> bool:
         'x_hw/y_hw idênticos ao layout smooth da bipartite':
             np.array_equal(d['x_hw'], sb['x_hw']) and np.array_equal(d['y_hw'], sb['y_hw']),
         f'node_y == média dos 3 valores nodais suavizados, em (Br, Bθ) (max |dif| {err:.1e} T)': err < 1e-5,
-        'estrutura idêntica ao protótipo sem smooth': same_struct,
-        'node_y difere do curl(A) P0 do protótipo sem smooth':
+        'estrutura idêntica à de parse_elem_structure': same_struct,
+        'node_y difere do curl(A) P0 exato (parse_elem_structure)':
             not np.array_equal(d['node_y'], e['node_y']),
         'tudo finito': all(np.isfinite(v).all() for v in d.values()),
     }

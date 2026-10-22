@@ -1,10 +1,10 @@
 """
-Geometria das fronteiras entre materiais na malha do FEMM (2026-10-20).
+Geometria das fronteiras entre materiais na malha do FEMM.
 
-  interface_edges — arestas compartilhadas por elementos de materiais diferentes (P4:
-                    contornos nos mapas de erro; P5: estratificação espacial).
+  interface_edges — arestas compartilhadas por elementos de materiais diferentes
+                    (contornos nos mapas de erro; estratificação espacial).
   corner_nodes / classify_triangles / RegionAccum — estratificação espacial do erro de
-                    superfície em interior / interface / canto (P5).
+                    superfície em interior / interface / canto.
 
 Material por elemento = material do rótulo (samples.parse_smooth(..., with_elem=True)
 -> lay['elem_mat'], via ans_parsing._parse_label_materials).
@@ -48,7 +48,7 @@ def interface_edges(tri, elem_mat):
 
 
 # --------------------------------------------------------------------------- #
-# Estratificação espacial do erro de superfície (P5, 2026-10-20)
+# Estratificação espacial do erro de superfície
 # --------------------------------------------------------------------------- #
 REGIONS = ('interior', 'interface', 'canto')     # código = índice; canto > interface
 

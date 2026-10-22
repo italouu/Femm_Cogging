@@ -26,8 +26,7 @@ class FNO_BipartiteGNN(torch.nn.Module):
     message passing) + elementos estáticos (nunca atualizados, injetados a
     cada camada via arestas cruzadas) -- ver
     src/neural_op/archs/_blocks.py::BipartiteGNN e src/data_gen/parsers/bipartite_structure.py
-    para o contrato de dados. Decisão de arquitetura registrada na conversa
-    de 2026-08-10 (ver CLAUDE.md).
+    para o contrato de dados (docs/claude/modelos.md §3–4).
 
     Pipeline
     --------
@@ -49,7 +48,7 @@ class FNO_BipartiteGNN(torch.nn.Module):
                  edge_dim, grid_in_ch, grid_out_ch, node_in_ch,
                  elem_in_ch, cross_edge_dim):
         super().__init__()
-        # B2 — FNO@nós sempre recodificado (fno_gnn.py::_rescale_fno_to_node_space)
+        # FNO@nós recodificado de stats y_hw -> node_y (fno_gnn.py::_rescale_fno_to_node_space)
         self.normalizer = None   # atribuído externamente (scripts/train.py, postprocess/inference.py)
 
         self.fno = FNO2d(

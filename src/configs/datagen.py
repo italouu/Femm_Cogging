@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class DatagenConfig:
-    # raw com correntes de fase (current_peak abaixo), 6000 amostras — 2026-10-14
+    # raw com correntes de fase (current_peak abaixo), 6000 amostras
     dataset: str = 'BLDC_138x276'
 
     # Grade / Geometria
@@ -18,16 +18,15 @@ class DatagenConfig:
     distribution: str = 'uniform'
     n_samples: int = 6000
     datagen_seed: int = 12
-    # Correntes de fase (2026-10-14): pico [A] por fase do sorteio equilibrado
+    # Correntes de fase: pico [A] por fase do sorteio equilibrado
     # (I ~ U[0, current_peak], θe ~ U[0, 360°) — BLDC_Process.add_phase_currents).
-    # 0 = sem correntes (raw sem as colunas current_* -> 0 A, como antes).
+    # 0 = sem correntes (raw sem as colunas current_*; o desenho usa 0 A).
     current_peak: float = 10.0
 
     # Prepare / chunks
     chunk_size: int = 32
     # workers do parse raw -> chunks (scripts/build_chunks_main.py,
-    # scripts/build_chunks_elem.py, scripts/build_datasets.py; até 2026-10-22
-    # npz_max_workers)
+    # scripts/build_chunks_elem.py, scripts/build_datasets.py)
     chunk_max_workers: int = 6
 
     # workers da geração do raw (scripts/generate_raw.py)

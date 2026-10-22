@@ -5,7 +5,7 @@ from typing import Optional
 @dataclass
 class MonitorCfg:
     checkpoint_every:     int           = 10
-    # paciência ligada por default (2026-10-03): com None, runs estagnadas iam até n_epochs
+    # paciência ligada por default: com None, uma run estagnada vai até n_epochs
     early_stop_patience:  Optional[int] = 10    # heartbeats sem novo best (estagnação);
                                                  # None = desativado; respeita min_epochs
     early_stop_min_delta: float         = 1e-6
@@ -13,7 +13,7 @@ class MonitorCfg:
                                                   # None = desativado; ativo por padrão (GL_5)
     gl_patience:          int           = 3      # heartbeats CONSECUTIVOS com GL > gl_threshold
                                                   # antes de parar (piora sustentada, não um
-                                                  # heartbeat ruidoso/pico isolado); 1 = antigo
+                                                  # heartbeat ruidoso/pico isolado); 1 = para no 1º
     min_epochs:           int           = 100    # nenhum critério de parada age antes disso
                                                   # (ruído do início do treino); 0 = desativado
     save_best:            bool          = True

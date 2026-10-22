@@ -169,7 +169,7 @@ class GNN(nn.Module):
 
 # ---------------------------------------------------------------------------
 # Grafo duplo (mode='bipartite', ver src/data_gen/parsers/bipartite_structure.py e
-# CLAUDE.md/conversa 2026-08-10): vértices (iterado) + elementos (estático,
+# docs/claude/modelos.md §3): vértices (iterado) + elementos (estático,
 # nunca atualizado, só injeta via arestas cruzadas). EdgeMessageBlock isola
 # só a parte de "mensagem" do EdgeConvLayer (gate × transform + soma) — sem
 # a atualização de nó — pra ser reaproveitada tanto nas arestas vértice-

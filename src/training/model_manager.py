@@ -8,10 +8,10 @@ from pathlib import Path
 
 import torch
 
-from src.neural_op.training_utils import count_params, count_params_real
+from src.neural_op.training_utils import count_params_real
 
 
-# B4 (2026-10-03) — colunas de epochs.csv (uma linha por época)
+# colunas de epochs.csv (uma linha por época)
 EPOCH_CSV_FIELDS = ('epoch', 'train_loss', 'val_loss', 'mae_hw', 'mae_graph', 'lr',
                     'epoch_time_s', 'train_time_s', 'eval_time_s', 'metric_time_s')
 
@@ -51,7 +51,7 @@ def _postbase_base_info(arch_cfg):
     if cfg_path.exists():
         base_cfg = json.loads(cfg_path.read_text(encoding='utf-8'))
         info.update(base_arch=base_cfg.get('arch'), base_loss=base_cfg.get('loss'),
-                    base_repeat=base_cfg.get('repeat', 0),
+                    base_repeat=base_cfg.get('repeat'),
                     base_git_commit=base_cfg.get('git_commit'))
     return info
 
@@ -90,8 +90,8 @@ class ModelManager:
         self._metrics_path  = self.run_dir / 'metrics.jsonl'
         self._status_path   = self.run_dir / 'status.txt'
         self._notes_path    = self.run_dir / 'notes.txt'
-        self._epochs_path   = self.run_dir / 'epochs.csv'        # B4
-        self._summary_path  = self.run_dir / 'run_summary.json'  # B4
+        self._epochs_path   = self.run_dir / 'epochs.csv'
+        self._summary_path  = self.run_dir / 'run_summary.json'
         self._t_open        = None
         self._device        = None
         self._n_params      = {}
@@ -110,13 +110,11 @@ class ModelManager:
             pós-processamento (src/postprocess/samples.py) para reproduzir o split.
         """
         cfg_dict               = asdict(self.cfg)
-        cfg_dict['n_params']   = count_params(model)
         cfg_dict['device']     = str(device)
         cfg_dict['start_time'] = datetime.now().isoformat(timespec='seconds')
         if resumed_from is not None:
             cfg_dict['resumed_from'] = str(resumed_from)
-        # B4 (2026-10-03) — parâmetros reais (complexo ×2) e treináveis, git,
-        # base exata do GNN_PostBase. n_params acima mantido (convenção antiga, numel).
+        # parâmetros reais (complexo ×2) e treináveis, git, base exata do GNN_PostBase
         self._n_params = {
             'n_params_real':           count_params_real(model),
             'n_params_trainable_real': count_params_real(model, trainable_only=True),
@@ -129,7 +127,7 @@ class ModelManager:
         self._config_path.write_text(json.dumps(cfg_dict, indent=2))
         self._git = {k: cfg_dict.get(k) for k in ('git_commit', 'git_dirty')}
 
-        # B4 — epochs.csv (cabeçalho) + relógio de parede + pico de memória da GPU
+        # epochs.csv (cabeçalho) + relógio de parede + pico de memória da GPU
         with self._epochs_path.open('w', newline='') as f:
             csv.writer(f).writerow(EPOCH_CSV_FIELDS)
         self._t_open = time.perf_counter()
@@ -174,7 +172,7 @@ class ModelManager:
             f.write(json.dumps(entry) + '\n')
 
     def log_epoch(self, **row):
-        """B4 — uma linha por época em epochs.csv (ver fit(..., epoch_log_fn=))."""
+        """Uma linha por época em epochs.csv (ver fit(..., epoch_log_fn=))."""
         with self._epochs_path.open('a', newline='') as f:
             csv.writer(f).writerow(['' if row.get(k) is None else row.get(k)
                                     for k in EPOCH_CSV_FIELDS])
@@ -212,7 +210,7 @@ class ModelManager:
               stop_reason=None, best_epoch=None, best_val_loss=None, n_epochs_cfg=None):
         """Salva model_final.pth e atualiza status.txt. Deve ser chamado no finally do script.
 
-        B4 (2026-10-03): grava também run_summary.json — pico de memória da GPU
+        Grava também run_summary.json — pico de memória da GPU
         (max_memory_allocated desde open()), parâmetros reais/treináveis, tempo
         de parede total, época/val_loss do best, motivo da parada e hash git."""
         sd = {k: v for k, v in model.state_dict().items() if k != '_metadata'}

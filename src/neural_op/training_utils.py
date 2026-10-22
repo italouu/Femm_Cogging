@@ -1,21 +1,10 @@
 import torch
 import time
-from functools import reduce
-import operator
-
-
-def count_params(model):
-    c = 0
-    for p in list(model.parameters()):
-        c += reduce(operator.mul, list(p.size()))
-    return c
 
 
 def count_params_real(model, trainable_only=False):
     """Nº de parâmetros REAIS: tensores complexos (pesos espectrais cfloat do
-    FNO) contam em dobro (parte real + imaginária). count_params acima conta
-    numel, ou seja, 1 por complexo — mantido por compatibilidade com o
-    n_params já gravado nos config.json antigos."""
+    FNO) contam em dobro (parte real + imaginária)."""
     c = 0
     for p in model.parameters():
         if trainable_only and not p.requires_grad:
@@ -102,7 +91,7 @@ def compute_mae_metrics(model, loader, device, metric_fn):
     model.eval()
     total_hw, total_graph = 0.0, 0.0
     has_graph = False
-    has_hw = False      # 2026-10-20: archs com GNN devolvem mae_hw=None
+    has_hw = False      # archs com GNN devolvem mae_hw=None
     n_batches = 0
     with torch.no_grad():
         for batch in loader:
@@ -121,9 +110,8 @@ def compute_mae_metrics(model, loader, device, metric_fn):
 
 
 def _default_log_epoch(ep, train_loss, val_loss, train_time_s, eval_time_s, samples_per_s):
-    """log_epoch padrão -- usado se fit() for chamado sem log_fn (ex: scripts
-    antigos/testes) ou por qualquer BaseLoss que não sobrescreva log_epoch
-    (src/neural_op/losses.py). Mesmo texto que já era hardcoded aqui."""
+    """log_epoch padrão -- usado se fit() for chamado sem log_fn ou por qualquer
+    BaseLoss que não sobrescreva log_epoch (src/neural_op/losses.py)."""
     print(f"epoch {ep:>4d}  train {train_loss:.4e}  val {val_loss:.4e}"
           f"  [{train_time_s:.1f}s + {eval_time_s:.1f}s eval]  {samples_per_s:.0f} samp/s")
 
@@ -165,7 +153,7 @@ def fit(model, train_loader, val_loader,
                   src/neural_op/losses.py), passado por scripts/train.py como
                   `loss_obj.log_epoch`. None usa _default_log_epoch (mesmo texto
                   de sempre) — mantém fit() utilizável sem essa peça.
-    epoch_log_fn: (B4, 2026-10-03) callable(**row) | None — chamado em TODA época
+    epoch_log_fn: callable(**row) | None — chamado em TODA época
                   com epoch/train_loss/val_loss/lr (lr usado NA época, antes do
                   scheduler.step)/train_time_s/eval_time_s/metric_time_s/
                   epoch_time_s/mae_hw/mae_graph. mae_* só vêm preenchidos em toda
@@ -185,7 +173,7 @@ def fit(model, train_loader, val_loader,
         for k, v in state.items():
             if isinstance(v, torch.Tensor):
                 state[k] = v.to(device)
-    print(f"Modelo: {count_params(model):,} parâmetros  |  device: {device}")
+    print(f"Modelo: {count_params_real(model):,} parâmetros reais  |  device: {device}")
     if start_epoch > 0:
         print(f"Retomando do epoch {start_epoch} — treinando {n_epochs} épocas adicionais")
 
@@ -197,15 +185,15 @@ def fit(model, train_loader, val_loader,
 
     for i in range(n_epochs):
         ep = start_epoch + i
-        epoch_lr = optimizer.param_groups[0]['lr']   # B4 — lr usado nesta época
+        epoch_lr = optimizer.param_groups[0]['lr']   # lr usado nesta época
         t0 = time.perf_counter()
         train_loss, n_train_samples = train_epoch(model, train_loader, optimizer, loss_fn, device, step_fn)
         t1 = time.perf_counter()
         val_loss = eval_epoch(model, val_loader, loss_fn, device, step_fn)
         t2 = time.perf_counter()
         is_heartbeat = monitor is not None and (i + 1) % monitor.cfg.checkpoint_every == 0
-        # B4 — mae_hw/mae_graph: toda época (metrics_every_epoch) ou só no
-        # heartbeat (antigo); calculado 1x e reaproveitado pelo monitor abaixo
+        # mae_hw/mae_graph: toda época (metrics_every_epoch) ou só no heartbeat;
+        # calculado 1x e reaproveitado pelo monitor abaixo
         if metric_fn is not None and (metrics_every_epoch or is_heartbeat):
             mae_hw, mae_graph = compute_mae_metrics(model, val_loader, device, metric_fn)
         else:

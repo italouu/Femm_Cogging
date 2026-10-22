@@ -1,7 +1,7 @@
 """
 fno_bipartite_gnn_elem.py
 -------------------------
-FNO_BipartiteGNN com os papéis dos grafos TROCADOS (criada em 2026-10-07): o
+FNO_BipartiteGNN com os papéis dos grafos TROCADOS: o
 grafo de ELEMENTOS é o principal (iterado n_layers, saída (Br, Bθ) por elemento
 no dataset; (Bx, By) só no gabarito target_field='B' do torque) e o de VÉRTICES
 é o auxiliar (estático, injetado a cada camada por arestas cruzadas vértice ->
@@ -18,9 +18,8 @@ isto é, no que entra em cada papel:
                ↑ auxiliar: elem_x (vértices, só posição)
     y_elem = y_fno@centróides + Δ
 
-O auxiliar (vértices) recebe só a posição -- troca "pura" (aux_fno=False,
-decisão do usuário 2026-10-07; a opção de concatenar o FNO interpolado no
-vértice saiu em 2026-10-21, sem uso).
+O auxiliar (vértices) recebe só a posição (o FNO interpolado entra só no
+grafo principal).
 
 Mesma assinatura de forward de FNO_BipartiteGNN -- make_fno_bipartite_gnn_step
 e fno_bipartite_gnn_metric_fn reaproveitados sem mudança (mae_graph aqui é o

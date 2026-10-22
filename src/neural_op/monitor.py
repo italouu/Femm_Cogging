@@ -39,7 +39,7 @@ class TrainingMonitor:
         self._best_loss      = float('inf')
         self._patience_count = 0
         self._gl_count       = 0    # heartbeats consecutivos com GL > gl_threshold
-        # B4 — registrados em run_summary.json (ModelManager.close)
+        # registrados em run_summary.json (ModelManager.close)
         self.best_epoch      = None
         self.stop_reason     = None   # 'gl' | 'early_stop_patience' | None (não parou cedo)
 

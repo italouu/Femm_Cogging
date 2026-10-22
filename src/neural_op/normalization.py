@@ -4,7 +4,7 @@ from pathlib import Path
 import torch
 
 
-# ── Layout de entrada por arch (R1, 2026-10-21) ───────────────────────────────
+# ── Layout de entrada por arch ────────────────────────────────────────────────
 # Regra única: toda feature de entrada é normalizada por z-score com stats dos chunks de
 # TREINO; só ficam crus os canais de posição lidos pela interpolação grade -> pontos
 # (archs/interp.py::interpolate_grid_to_nodes, que espera r e θ normalizados em [0,1]).
@@ -126,7 +126,7 @@ class Normalizer:
         self.stats   = stats or {}
         self.exclude = exclude or {}
         # chunks de treino usados nas stats -- {'sha1': hash do nome do cache, 'n', 'cache'};
-        # gravado no config.json da run (norm_stats.train_chunks). {} em runs antigas.
+        # gravado no config.json da run (norm_stats.train_chunks).
         self.train_chunks = train_chunks or {}
 
     @classmethod
@@ -165,8 +165,8 @@ class Normalizer:
 
     @classmethod
     def from_dict(cls, d: dict) -> 'Normalizer':
-        exclude = {k: set(v) for k, v in d.get('exclude', {}).items()}
-        return cls(d.get('stats', {}), exclude=exclude, train_chunks=d.get('train_chunks'))
+        exclude = {k: set(v) for k, v in d['exclude'].items()}
+        return cls(d['stats'], exclude=exclude, train_chunks=d['train_chunks'])
 
     def to_dict(self) -> dict:
         return {

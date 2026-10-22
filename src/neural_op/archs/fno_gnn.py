@@ -17,11 +17,10 @@ def _interpolate_fno_to_nodes(fno_out, node_x, L):
 
 
 def _rescale_fno_to_node_space(fno_at_nodes, normalizer):
-    """B2 (2026-10-03): o estágio FNO produz saída no espaço normalizado de
-    y_hw, mas o resíduo da GNN é somado e comparado com node_y, normalizado
-    com OUTRAS stats (σ Bx 0,391 pixels × 0,539 nós; σ By 0,420 × 0,522 no
-    dataset unificado). Decodifica com as stats de y_hw e recodifica com as de
-    node_y — mesmo round-trip de GNN_PostBase._base_pred_at_nodes. No-op sem
+    """O estágio FNO produz saída no espaço normalizado de y_hw, mas o resíduo da
+    GNN é somado e comparado com node_y, normalizado com OUTRAS stats (pixels e nós
+    têm distribuições diferentes). Decodifica com as stats de y_hw e recodifica com
+    as de node_y — mesmo round-trip de GNN_PostBase._base_pred_at_nodes. No-op sem
     normalizer (treino sem normalização: as duas escalas já são a física)."""
     if normalizer is None:
         return fno_at_nodes
@@ -61,8 +60,8 @@ class FNO_GNN(torch.nn.Module):
                  grid_out_ch,
                  node_in_ch):
         super().__init__()
-        # B2 — FNO@nós recodificado de stats y_hw -> node_y antes do resíduo
-        # (_rescale_fno_to_node_space), sempre (fno_node_rescale fixo desde 2026-10-21)
+        # FNO@nós recodificado de stats y_hw -> node_y antes do resíduo
+        # (_rescale_fno_to_node_space)
         self.normalizer = None   # atribuído externamente (scripts/train.py, postprocess/inference.py)
 
         self.fno = FNO2d(

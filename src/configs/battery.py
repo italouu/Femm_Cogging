@@ -1,5 +1,5 @@
 """
-battery.py — definição de uma bateria de treinos (2026-10-13).
+battery.py — definição de uma bateria de treinos.
 
 Uma bateria é uma sequência de execuções; cada execução é uma função que devolve um
 `NnCfg` escrito POR INTEIRO no arquivo da bateria (src/configs/batteries/<nome>.py).

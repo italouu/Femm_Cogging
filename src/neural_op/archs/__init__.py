@@ -80,7 +80,7 @@ ARCH_REGISTRY: dict = {
         make_step_fn=lambda cfg, lcfg: gnn_post_base_step_fn,
         metric_fn=lambda cfg: gnn_post_base_metric_fn,
     ),
-    # FNO_BipartiteGNN (2026-08-10): grafo duplo vértices+elementos,
+    # FNO_BipartiteGNN: grafo duplo vértices+elementos,
     # mode='bipartite' (ver src/data_gen/parsers/bipartite_structure.py,
     # src/neural_op/archs/fno_bipartite_gnn.py).
     'FNO_BipartiteGNN': ArchEntry(

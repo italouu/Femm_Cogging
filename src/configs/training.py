@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, fields, MISSING
+from dataclasses import dataclass, field, fields
 from typing import Any, Optional
 
 from src.configs.monitor import MonitorCfg
@@ -12,8 +12,8 @@ def _detect_chunk_dims(dataset: str) -> dict:
     Fonte de verdade para in/out channels (x_hw/y_hw), features de nó
     (node_x/node_y) e de aresta (edge_attr) de todos os arch_cfgs com
     dimensões dependentes do dataset (FNOConfig, FNO_GNNConfig, GNN_PostBaseConfig,
-    FNO_BipartiteGNN*Config) — evita hardcode quando o layout do chunk muda
-    (ex: canal J em 2026-10-14). Chamado por NnCfg.__post_init__.
+    FNO_BipartiteGNN*Config) — sem hardcode do layout do chunk. Chamado por
+    NnCfg.__post_init__.
     """
     import glob
     import torch
@@ -29,7 +29,7 @@ def _detect_chunk_dims(dataset: str) -> dict:
     dims = {
         'x_hw_ch': sample['x_hw'].shape[1],
         'y_hw_ch': sample['y_hw'].shape[1],
-        'grid_hw': tuple(sample['x_hw'].shape[-2:]),   # B3 — checagem de data_res
+        'grid_hw': tuple(sample['x_hw'].shape[-2:]),   # checagem de data_res
     }
     if 'node_x' in sample:
         dims['node_x_ch'] = sample['node_x'].shape[1]
@@ -53,21 +53,17 @@ def _from_dict_generic(cls, d: dict):
     """
     Reconstrói uma dataclass com campos init=False (ex: edge_dim, base_arch) a
     partir de um dict já salvo (config.json), sem passar por __init__/__post_init__
-    — usado por postprocess/inference.load_model (via hasattr(cfg_cls, 'from_dict')) para reconstruir
-    arch_cfg sem depender de recursos externos (dataset, base_run_dir) ainda
-    existirem no mesmo estado do treino.
-
-    Campo ausente em d (ex: 'edge_dim' em config.json de runs salvas antes desse
-    campo existir) cai no default da dataclass, em vez de KeyError — mesmo
-    comportamento que cls(**d) teria se o campo fosse init=True.
+    — usado por postprocess/inference.load_model e GNN_PostBase (via hasattr(cfg_cls,
+    'from_dict')) para reconstruir arch_cfg sem depender de recursos externos (dataset,
+    base_run_dir) ainda existirem no mesmo estado do treino. Todo campo da dataclass
+    precisa estar em d (o config.json grava asdict do arch_cfg).
     """
+    missing = [f.name for f in fields(cls) if f.name not in d]
+    if missing:
+        raise KeyError(f"{cls.__name__}.from_dict: campos ausentes no config.json: {missing}")
     obj = cls.__new__(cls)
     for f in fields(cls):
-        if f.name in d:
-            setattr(obj, f.name, d[f.name])
-        else:
-            default = f.default if f.default is not MISSING else f.default_factory()
-            setattr(obj, f.name, default)
+        setattr(obj, f.name, d[f.name])
     return obj
 
 
@@ -121,10 +117,8 @@ class FNO_GNNConfig:
     # automaticamente em NnCfg.__post_init__ (helper _detect_chunk_dims) a
     # partir dos chunks reais do dataset de treino (self.dataset): edge_dim de
     # edge_attr, grid_in_ch de x_hw, grid_out_ch de y_hw, node_in_ch de node_x.
-    # Defaults abaixo (4/2/2/5) só são usados se este arch_cfg for reconstruído
-    # fora de NnCfg (ex: postprocess/inference.load_model faz cfg_cls.from_dict(arch_cfg_dict)
-    # direto do config.json salvo — nesse caso os valores gravados na própria
-    # run são usados, não o default).
+    # Os defaults abaixo só valem até o __post_init__ do NnCfg; from_dict usa os
+    # valores gravados no config.json da run.
     edge_dim:     int = field(default=4, init=False)
     grid_in_ch:   int = field(default=2, init=False)
     grid_out_ch:  int = field(default=2, init=False)
@@ -143,7 +137,7 @@ class FNO_BipartiteGNNConfig:
     """Config de FNO_BipartiteGNN (src/neural_op/archs/fno_bipartite_gnn.py) --
     grafo duplo vértices (iterado) + elementos (estático, injetado via
     arestas cruzadas), mode='bipartite' (ver src/data_gen/parsers/bipartite_structure.py
-    e CLAUDE.md/conversa 2026-08-10 sobre a arquitetura)."""
+    e docs/claude/modelos.md §3–4)."""
     # Defaults = run bipartite_mae da bateria bldc (src/configs/batteries/bldc.py), conferidos campo a campo.
     fno_modes1: int = 69
     fno_modes2: int = 139
@@ -160,10 +154,7 @@ class FNO_BipartiteGNNConfig:
     # edge_dim/grid_in_ch/grid_out_ch/node_in_ch/elem_in_ch/cross_edge_dim --
     # todos auto-detectados em NnCfg.__post_init__ (helper _detect_chunk_dims)
     # a partir dos chunks reais do dataset — ver FNO_GNNConfig para o mesmo
-    # padrão. Defaults abaixo batem com o layout fixo de
-    # src/data_gen/parsers/bipartite_structure.py (node_x=[r,c], edge_attr=3 colunas,
-    # elem_x=5 colunas, cross_edge_attr=1 coluna) — só usados se este
-    # arch_cfg for reconstruído fora de NnCfg (ex: postprocess/inference.load_model).
+    # padrão (defaults só até o __post_init__ do NnCfg).
     edge_dim:       int = field(default=3, init=False)
     grid_in_ch:     int = field(default=2, init=False)
     grid_out_ch:    int = field(default=1, init=False)
@@ -196,9 +187,7 @@ class FNO_BipartiteGNN_ElemConfig:
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
 
-    # auto-detectados em NnCfg.__post_init__; defaults = layout de
-    # src/data_gen/parsers/elem_structure.py (node_x de elemento com 5 colunas,
-    # elem_x de vértice com 2)
+    # auto-detectados em NnCfg.__post_init__ (defaults só até lá)
     edge_dim:       int = field(default=3, init=False)
     grid_in_ch:     int = field(default=2, init=False)
     grid_out_ch:    int = field(default=2, init=False)
@@ -215,10 +204,9 @@ class FNO_BipartiteGNN_ElemConfig:
 class GNN_PostBaseConfig:
     # Treino em duas etapas (não end-to-end): base_run_dir aponta para um run FNO2d já
     # treinado, congelado; só o GNN novo é treinado.
-    # Defaults = run postbase_mae da bateria bldc; nela a base é runs['fno2d_mae'] (resolvida
-    # pelo runner) -- aqui, o FNO2d mae local de BLDC_138x276 (alvo polar Br, Bθ, run de
-    # 2026-10-19; trocar pela run nova depois que a bateria for refeita).
-    base_run_dir   : str = 'data/logs/BLDC_138x276/FNO2d/run_0002'
+    # Demais defaults = run postbase_mae da bateria bldc. base_run_dir é obrigatório (na
+    # bateria, runs['fno2d_*'], resolvida pelo runner); vazio -> erro no __post_init__.
+    base_run_dir   : str = ''
     base_checkpoint: str = 'best'   # 'best', 'latest' ou 'final'
     gnn_node_width : int = 64
     gnn_n_layers   : int = 6
@@ -239,8 +227,7 @@ class GNN_PostBaseConfig:
 
     # base_out_ch: número de canais de saída do modelo base congelado (Br, Bθ)
     # — lido do PRÓPRIO base_run_dir/config.json (FNO2d grava em 'out_channels'),
-    # não do dataset desta run nova. Default 2 cobre configs salvos antes desse
-    # campo existir.
+    # não do dataset desta run nova.
     base_out_ch: int = field(default=2, init=False)
 
     # base_normalize/base_norm_stats: snapshot da normalização (ver
@@ -250,7 +237,7 @@ class GNN_PostBaseConfig:
     # nova (self.dataset), com stats diferentes; GNN_PostBase.forward faz um
     # round-trip decode(normalizer)/encode(base_normalizer) só ao redor da
     # chamada ao modelo base, para ele sempre receber x_hw na escala exata que
-    # aprendeu. Default False/{} cobre runs base salvas antes dessa feature.
+    # aprendeu.
     base_normalize:  bool = field(default=False, init=False)
     base_norm_stats: dict = field(default_factory=dict, init=False)
 
@@ -259,13 +246,16 @@ class GNN_PostBaseConfig:
         from pathlib import Path
         import torch
 
+        if not self.base_run_dir:
+            raise ValueError("GNN_PostBaseConfig.base_run_dir vazio: informe a run FNO2d base "
+                             "(na bateria, via needs=('fno2d_*',))")
         run_dir  = Path(self.base_run_dir)
         cfg_dict = json.loads((run_dir / 'config.json').read_text())
         self.base_arch     = cfg_dict['arch']
         self.base_arch_cfg = cfg_dict['arch_cfg']
-        self.base_out_ch   = self.base_arch_cfg.get('out_channels') or 2
-        self.base_normalize  = cfg_dict.get('normalize', False)
-        self.base_norm_stats = cfg_dict.get('norm_stats', {})
+        self.base_out_ch   = self.base_arch_cfg['out_channels']
+        self.base_normalize  = cfg_dict['normalize']
+        self.base_norm_stats = cfg_dict['norm_stats']
 
         ckpt_path = (run_dir / 'model_final.pth') if self.base_checkpoint == 'final' \
             else (run_dir / 'checkpoints' / f'{self.base_checkpoint}.pth')
@@ -326,10 +316,9 @@ class NnCfg:
     prefetch_factor: int = 2
     split_seed: int = 12
 
-    # B5 (2026-10-03) — índice da repetição (sem controle de semente) na bateria;
-    # só rótulo gravado no config.json. Gravado pelo runner (scripts/run_battery.py,
-    # BatteryCfg.n_repeats) — nas definições de bateria fica no default 0.
-    # Configs antigos sem o campo = repetição 0.
+    # índice da repetição (sem controle de semente) na bateria; só rótulo gravado no
+    # config.json. Gravado pelo runner (scripts/run_battery.py, BatteryCfg.n_repeats) —
+    # nas definições de bateria fica no default 0.
     repeat: int = 0
 
     # Resume
@@ -397,7 +386,7 @@ class NnCfg:
                 self.arch_cfg.elem_in_ch = dims['elem_in_ch']
             if hasattr(self.arch_cfg, 'cross_edge_dim'):
                 self.arch_cfg.cross_edge_dim = dims['cross_edge_dim']
-            # B3 (2026-10-03) — data_res só limita modes1/modes2 em FNO2d; se
+            # data_res só limita modes1/modes2 em FNO2d; se
             # diferir da grade real o espectro pode ficar sobreposto sem aviso
             # (ex: (135,270) numa grade 138×276). Só avisa, não corrige.
             data_res = getattr(self.arch_cfg, 'data_res', None)

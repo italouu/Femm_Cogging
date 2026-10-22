@@ -161,7 +161,7 @@ def gnn_post_base_metric_fn(batch, model, device):
 
     batch já chega normalizado (CUDAPrefetcher.encode_batch, se normalize=True)
     — decodifica pred/y de volta pra unidade física (Tesla) antes do MAE, pra
-    manter o significado documentado de mae_hw/mae_graph em metrics.jsonl.
+    manter o significado documentado de mae_graph em metrics.jsonl.
     """
     normalizer = getattr(model, 'normalizer', None)
     x_hw       = batch['x_hw'].to(device)
@@ -169,14 +169,11 @@ def gnn_post_base_metric_fn(batch, model, device):
     edge_index = batch['edge_index'].to(device)
     edge_attr  = batch['edge_attr'].to(device)
     L          = batch['L'].to(device)
-    y_hw       = batch['y_hw'].to(device)
     y_node     = batch['node_y'].to(device)
     with torch.no_grad():
-        y_hw_base, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
+        _, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
         if normalizer is not None:
-            y_hw_base = normalizer.decode(y_hw_base, 'y_hw')
             y_nodes   = normalizer.decode(y_nodes,   'node_y')
-            y_hw      = normalizer.decode(y_hw,      'y_hw')
             y_node    = normalizer.decode(y_node,    'node_y')
         mae_hw    = None
         mae_graph = torch.mean(torch.abs(y_nodes   - y_node)).item()

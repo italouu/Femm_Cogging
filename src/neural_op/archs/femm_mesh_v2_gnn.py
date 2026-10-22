@@ -96,7 +96,9 @@ def fno_bipartite_gnn_step(batch, model, loss_fn, device):
     return loss_fn(y_nodes, batch['node_y'].to(device))
 
 def fno_bipartite_gnn_metric_fn(batch, model, device):
-    """MAE bruto (sem máscara) -- mesmo padrão de fno_gnn.py::fno_gnn_metric_fn.
+    """MAE bruto (sem máscara) só no grafo -- mesmo padrão de fno_gnn.py::fno_gnn_metric_fn:
+    mae_graph = saída final nos nós (por ELEMENTO na Elem, que reaproveita esta função);
+    mae_hw = None (grade do FNO intermediária, não supervisionada).
 
     batch já chega normalizado (CUDAPrefetcher.encode_batch, se normalize=True)
     -- decodifica pred/y de volta pra unidade física antes do MAE."""
@@ -109,16 +111,13 @@ def fno_bipartite_gnn_metric_fn(batch, model, device):
     cross_edge_index = batch['cross_edge_index'].to(device)
     cross_edge_attr  = batch['cross_edge_attr'].to(device)
     L                = batch['L'].to(device)
-    y_hw             = batch['y_hw'].to(device)
     y_node           = batch['node_y'].to(device)
     with torch.no_grad():
-        y_hw_fno, y_nodes = model(
+        _, y_nodes = model(
             x_hw, node_x, elem_x, edge_index, edge_attr,
             cross_edge_index, cross_edge_attr, L)
         if normalizer is not None:
-            y_hw_fno = normalizer.decode(y_hw_fno, 'y_hw')
             y_nodes  = normalizer.decode(y_nodes,  'node_y')
-            y_hw     = normalizer.decode(y_hw,     'y_hw')
             y_node   = normalizer.decode(y_node,   'node_y')
         mae_hw    = None
         mae_graph = torch.mean(torch.abs(y_nodes  - y_node)).item()

@@ -78,7 +78,8 @@ def fno_step_fn(batch, model, loss_fn, device):
 
 def fno_metric_fn(batch, model, device):
     """
-    MAE bruto (sem máscara) na grade H×W. Sem estrutura de grafo — mae_graph=None.
+    MAE bruto (sem máscara) só na grade H×W (a saída do FNO2d). Sem estrutura de
+    grafo — mae_graph=None.
 
     batch já chega normalizado (CUDAPrefetcher.encode_batch, se normalize=True)
     — decodifica pred/y de volta pra unidade física antes do MAE, pra manter o

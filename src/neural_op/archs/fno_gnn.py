@@ -103,12 +103,13 @@ def fno_gnn_step(batch, model, loss_fn, device):
 
 def fno_gnn_metric_fn(batch, model, device):
     """
-    MAE bruto (sem máscara): mae_hw compara a saída do FNO (grade H×W) contra
-    y_hw; mae_graph compara a saída final do modelo nos nós (pós-GNN) contra node_y.
+    MAE bruto (sem máscara) só no grafo: mae_graph compara a saída final do modelo
+    nos nós (pós-GNN) contra node_y; mae_hw = None (a grade do FNO é intermediária,
+    não supervisionada).
 
     batch já chega normalizado (CUDAPrefetcher.encode_batch, se normalize=True)
     — decodifica pred/y de volta pra unidade física antes do MAE, pra manter o
-    significado documentado de mae_hw/mae_graph em metrics.jsonl.
+    significado documentado de mae_graph em metrics.jsonl.
     """
     normalizer = getattr(model, 'normalizer', None)
     x_hw       = batch['x_hw'].to(device)
@@ -116,14 +117,11 @@ def fno_gnn_metric_fn(batch, model, device):
     edge_index = batch['edge_index'].to(device)
     edge_attr  = batch['edge_attr'].to(device)
     L          = batch['L'].to(device)
-    y_hw       = batch['y_hw'].to(device)
     y_node     = batch['node_y'].to(device)
     with torch.no_grad():
-        y_hw_fno, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
+        _, y_nodes = model(x_hw, node_x, edge_index, edge_attr, L)
         if normalizer is not None:
-            y_hw_fno = normalizer.decode(y_hw_fno, 'y_hw')
             y_nodes  = normalizer.decode(y_nodes,  'node_y')
-            y_hw     = normalizer.decode(y_hw,     'y_hw')
             y_node   = normalizer.decode(y_node,   'node_y')
         mae_hw    = None
         mae_graph = torch.mean(torch.abs(y_nodes  - y_node)).item()

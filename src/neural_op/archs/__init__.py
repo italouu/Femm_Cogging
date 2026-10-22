@@ -21,10 +21,10 @@ class ArchEntry:
     model_kwargs: callable  # (arch_cfg) -> dict com kwargs do construtor do modelo
     make_step_fn: callable  # (arch_cfg, loss_cfg) -> step_fn(batch, model, loss_fn, device)
     metric_fn   : callable  # (arch_cfg) -> metric_fn(batch, model, device) -> (mae_hw, mae_graph|None)
-                            # MAE bruto (sem máscara) para monitoramento em metrics.jsonl;
-                            # mae_hw sempre compara a saída em grade H×W do estágio FNO;
-                            # mae_graph compara a saída final nos nós/grafo (None se o
-                            # arch não produz saída em grafo — ex: FNO2d)
+                            # MAE bruto (sem máscara) para monitoramento em metrics.jsonl,
+                            # em T, só sobre a saída final: FNO2d -> mae_hw (grade H×W),
+                            # mae_graph=None; demais -> mae_hw=None (grade intermediária
+                            # não supervisionada), mae_graph nos nós (elementos na Elem)
 
     def make_model(self, arch_cfg):
         return self.cls(**self.model_kwargs(arch_cfg))

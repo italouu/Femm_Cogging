@@ -229,27 +229,6 @@ def _element_areas(nodes: np.ndarray, elems: np.ndarray) -> np.ndarray:
     return 0.5 * np.abs((x2 - x1) * (y3 - y1) - (x3 - x1) * (y2 - y1))
 
 
-def _node_material_stats(nodes: np.ndarray, elems: np.ndarray, area: np.ndarray,
-                          elem_material_id: np.ndarray):
-    """Vota material dominante por nó (area-weighted, mesmo princípio do
-    frac_dom do quadtree) e computa a área lumped do nó (soma de 1/3 da
-    área dos triângulos incidentes — massa lumped padrão de FEM linear).
-
-    Retorna: node_material_id [n_nodes], frac_dom [n_nodes], node_dual_area [n_nodes] (mm^2)
-    """
-    n_nodes = nodes.shape[0]
-
-    area_per_mat = np.zeros((n_nodes, _N_MATERIALS), dtype=np.float64)
-    for corner in range(3):
-        np.add.at(area_per_mat, (elems[:, corner], elem_material_id), area)
-    node_material_id = area_per_mat.argmax(axis=1)
-    total = area_per_mat.sum(axis=1)
-    frac_dom = np.divide(area_per_mat.max(axis=1), total,
-                          out=np.ones(n_nodes, dtype=np.float64), where=total > 0)
-
-    return node_material_id, frac_dom.astype(np.float32), _node_dual_area(elems, area, n_nodes)
-
-
 def _node_dual_area(elems: np.ndarray, area: np.ndarray, n_nodes: int) -> np.ndarray:
     """Área lumped do nó (mm^2): soma de 1/3 da área dos triângulos incidentes."""
     node_dual_area = np.zeros(n_nodes, dtype=np.float64)
@@ -299,7 +278,8 @@ MATERIAL_PRIORITY = (MATERIAL_ID['iron_1008'], _MAGNET_ID,
 def _node_material_priority(elems: np.ndarray, elem_material_id: np.ndarray, n_nodes: int,
                              priority=MATERIAL_PRIORITY) -> np.ndarray:
     """Material do nó = o de MAIOR prioridade entre os elementos incidentes
-    (alternativa ao voto por área de _node_material_stats, que serrilha as
+    (alternativa ao voto por área do antigo _node_material_stats, removido em
+    2026-10-22, que serrilhava as
     interfaces -- ~50% das arestas de interface com lado trocado). 2026-10-09.
 
     Retorna node_material_id [n_nodes] (int64).

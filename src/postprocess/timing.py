@@ -30,7 +30,7 @@ import torch
 from src.data_gen.parsers.ans_parsing import (
     _MAGNET_ID, _MU_BY_ID, _build_bidirectional_edge_attrs, _build_edges, _element_areas,
     _grid_polar_xy, _node_current_density, _node_magnet_polarity, _node_material_priority,
-    _node_material_stats, _parse_label_currents, _parse_label_materials, _parse_solution,
+    _node_dual_area, _parse_label_currents, _parse_label_materials, _parse_solution,
     _wrap_edge_pairs, read_ans,
 )
 from src.data_gen.parsers.femm_mesh_elem import _build_dual_edges
@@ -205,7 +205,7 @@ def preprocess_timed(ans_path, r_in, r_ext, ang_1=0.0, ang_2=120.0, n_r=138, n_a
     # v1 (FNO_GNN / GNN_PostBase; femm_mesh_smooth): material por prioridade
     s = _now()
     node_material_id = _node_material_priority(elems, elem_material_id, nodes.shape[0])
-    _, _frac, node_dual_area = _node_material_stats(nodes, elems, area, elem_material_id)
+    node_dual_area = _node_dual_area(elems, area, nodes.shape[0])
     node_mu = _MU_BY_ID[node_material_id]
     node_M = np.where(node_material_id == _MAGNET_ID,
                       _node_magnet_polarity(nodes, elems, area, elem_material_id, elem_M),

@@ -689,7 +689,8 @@ def build_loaders(chunk_paths, batch_size, train_split,
         raise FileNotFoundError(
             "Nenhum chunk encontrado. Verifique se os arquivos data_chunk_*.pt estão em "
             "data/torch/data_chunks/<dataset>/ e se o campo 'dataset' em NnCfg aponta "
-            "para o subdiretório correto. Execute build_data_chunks.py antes do treino."
+            "para o subdiretório correto. Gere os datasets antes do treino: "
+            "python -m scripts.build_smooth_datasets"
         )
 
     train_paths, test_paths = split_chunk_paths(paths, train_split, seed, test_split)

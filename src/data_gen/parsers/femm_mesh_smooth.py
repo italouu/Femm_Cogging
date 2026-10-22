@@ -12,7 +12,7 @@ Diferenças em relação ao gabarito "unificado" (curl(A); parser removido em 20
 
   material do nó  -- prioridade ferro > ímã > cobre > ar entre os elementos
                      incidentes (_node_material_priority), em vez do voto por
-                     área (_node_material_stats).
+                     área (_node_material_stats, removido em 2026-10-22).
   node_y [S,2]    -- (as 4 archs) média dos valores nodais suavizados
                      (b1,b2 do FEMM, P1 descontínuo) dos elementos incidentes
                      DO MATERIAL ESCOLHIDO para o nó. Antes: média simples do

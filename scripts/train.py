@@ -13,10 +13,9 @@ from src.training.model_manager import ModelManager
 
 def run(_nn):
     """
-    Executa um treino completo a partir de um NnCfg já construído. Extraído do
-    antigo corpo de `if __name__ == '__main__':` (mesma lógica, sem alteração)
-    pra ser reaproveitado por scripts/run_best_configs.py (sequência de treinos)
-    sem duplicar o pipeline model/optimizer/scheduler/fit/ModelManager.
+    Executa um treino completo a partir de um NnCfg já construído. Chamado pelo
+    `__main__` abaixo e por scripts/run_battery.py (sequência de treinos), sem
+    duplicar o pipeline model/optimizer/scheduler/fit/ModelManager.
     """
     entry       = ARCH_REGISTRY[_nn.arch]
     chunk_paths = sorted(glob.glob(
@@ -37,16 +36,14 @@ def run(_nn):
 
     # normalizer : None se _nn.normalize=False; senão reconstruído das stats já
     # calculadas em NnCfg.__post_init__ (Normalizer.fit, com cache em disco).
-    # Atrelado ao modelo (model.normalizer) logo após make_model — metric_fn e
-    # eval_fn leem de lá pra decodificar pred/y de volta pra unidade física.
+    # Atrelado ao modelo (model.normalizer) logo após make_model — a metric_fn
+    # lê de lá pra decodificar pred/y de volta pra unidade física.
     normalizer = Normalizer.from_dict(_nn.norm_stats) if _nn.normalize and _nn.norm_stats else None
 
     step_fn   = entry.make_step_fn(_nn.arch_cfg, _nn.loss_cfg)
     metric_fn = entry.metric_fn(_nn.arch_cfg)
-    # loss_obj (BaseLoss, src/neural_op/losses.py) preservado à parte de
-    # loss_fn: functools.partial não repassa atributos do callable original,
-    # então log_fn precisa ser extraído de loss_obj.log_epoch ANTES do wrap
-    # abaixo — não de loss_fn (que pode virar um partial).
+    # loss_obj (BaseLoss, src/neural_op/losses.py): loss_fn é o próprio objeto;
+    # log_fn sai de loss_obj.log_epoch.
     loss_obj = LOSS_REGISTRY[_nn.loss]
     loss_fn  = loss_obj
 
@@ -122,7 +119,7 @@ def run(_nn):
 
 
 if __name__ == '__main__':
-    # Execução avulsa = defaults de src/configs (melhor run da bateria smooth).
+    # Execução avulsa = defaults de src/configs (run elem_mae da bateria bldc).
     # NnCfg só aqui (não em nível de módulo): o __post_init__ detecta dims e roda
     # Normalizer.fit -- não pode ser efeito colateral de importar `run` (run_battery).
     _nn = NnCfg()

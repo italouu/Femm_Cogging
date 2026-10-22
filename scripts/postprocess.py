@@ -114,7 +114,7 @@ from src.postprocess.samples import (ANG_1, ANG_2, N_A, N_R, RAW_DIR, SUBSETS, T
                                      parse_smooth, sample_path, samples_with_subset)
 
 DATASET   = DatagenConfig().dataset
-ROOT_S    = Path('data/logs') / DATASET                              # logs da bateria smooth
+ROOT_S    = Path('data/logs') / DATASET                              # logs da bateria bldc
 N_SAMPLES = MAX_SAMPLES   # amostras do raw no dataset (as mesmas do build dos chunks)
 OUT_ROOT  = Path('resultados') / DATASET
 N_WORKERS = 12
@@ -979,7 +979,7 @@ def run_train_table(out_dir: Path):
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[3])
     sp = ap.add_subparsers(dest='cmd', required=True)
-    p_eval = sp.add_parser('eval', help='bateria smooth × gabarito smooth (+ piso da grade)')
+    p_eval = sp.add_parser('eval', help='bateria bldc × gabarito smooth (+ pisos)')
     p_eval.add_argument('n', nargs='?', type=int, default=None, help='nº de amostras (default: todas)')
     p_eval.add_argument('--out', type=Path, default=OUT_ROOT / 'dados', help='diretório de saída')
     p_fig = sp.add_parser('figures', help='curvas de treino, barras de erro, campo P50/P95 (após eval)')

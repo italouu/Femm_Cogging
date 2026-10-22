@@ -1,11 +1,11 @@
 """
 build_smooth_datasets.py
 ------------------------
-Gera os 5 datasets da bateria smooth com um comando, direto do raw
-(data/raw/<DatagenConfig.dataset>/ — desde 2026-10-14 BLDC_138x276, com correntes; antes
-mesh_ans_138x276), nas MAX_SAMPLES primeiras amostras (None = todas; 6000 -> 188 chunks):
-  - FNO2d, FNO_GNN, GNN_PostBase, FNO_BipartiteGNN  (scripts.build_smooth_ans_chunks_direct)
-  - FNO_BipartiteGNN_Elem                           (scripts.build_elem_smooth_chunks)
+Gera os 5 datasets da bateria bldc (src/configs/batteries/bldc.py) com um comando, direto
+do raw (data/raw/<DatagenConfig.dataset>/, BLDC_138x276 com correntes), nas MAX_SAMPLES
+primeiras amostras (None = todas; 6000 -> 188 chunks):
+  - FNO2d, FNO_GNN, GNN_PostBase, FNO_BipartiteGNN  (layouts de femm_mesh_smooth)
+  - FNO_BipartiteGNN_Elem                           (layout de femm_mesh_elem_smooth)
 Saída: data/torch/data_chunks/<DatagenConfig.dataset>/<arch>/data_chunk_XXXX.pt
 Retomável: chunks já presentes são pulados (pode rodar de novo após interrupção).
 

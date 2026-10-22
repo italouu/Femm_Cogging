@@ -178,12 +178,11 @@ class FNO_BipartiteGNNConfig:
 
 @dataclass
 class FNO_BipartiteGNN_ElemConfig:
-    """Config de FNO_BipartiteGNN_Elem (PROTÓTIPO 2026-10-07,
-    src/neural_op/archs/femm_mesh_elem_gnn.py) -- FNO_BipartiteGNN com os
-    papéis trocados: elementos = grafo principal (saída Bx,By por elemento),
-    vértices = auxiliar estático. Dataset: BLDC_138x276/FNO_BipartiteGNN_Elem
-    (scripts/build_elem_smooth_chunks.py). Mesmos campos de
-    FNO_BipartiteGNNConfig."""
+    """Config de FNO_BipartiteGNN_Elem (src/neural_op/archs/femm_mesh_elem_gnn.py)
+    -- mesma rede da FNO_BipartiteGNN com os papéis trocados no layout dos dados:
+    elementos = grafo principal (saída (Br, Bθ) por elemento), vértices = auxiliar
+    estático. Dataset: BLDC_138x276/FNO_BipartiteGNN_Elem
+    (scripts/build_smooth_datasets.py). Mesmos campos de FNO_BipartiteGNNConfig."""
     # Defaults = run elem_mae da bateria bldc (src/configs/batteries/bldc.py), conferidos campo a campo.
     fno_modes1: int = 69
     fno_modes2: int = 139

@@ -401,11 +401,10 @@ def _element_b_from_A(nodes: np.ndarray, elems: np.ndarray, node_A: np.ndarray):
     projeto) -- convertido pra metro aqui, senão o erro é de ~1000x (achado
     2026-08-07, ver CLAUDE.md "Extração de dados direto do arquivo .ans").
 
-    Diferente de eval.py::_element_curl_A (que reconstrói o triângulo por lei
-    dos cossenos, sem coordenadas absolutas no chunk final) -- aqui as
-    coordenadas reais já estão disponíveis (vêm direto do .ans), então B sai
-    no referencial global de verdade, sem ambiguidade de rotação por
-    elemento. Vetorizado -- retorna (Bx, By), cada um [n_elems].
+    As coordenadas reais vêm direto do .ans, então B sai no referencial global
+    de verdade, sem ambiguidade de rotação por elemento (antes, o
+    eval.py::_element_curl_A, já removido, reconstruía o triângulo por lei dos
+    cossenos, sem coordenadas absolutas). Vetorizado -- retorna (Bx, By), cada um [n_elems].
     """
     xm = nodes[:, 0].astype(np.float64) * 1e-3
     ym = nodes[:, 1].astype(np.float64) * 1e-3

@@ -106,8 +106,8 @@ class ModelManager:
         split : dict|None
             {'train': [...paths...], 'test': [...paths...]} usados nesta run.
             Gravado em split.json (só os nomes dos arquivos, não o caminho completo,
-            para não depender do dataset continuar no mesmo local) — permite que
-            scripts/eval.py reproduza o split exato sem recalcular via seed.
+            para não depender do dataset continuar no mesmo local) — lido pelo
+            pós-processamento (src/postprocess/samples.py) para reproduzir o split.
         """
         cfg_dict               = asdict(self.cfg)
         cfg_dict['n_params']   = count_params(model)

@@ -9,8 +9,8 @@ def _interpolate_fno_to_nodes_v2(fno_out, node_x, L):
     """
     Idêntica em espírito a fno_gnn.py::_interpolate_fno_to_nodes, mas node_x
     aqui tem layout [r_base, c_base] (colunas 0,1) -- não
-    [material_id,mu_r,M,area,r_base,c_base,...] (colunas 3,4) do grafo
-    qtree/femm_mesh v1. Ver src/data_gen/femm_mesh_v2.py.
+    [mu_r, M, área dual, r_base, c_base, J] (colunas 3,4) do mesh_v1 (grafo de
+    vértices). Ver src/data_gen/parsers/femm_mesh_v2.py.
 
     fno_out : [B, C, H, W]
     node_x  : [S_tot, 2]  colunas 0,1 = r_base, c_base ∈ [0,1]
@@ -50,7 +50,7 @@ class FNO_BipartiteGNN(torch.nn.Module):
                  elem_in_ch, cross_edge_dim):
         super().__init__()
         # B2 — FNO@nós sempre recodificado (fno_gnn.py::_rescale_fno_to_node_space)
-        self.normalizer = None   # atribuído externamente (scripts/train.py/eval.py)
+        self.normalizer = None   # atribuído externamente (scripts/train.py, postprocess/inference.py)
 
         self.fno = FNO2d(
             in_channels=grid_in_ch, out_channels=grid_out_ch,

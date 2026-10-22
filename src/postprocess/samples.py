@@ -1,5 +1,5 @@
 """
-Amostras do raw (data/raw/mesh_ans_138x276/): designs válidos, caminhos,
+Amostras do raw (data/raw/<DatagenConfig.dataset>/): designs válidos, caminhos,
 subsets teste/fora (split_seed=12), parse do gabarito smooth.
 
 Origem: tests/resultados/common.py (2026-10-13), sem mudança de lógica; a run

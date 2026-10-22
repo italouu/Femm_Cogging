@@ -91,8 +91,8 @@ ARCH_REGISTRY: dict = {
         make_step_fn=lambda cfg, lcfg: fno_bipartite_gnn_step,
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),
-    # FNO_BipartiteGNN_Elem (PROTÓTIPO 2026-10-07): bipartite com os papéis
-    # trocados -- elementos = grafo principal (saída Bx,By por elemento),
+    # FNO_BipartiteGNN_Elem: a rede da bipartite com os papéis trocados no layout
+    # dos dados -- elementos = grafo principal (saída (Br, Bθ) por elemento),
     # vértices = auxiliar estático. Chunk com as chaves do femm_mesh_v2
     # (src/data_gen/parsers/femm_mesh_elem.py), então loader/step_fn/metric_fn
     # da bipartite servem sem mudança.

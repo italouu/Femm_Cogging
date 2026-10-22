@@ -602,8 +602,8 @@ def split_chunk_paths(chunk_paths, train_split, seed=None, test_split=None):
     """
     Divide chunk_paths em treino/teste ao nível de chunk — mesmo shuffle
     determinístico (via seed) usado por build_loaders, exposto separadamente
-    para que scripts/eval.py possa reproduzir o split de uma run sem duplicar
-    a lógica.
+    para que o pós-processamento (src/postprocess/samples.py) reproduza o split
+    de uma run sem duplicar a lógica.
 
     test_split : float|None
         None       → teste = complemento de train_split (comportamento padrão).

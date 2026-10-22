@@ -1,15 +1,16 @@
 """
 femm_mesh_elem_gnn.py
 ---------------------
-PROTÓTIPO (2026-10-07) -- FNO_BipartiteGNN com os papéis dos grafos
-TROCADOS: o grafo de ELEMENTOS é o principal (iterado n_layers, saída Bx,By
-por elemento) e o de VÉRTICES é o auxiliar (estático, injetado a cada camada
-por arestas cruzadas vértice -> elemento). Contrato de dados: bloco
-"CONTRATO DO LAYOUT Elem" da docstring de src/data_gen/parsers/femm_mesh_elem.py
-(chaves node_* = elementos, elem_* = vértices).
+FNO_BipartiteGNN com os papéis dos grafos TROCADOS (criada em 2026-10-07): o
+grafo de ELEMENTOS é o principal (iterado n_layers, saída (Br, Bθ) por elemento
+no dataset; (Bx, By) só no gabarito target_field='B' do torque) e o de VÉRTICES
+é o auxiliar (estático, injetado a cada camada por arestas cruzadas vértice ->
+elemento). Contrato de dados: bloco "CONTRATO DO LAYOUT Elem" da docstring de
+src/data_gen/parsers/femm_mesh_elem.py (chaves node_* = elementos, elem_* = vértices).
 
-Mesmo BipartiteGNN (_blocks.py) da bipartite, sem mudança -- só o que entra
-em cada papel muda:
+A REDE É A MESMA da FNO_BipartiteGNN (subclasse; mesmo FNO2d + BipartiteGNN de
+_blocks.py, mesmos hiperparâmetros) -- a diferença está toda no layout dos dados,
+isto é, no que entra em cada papel:
 
     x_hw  →  FNO2d  →  y_hw_fno
                ↓ interpolado nos CENTRÓIDES (node_x[:,0:2])

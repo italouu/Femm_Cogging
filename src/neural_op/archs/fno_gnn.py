@@ -63,7 +63,7 @@ class FNO_GNN(torch.nn.Module):
         super().__init__()
         # B2 — FNO@nós recodificado de stats y_hw -> node_y antes do resíduo
         # (_rescale_fno_to_node_space), sempre (fno_node_rescale fixo desde 2026-10-21)
-        self.normalizer = None   # atribuído externamente (scripts/train.py/eval.py)
+        self.normalizer = None   # atribuído externamente (scripts/train.py, postprocess/inference.py)
 
         self.fno = FNO2d(
             in_channels=grid_in_ch,

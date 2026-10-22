@@ -1,19 +1,20 @@
 """
 parsers/femm_mesh_elem.py
 -------------------------
-PROTÓTIPO (2026-10-07) -- grafo duplo do FNO_BipartiteGNN com os PAPÉIS
-TROCADOS: o grafo de ELEMENTOS vira o principal (iterado, saída Bx,By por
-elemento) e o grafo de VÉRTICES vira o auxiliar (estático, injetado nos
-elementos por arestas cruzadas vértice -> elemento). Arch:
-src/neural_op/archs/femm_mesh_elem_gnn.py::FNO_BipartiteGNN_Elem.
+Grafo duplo do FNO_BipartiteGNN com os PAPÉIS TROCADOS (criado em 2026-10-07):
+o grafo de ELEMENTOS vira o principal (iterado, saída B por elemento) e o grafo de
+VÉRTICES vira o auxiliar (estático, injetado nos elementos por arestas cruzadas
+vértice -> elemento). Arch: src/neural_op/archs/femm_mesh_elem_gnn.py::
+FNO_BipartiteGNN_Elem (mesma rede da FNO_BipartiteGNN; muda só o layout).
 
-Mesmo raw da bateria (data/raw/mesh_ans_138x276/), mesmas regras de
-amostragem: x_hw/y_hw/elem_x/arestas cruzadas saem de
-parse_ans_gzip_sample(target_field='B') SEM mudança (y_hw = interpolação
-baricêntrica do B médio nodal, idêntico ao da bateria). Só o alvo do grafo
-muda: B = curl(A) EXATO por elemento P1 (_element_b_from_A -- a mesma
-função que gera o gabarito da bateria, que é a média simples desses valores
-nos nós), sem média nodal.
+Raw: data/raw/<DatagenConfig.dataset>/. Estrutura (x_hw, elem_x, arestas
+cruzadas) do layout bipartite (parse_ans_gzip_sample), reorganizada.
+Gabarito por elemento:
+  - dataset (femm_mesh_elem_smooth, target_field=None aqui): (Br, Bθ) do B
+    suavizado do FEMM no centróide; y_hw = B suavizado no centro do pixel;
+  - target_field='B' (gabarito do torque, postprocess/torque.py): (Bx, By) do
+    curl(A) EXATO por elemento P1 (_element_b_from_A), sem média nodal; y_hw =
+    interpolação baricêntrica do B médio nodal (parse_ans_gzip_sample).
 
 =============================================================================
 CONTRATO DO LAYOUT Elem (FNO_BipartiteGNN_Elem) -- fonte única (2026-10-21).

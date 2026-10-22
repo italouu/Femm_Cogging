@@ -1,16 +1,16 @@
 """
 build_elem_smooth_chunks.py
 ---------------------------
-Chunks do FNO_BipartiteGNN_Elem com gabarito B SUAVIZADO do FEMM (2026-10-10)
--- versão smooth de scripts/build_elem_proto_chunks.py (mesma mecânica: raw
--> chunks direto, pool novo por chunk, escrita atômica via .tmp/, retomável),
-só trocando o parser por parse_ans_gzip_sample_elem_smooth (ver
-src/data_gen/parsers/femm_mesh_elem_smooth.py).
+Chunks do FNO_BipartiteGNN_Elem com gabarito B SUAVIZADO do FEMM (2026-10-10):
+raw -> chunks direto, pool novo por chunk, escrita atômica (src/data_gen/chunks.py),
+retomável. Parser: parse_ans_gzip_sample_elem_smooth
+(src/data_gen/parsers/femm_mesh_elem_smooth.py). O scripts.build_smooth_datasets gera
+este dataset junto com os outros 4 numa passada só; este script gera só a Elem.
 
-Raw: o MESMO da bateria (data/raw/mesh_ans_138x276/), amostras em ordem de
-índice, CHUNK_SIZE=32 (125 chunks) -> mesmo split (split_seed=12) da bateria
-smooth (scripts/run_best_configs_smooth.py).
-Saída: data/torch/data_chunks/mesh_ans_138x276/FNO_BipartiteGNN_Elem/
+Raw: data/raw/<DatagenConfig.dataset>/ (o mesmo das outras 4 archs), amostras em
+ordem de índice, CHUNK_SIZE=32 (BLDC_138x276: 6000 amostras -> 188 chunks) -> mesmo
+split (split_seed=12) da bateria bldc (src/configs/batteries/bldc.py).
+Saída: data/torch/data_chunks/<DatagenConfig.dataset>/FNO_BipartiteGNN_Elem/
 
 Precheck (amostra 0, pular com --no-precheck): x_hw/y_hw idênticos ao layout
 smooth da bipartite; node_y == média dos 3 valores nodais suavizados do

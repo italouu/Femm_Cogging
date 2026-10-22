@@ -35,13 +35,11 @@ Grafo 1 -- vértices/campo (nós da malha real):
 target_field='B' (2026-08-13, ver CLAUDE.md "Grafo duplo vértices+elementos"):
     node_y [S,2]  Bx,By -- calculado a partir de A via curl(A) fechado por
                   elemento P1 (_element_b_from_A, coordenadas reais em
-                  metros -- sem a ambiguidade de rotação que existe em
-                  eval.py, que reconstrói o triângulo sem coordenadas
-                  absolutas), agregado por nó via média simples dos
-                  elementos incidentes (_node_mean_of_elements -- mesma
-                  caracterização empírica do B suavizado do FEMM usada no
-                  eval). y_hw por interpolação baricêntrica (barycentric,
-                  não constante-por-elemento) -- ver _grid_barycentric.
+                  metros, sem ambiguidade de rotação), agregado por nó via
+                  média simples dos elementos incidentes
+                  (_node_mean_of_elements). y_hw por interpolação
+                  baricêntrica (barycentric, não constante-por-elemento) --
+                  ver _grid_barycentric.
 
 Grafo 2 -- elementos/centróides (1 nó por triângulo, SEM arestas internas):
     elem_x [M,6]  mu_r, M, area, r_base_centróide, c_base_centróide, J

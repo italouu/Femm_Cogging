@@ -25,7 +25,7 @@ def count_params_real(model, trainable_only=False):
 
 
 def _batch_size(batch):
-    """Conta amostras no batch independente do formato (tuple grid ou dict qtree)."""
+    """Conta amostras no batch independente do formato (tuple grid ou dict de grafo, mesh_v1/femm_mesh_v2)."""
     if isinstance(batch, (tuple, list)):
         return int(batch[0].shape[0])
     return int(batch['x_hw'].shape[0])

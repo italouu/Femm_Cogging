@@ -32,9 +32,9 @@ Diferenças em relação ao gabarito "unificado" (curl(A); parser removido em 20
                      incidentes; outro -> 0 (_node_current_density).
   edge_attr [E,4] -- delta_mu recalculado com o mu_r novo.
 
-Idênticos aos unificados: x_hw, node_dual_area, r_base/c_base,
-edge_index, e todo o resto do layout bipartite (node_x, elem_x, arestas,
-arestas cruzadas, contagens).
+Demais chaves (x_hw, node_dual_area, r_base/c_base, edge_index e todo o resto do
+layout bipartite: node_x, elem_x, arestas, arestas cruzadas, contagens) não
+dependem do gabarito.
 
 Sem node_A/a_hw (2026-10-21): o layout v1 deixou de carregar o potencial A,
 que nenhum código do pipeline atual lia (só os eval_fn antigos); o gabarito do femm_mesh_v2 (curl(A)/interpolação) não é mais

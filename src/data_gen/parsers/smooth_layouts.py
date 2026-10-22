@@ -3,42 +3,30 @@ parsers/smooth_layouts.py
 -------------------------
 Layouts das 4 archs de SMOOTH_ARCHS (FNO2d, FNO_GNN, GNN_PostBase,
 FNO_BipartiteGNN) a partir do raw (`.ans.gz`), com o gabarito B da suavização
-do pós-processador do FEMM
-(`ans_b_smoothing.py`, porte de xfemm validado a ~1e-15 contra o FEMM) e o
-material do nó por PRIORIDADE em vez de voto por área (2026-10-09, ver
-CLAUDE.md "Suavização de B do FEMM a partir do `.ans`").
-
-Diferenças em relação ao gabarito "unificado" (curl(A); parser removido em 2026-10-21):
+do pós-processador do FEMM (`ans_b_smoothing.py`, porte do xfemm, igual ao FEMM a
+~1e-15). Ver docs/claude/dados.md §2–3.
 
   material do nó  -- prioridade ferro > ímã > cobre > ar entre os elementos
-                     incidentes (_node_material_priority), em vez do voto por
-                     área (_node_material_stats, removido em 2026-10-22).
+                     incidentes (_node_material_priority).
   node_y [S,2]    -- (as 4 archs) média dos valores nodais suavizados
                      (b1,b2 do FEMM, P1 descontínuo) dos elementos incidentes
-                     DO MATERIAL ESCOLHIDO para o nó. Antes: média simples do
-                     curl(A) P0 de todos os incidentes.
+                     DO MATERIAL ESCOLHIDO para o nó.
   y_hw [2,H,W]    -- (as 4 archs) point_b(smooth=True) no centro do pixel,
                      elemento via trifinder (= mo_getb com mo_smooth('on')).
-                     Antes: interpolação baricêntrica do node_y antigo.
 
-  Referencial (2026-10-17): node_y e y_hw são POLARES (Br, Bθ), girados pelo
-  ângulo atan2(y, x) do nó / centro do pixel (_to_polar). Antes eram (Bx, By).
+  Referencial: node_y e y_hw são POLARES (Br, Bθ), girados pelo ângulo
+  atan2(y, x) do nó / centro do pixel (_to_polar).
   node_x [S,6]    -- (FNO_GNN/GNN_PostBase) mu_r pela prioridade; M segue o
                      material escolhido (nó ímã -> +-1 pela polaridade dos
-                     elementos de ímã incidentes; qualquer outro -> 0 --
-                     decisão do usuário 2026-10-09, opção (a)). J [A/mm²]
-                     (2026-10-14, última coluna) segue o mesmo critério: nó de
-                     cobre -> média por área do J dos elementos de cobre
-                     incidentes; outro -> 0 (_node_current_density).
-  edge_attr [E,4] -- delta_mu recalculado com o mu_r novo.
+                     elementos de ímã incidentes; qualquer outro -> 0). J [A/mm²]
+                     (última coluna) segue o mesmo critério: nó de cobre -> média
+                     por área do J dos elementos de cobre incidentes; outro -> 0
+                     (_node_current_density).
+  edge_attr [E,4] -- delta_mu com o mu_r do nó (prioridade).
 
 Demais chaves (x_hw, node_dual_area, r_base/c_base, edge_index e todo o resto do
 layout bipartite: node_x, elem_x, arestas, arestas cruzadas, contagens) não
-dependem do gabarito.
-
-Sem node_A/a_hw (2026-10-21): o layout v1 deixou de carregar o potencial A,
-que nenhum código do pipeline atual lia (só os eval_fn antigos). O bipartite_structure só dá a
-estrutura (o gabarito próprio dele, curl(A)/interpolação, saiu em 2026-10-22).
+dependem do gabarito; a estrutura do bipartite vem de bipartite_structure.
 """
 from pathlib import Path
 
@@ -150,7 +138,7 @@ def _parse_smooth(ans: AnsData, r_in, r_ext, ang_1, ang_2, n_r, n_a):
     node_M = np.where(node_material_id == _MAGNET_ID,
                       _node_magnet_polarity(nodes, elems, area, elem_material_id, elem_M),
                       0.0).astype(np.float32)
-    # J (2026-10-14): elem_x do bipartite, coluna 5 (mesma ordem de elementos)
+    # J: elem_x do bipartite, coluna 5 (mesma ordem de elementos)
     node_J = _node_current_density(elems, area, bip['elem_x'][:, 5], elem_material_id,
                                    node_material_id)
 
@@ -165,7 +153,7 @@ def _parse_smooth(ans: AnsData, r_in, r_ext, ang_1, ang_2, n_r, n_a):
         node_dual_area.astype(np.float32),   # node_dual_area (mm^2)
         r_base.astype(np.float32),           # r_base
         c_base.astype(np.float32),           # c_base
-        node_J,                              # J [A/mm²] (2026-10-14; antes node_x [S,5])
+        node_J,                              # J [A/mm²]
     ], axis=1)
 
     vertex = {

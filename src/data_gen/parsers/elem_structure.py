@@ -1,7 +1,7 @@
 """
 parsers/elem_structure.py
 -------------------------
-Grafo duplo do FNO_BipartiteGNN com os PAPÉIS TROCADOS (criado em 2026-10-07):
+Grafo duplo do FNO_BipartiteGNN com os PAPÉIS TROCADOS:
 o grafo de ELEMENTOS vira o principal (iterado, saída B por elemento) e o grafo de
 VÉRTICES vira o auxiliar (estático, injetado nos elementos por arestas cruzadas
 vértice -> elemento). Arch: src/neural_op/archs/fno_bipartite_gnn_elem.py::
@@ -16,7 +16,7 @@ Gabarito por elemento:
     curl(A) EXATO por elemento P1 (_element_b_from_A), sem média nodal; y_hw = None.
 
 =============================================================================
-CONTRATO DO LAYOUT Elem (FNO_BipartiteGNN_Elem) -- fonte única (2026-10-21).
+CONTRATO DO LAYOUT Elem (FNO_BipartiteGNN_Elem) -- fonte única.
 Citado por: neural_op/archs/fno_bipartite_gnn_elem.py, neural_op/normalization.py
 (_LAYOUTS['FNO_BipartiteGNN_Elem']), postprocess/inference.predict,
 postprocess/fields.elem_to_nodes, parsers/elem_smooth.py.
@@ -29,7 +29,7 @@ mas com o SIGNIFICADO TROCADO -- node_* = elementos, elem_* = vértices:
   ----------------  -----  ----------------------------------------------------
   node_x            [M,6]  ELEMENTOS (grafo principal): r_base_c, c_base_c
                            (centróide, CRUS -- lidos pela interpolação grade ->
-                           pontos), mu_r, M, area [mm²], J [A/mm²] (2026-10-14)
+                           pontos), mu_r, M, area [mm²], J [A/mm²]
   node_y            [M,2]  B por ELEMENTO [T]: no dataset (elem_smooth)
                            = (Br, Bθ) do B suavizado no centróide; com
                            target_field='B' (torque) = (Bx, By) do curl(A) exato
@@ -46,7 +46,7 @@ mas com o SIGNIFICADO TROCADO -- node_* = elementos, elem_* = vértices:
   cross_edge_index  [2,C]  vértice -> elemento: linha 0 = vértice (auxiliar),
                            linha 1 = elemento (principal); C = 3M (cada
                            elemento liga seus 3 vértices). Mesma convenção
-                           "linha 0 = auxiliar, linha 1 = principal" do v2, então
+                           "linha 0 = auxiliar, linha 1 = principal" do bipartite, então
                            os offsets de src/data_gen/chunks.py ('bipartite') e
                            de bipartite_collate continuam corretos
   cross_edge_attr   [C,1]  distância centróide↔vértice (mm)
@@ -135,11 +135,10 @@ def parse_elem_structure(ans_gz_path: Path, r_in: float, r_ext: float,
     Mesmo formato de dict de parse_bipartite_structure (dim_H/dim_W escalares).
 
     target_field='B' (padrão): node_y = curl(A) exato por elemento -- é o gabarito usado
-    pelo postprocess/torque.py; y_hw = None (até 2026-10-22, a interpolação baricêntrica
-    do B médio nodal do bipartite_structure, sem leitor). None (2026-10-21): sem gabarito
-    (node_y/y_hw = None), para o parser smooth (elem_smooth) preencher.
+    pelo postprocess/torque.py; y_hw = None. None: sem gabarito (node_y/y_hw = None),
+    para o parser smooth (elem_smooth) preencher.
 
-    `ans` (2026-10-22): `.ans` já lido (read_ans); None = lê de `ans_gz_path`. `bip`: layout
+    `ans`: `.ans` já lido (read_ans); None = lê de `ans_gz_path`. `bip`: layout
     bipartite da mesma amostra já calculado (parse_bipartite_structure, mesma janela) -- a Elem
     só reorganiza as chaves dele; None = calcula aqui."""
     assert target_field in ('B', None), f"target_field inválido: {target_field!r}"
@@ -156,7 +155,7 @@ def parse_elem_structure(ans_gz_path: Path, r_in: float, r_ext: float,
     ex = bip['elem_x']                     # mu_r, M, area, r_base_c, c_base_c, J
     node_x = ex[:, [3, 4, 0, 1, 2, 5]].astype(np.float32)
     rc, cc = ex[:, 3].astype(np.float64), ex[:, 4].astype(np.float64)
-    # A em float32 (como era o node_A do bipartite_structure até 2026-10-22)
+    # curl(A) com A em float32 (mesma precisão do potencial nos layouts)
     node_y = None   # target_field=None: preenchido pelo chamador
     if target_field == 'B':
         elem_Bx, elem_By = _element_b_from_A(nodes, elems, nodes[:, 2].astype(np.float32))

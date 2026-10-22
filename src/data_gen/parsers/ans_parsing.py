@@ -3,7 +3,7 @@ ans_parsing.py
 ---------------
 Funções puras de parsing/geometria sobre o `.ans` do FEMM (nós, elementos,
 materiais, correntes, arestas, grade H×W) -- SEM `import femm` (COM), sem
-sessão FEMM aberta, só numpy sobre dados já em memória/disco. Usadas pelos
+FEMM aberto, só numpy sobre dados já em memória/disco. Usadas pelos
 parsers smooth (bipartite_structure/smooth_layouts/elem_structure*) e pelo
 pós-processamento (src/postprocess/), que rodam sem FEMM (Linux).
 """
@@ -59,10 +59,9 @@ class AnsData(NamedTuple):
 
 
 def read_ans(ans_gz_path: Path) -> AnsData:
-    """Descomprime o `.ans.gz` uma vez, em memória (2026-10-22) -- leitura única do `.ans`
-    em todo o código (parsers, pós-processamento). Linhas em utf-8 explícito (antes: a
-    codificação padrão do sistema, cp1252 no Windows; os 6000 .ans do raw BLDC_138x276 são
-    ASCII puro -> linhas idênticas, conferido); o AnsMesh (load_ans_lines) com
+    """Descomprime o `.ans.gz` uma vez, em memória -- leitura única do `.ans` em todo o
+    código (parsers, pós-processamento). Linhas em utf-8 explícito (independe da codificação
+    padrão do sistema; o `.ans` do FEMM é ASCII); o AnsMesh (load_ans_lines) com
     utf-8/errors='replace', como o load_ans."""
     with gzip.open(ans_gz_path, 'rb') as f:
         raw = f.read()
@@ -74,7 +73,7 @@ def read_ans(ans_gz_path: Path) -> AnsData:
 
 def _parse_block_materials(lines):
     """Por índice de BlockProps (0-based, ordem do arquivo): material_id e
-    mu_r CONSTANTES (convenção antiga PERMEABILITY), classificados por
+    mu_r CONSTANTES (valores canônicos de PERMEABILITY), classificados por
     limiar de mu.
 
     Limiar de cobre (0.999995) é MAIS APERTADO que o de _material_ids_from_mu
@@ -83,8 +82,7 @@ def _parse_block_materials(lines):
     aqui é o Mu_x BRUTO do bloco no FEMM, e o material "copper" da
     biblioteca do FEMM tem Mu_x=0.999991 (~1.0, bem mais perto de vácuo do
     que o 0.999 aproximado do projeto) — confirmado lendo o .fem gerado.
-    Com o limiar antigo (0.9995) todo nó de cobre caía silenciosamente em
-    vácuo/ar; achado e corrigido nesta sessão (2026-07-23)."""
+    Um limiar de 0.9995 classificaria todo bloco de cobre como vácuo/ar."""
     idx = next(i for i, l in enumerate(lines) if l.strip().startswith('[BlockProps]'))
     nblocks = int(lines[idx].split('=')[1].strip())
 
@@ -121,20 +119,17 @@ def _parse_block_materials(lines):
 def _parse_label_materials(lines):
     """Por RÓTULO DE BLOCO ([BlockLabels], 0-based) — o índice que o campo
     `label` de cada elemento do .ans de fato referencia: material_id, mu_r
-    constante e M (polaridade do ímã, MAGNETIZATION +-1). 2026-10-05.
+    constante e M (polaridade do ímã, MAGNETIZATION +-1).
 
-    Substitui o par _parse_block_materials + polaridade por ordem de bloco indexado
-    direto pelo label do elemento, que só funcionava por coincidência (cada
-    _create_sec chama mi_getmaterial logo antes de criar o rótulo, então
-    [BlockProps] e [BlockLabels] saem com a mesma ordem/tamanho) e exigia
-    exatamente N_POLES_SECTOR blocos de ímã — quebra com a fase do rotor
-    aplicada (polo partido no corte = 15 blocos). Aqui:
+    [BlockProps] (materiais) e [BlockLabels] (rótulos) são tabelas diferentes: o
+    elemento aponta para o rótulo, e o rótulo para o material. Com a fase do rotor
+    o polo partido no corte vira 2 rótulos de ímã (15 no setor), então nem a ordem
+    nem a contagem de blocos de ímã são fixas:
       - material: rótulo -> sua referência em [BlockProps] (3ª coluna, 1-based)
         -> _parse_block_materials;
       - polaridade: magdir do rótulo (6ª coluna, graus) comparado ao ângulo da
         posição do rótulo — magnetização radial para fora (N35p, magdir ~ θ)
         ou para dentro (N35n, magdir ~ θ+180°). Independe de ordem/contagem.
-    Validado idêntico ao método antigo nos .ans de fase 0 (ver CLAUDE.md).
     """
     prop_material_id, prop_mu = _parse_block_materials(lines)
     j = next(i for i, l in enumerate(lines) if l.strip().startswith('[NumBlockLabels]'))
@@ -155,14 +150,14 @@ def _parse_label_materials(lines):
 
 
 def _parse_label_currents(lines, elems: np.ndarray, area: np.ndarray) -> np.ndarray:
-    """Densidade de corrente J [A/mm²] por RÓTULO de bloco (2026-10-14).
+    """Densidade de corrente J [A/mm²] por RÓTULO de bloco.
 
     Na magnetostática o FEMM trata o bloco num circuito em série como condutor
     sólido de J uniforme = Turns·TotalAmps / área do bloco (os parâmetros de fio só
     importam em CA) — o mesmo J que entra na EDP. TotalAmps vem de [CircuitProps];
     InCircuit (5ª coluna de [BlockLabels], 1-based, 0 = nenhum) e Turns (8ª); a área
     do bloco é a soma das áreas dos elementos do rótulo. Rótulos fora de circuito e
-    .ans sem circuitos -> 0. Validado em tests/proto_currents_sample.py.
+    .ans sem circuitos -> 0.
     """
     amps, cur = [], None
     for l in lines:
@@ -194,7 +189,7 @@ def _parse_label_currents(lines, elems: np.ndarray, area: np.ndarray) -> np.ndar
 def _node_current_density(elems: np.ndarray, area: np.ndarray, elem_J: np.ndarray,
                           elem_material_id: np.ndarray,
                           node_material_id: np.ndarray) -> np.ndarray:
-    """J por nó (2026-10-14), seguindo o material do nó como M em
+    """J por nó, seguindo o material do nó como M em
     _node_magnet_polarity: nó de cobre -> média de J dos elementos de cobre
     incidentes, ponderada por área (nó na divisa ida/volta da mesma ranhura fica
     com a média dos dois lados); qualquer outro material -> 0."""
@@ -270,17 +265,17 @@ def _node_magnet_polarity(nodes: np.ndarray, elems: np.ndarray, area: np.ndarray
 
 
 #: ordem de prioridade de material por nó (ferro > ímã > cobre > ar) --
-#: decisão do usuário 2026-10-09, ver CLAUDE.md "Suavização de B do FEMM".
+#: ver docs/claude/dados.md, "Material do nó".
 MATERIAL_PRIORITY = (MATERIAL_ID['iron_1008'], _MAGNET_ID,
                      MATERIAL_ID['copper'], MATERIAL_ID['vacuum'])
 
 
 def _node_material_priority(elems: np.ndarray, elem_material_id: np.ndarray, n_nodes: int,
                              priority=MATERIAL_PRIORITY) -> np.ndarray:
-    """Material do nó = o de MAIOR prioridade entre os elementos incidentes
-    (alternativa ao voto por área do antigo _node_material_stats, removido em
-    2026-10-22, que serrilhava as
-    interfaces -- ~50% das arestas de interface com lado trocado). 2026-10-09.
+    """Material do nó = o de MAIOR prioridade entre os elementos incidentes.
+    Um voto por área entre os incidentes serrilharia as interfaces (o nó da divisa
+    cairia ora de um lado, ora do outro); a prioridade fixa dá a todo nó de interface
+    o material do lado de maior prioridade.
 
     Retorna node_material_id [n_nodes] (int64).
     """
@@ -328,8 +323,7 @@ def _build_bidirectional_edge_attrs(nodes: np.ndarray, edges_undirected: np.ndar
                                      node_mu: np.ndarray, H: int, W: int):
     """edge_index [2,E] + edge_attr [E,4] bidirecional, colunas
     [delta_r, delta_c, center_dist, delta_mu] — mesma convenção de produção
-    (delta_mu = origem-destino, i-j), SEM shared_length (removido — sem
-    análogo direto numa malha triangular, decisão 2026-07-23).
+    (delta_mu = origem-destino, i-j).
 
     Inclui as arestas de "wrap" do contorno periódico (wrap_idx_1<->
     wrap_idx_2, ver _wrap_edge_pairs) com delta_r=delta_c=center_dist=0 —
@@ -360,19 +354,15 @@ def _build_bidirectional_edge_attrs(nodes: np.ndarray, edges_undirected: np.ndar
 
 
 def _element_b_from_A(nodes: np.ndarray, elems: np.ndarray, node_A: np.ndarray):
-    """B=curl(A) constante por elemento (P1 linear) -- fórmula fechada
-    validada em tests/proto_femm_element_b_check.py (bate com
-    mo_getb(smooth='off') a ~1e-16). Gabarito exato por elemento do torque
+    """B=curl(A) constante por elemento (P1 linear), fórmula fechada (igual ao
+    mo_getb(smooth='off') do FEMM a ~1e-16). Gabarito exato por elemento do torque
     (elem_structure.parse_elem_structure, target_field='B').
 
-    Bx=dA/dy, By=-dA/dx. `nodes[:, :2]` está em mm (convenção mi_probdef do
-    projeto) -- convertido pra metro aqui, senão o erro é de ~1000x (achado
-    2026-08-07, ver CLAUDE.md "Extração de dados direto do arquivo .ans").
+    Bx=dA/dy, By=-dA/dx. `nodes[:, :2]` está em mm (mi_probdef em milímetros) --
+    convertido para metro aqui (A em Wb/m, B em T).
 
-    As coordenadas reais vêm direto do .ans, então B sai no referencial global
-    de verdade, sem ambiguidade de rotação por elemento (antes, o
-    eval.py::_element_curl_A, já removido, reconstruía o triângulo por lei dos
-    cossenos, sem coordenadas absolutas). Vetorizado -- retorna (Bx, By), cada um [n_elems].
+    As coordenadas vêm do .ans, então B sai no referencial global (x, y).
+    Vetorizado -- retorna (Bx, By), cada um [n_elems].
     """
     xm = nodes[:, 0].astype(np.float64) * 1e-3
     ym = nodes[:, 1].astype(np.float64) * 1e-3
@@ -406,8 +396,8 @@ def _grid_polar_xy(r_in: float, r_ext: float, ang_1_rad: float, ang_2_rad: float
 
 def _to_polar(bx: np.ndarray, by: np.ndarray, x: np.ndarray, y: np.ndarray):
     """(Bx, By) -> (Br, Bθ) pelo ângulo θ = atan2(y, x) de cada ponto (nó,
-    centróide ou centro do pixel). Gabarito dos parsers smooth desde 2026-10-17
-    (antes cartesiano). Rotação em float64; retorna float32."""
+    centróide ou centro do pixel). Referencial do gabarito dos parsers smooth.
+    Rotação em float64; retorna float32."""
     th = np.arctan2(np.asarray(y, np.float64), np.asarray(x, np.float64))
     c, s = np.cos(th), np.sin(th)
     bx, by = np.asarray(bx, np.float64), np.asarray(by, np.float64)

@@ -7,22 +7,19 @@ save_ans_gzip_sample) -- sem FEMM aberto, sem chamada COM: grafo de vértices, g
 elementos, arestas (malha + wrap periódico), arestas cruzadas, node_x/elem_x e x_hw.
 O gabarito (node_y/y_hw) NÃO é calculado aqui: sai como None e é preenchido pelos
 parsers smooth (smooth_layouts, elem_smooth); o curl(A) exato por elemento
-do torque fica em elem_structure (target_field='B'). Até 2026-10-22 este parser tinha
-também um gabarito próprio (target_field='B': média nodal do curl(A) + interpolação
-baricêntrica em y_hw), sem uso no pipeline atual.
+do torque fica em elem_structure (target_field='B').
 
-Decisão de design (em relação ao grafo único de vértices do layout v1):
+Desenho (em relação ao grafo único de vértices do layout de vértices, FNO_GNN):
 
-  Material (mu_r, M) deixa de ser feature de vértice -- no v1, um nó bem
-     na fronteira ferro/ar tinha que "votar" por UM material (ambíguo, perde
-     informação). Aqui vira um GRAFO SEPARADO, de elementos/centróides
-     (1 material por elemento, sempre exato, sem ambiguidade nenhuma),
+  Material (mu_r, M) não é feature de vértice -- um nó na fronteira ferro/ar
+     teria que receber UM material (ambíguo, perde informação). Aqui é um GRAFO
+     SEPARADO, de elementos/centróides (1 material por elemento, exato),
      conectado ao grafo de vértices só por arestas de INJEÇÃO
      (elemento -> vértice, unidirecional): cada elemento manda info pros
      seus 3 vértices, mas nunca recebe nada de volta -- o grafo de
-     elementos não é iterado (sem estado evoluindo por camada; ver
-     conversa de 2026-08-10 sobre a camada F2 na GNN, que roda com pesos
-     próprios por camada mas sempre lendo o mesmo elem_x estático).
+     elementos não é iterado (sem estado evoluindo por camada; a mensagem F2
+     da BipartiteEdgeConvLayer tem pesos próprios por camada, mas sempre lê o
+     mesmo elem_x estático).
 
 Grafo 1 -- vértices/campo (nós da malha real):
     node_x [S,2]  r_base, c_base
@@ -34,8 +31,8 @@ Grafo 1 -- vértices/campo (nós da malha real):
 Grafo 2 -- elementos/centróides (1 nó por triângulo, SEM arestas internas):
     elem_x [M,6]  mu_r, M, area, r_base_centróide, c_base_centróide, J
                   (J [A/mm²] = Turns·I/área do bloco, 0 fora das bobinas --
-                  2026-10-14, _parse_label_currents; última coluna, fora dos
-                  índices estruturais da normalização)
+                  _parse_label_currents; última coluna, fora dos índices
+                  estruturais da normalização)
 
 Arestas cruzadas (elemento -> vértice, unidirecional, conexão imediata --
 cada elemento liga só aos seus 3 vértices, sem busca por raio/k-NN):
@@ -106,7 +103,7 @@ def parse_bipartite_structure(ans_gz_path: Path, r_in: float, r_ext: float,
     faz numpy/matplotlib.tri puro. `node_y`/`y_hw` saem como None, para o chamador
     preencher (parsers smooth: smooth_layouts, elem_smooth).
 
-    `ans` (2026-10-22): `.ans` já lido (ans_parsing.read_ans) -- evita descomprimir/ler o
+    `ans`: `.ans` já lido (ans_parsing.read_ans) -- evita descomprimir/ler o
     arquivo de novo; None = lê de `ans_gz_path` (read_ans, em memória).
 
     Retorna dict com todos os campos descritos na docstring do módulo, mais
@@ -117,13 +114,13 @@ def parse_bipartite_structure(ans_gz_path: Path, r_in: float, r_ext: float,
         ans = read_ans(ans_gz_path)
     lines, nodes, elems = ans.lines, ans.nodes, ans.elems
 
-    # material/polaridade pelo rótulo de cada bloco (2026-10-05) -- indexar [BlockProps] pela
-    # ordem de criação exigia 14 blocos de ímã e quebra com a fase do rotor aplicada
+    # material/polaridade pelo rótulo de cada bloco (_parse_label_materials): a ordem e a
+    # contagem dos blocos de ímã variam com a fase do rotor
     _, label_mu, label_M = _parse_label_materials(lines)
     elem_mu = label_mu[elems[:, 3]]
     elem_M = label_M[elems[:, 3]]
     elem_area = _element_areas(nodes, elems)
-    # densidade de corrente por elemento (2026-10-14) -- 0 sem correntes
+    # densidade de corrente por elemento -- 0 sem correntes
     elem_J = _parse_label_currents(lines, elems, elem_area)[elems[:, 3]]
 
     ang_1_rad, ang_2_rad = np.deg2rad(ang_1), np.deg2rad(ang_2)

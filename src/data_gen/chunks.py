@@ -2,12 +2,8 @@
 chunks.py
 ---------
 Montagem e gravação dos chunks de treino (`data_chunk_XXXX.pt`) a partir dos dicts por
-amostra dos parsers smooth (`smooth_layouts`, `elem_smooth`) -- 2026-10-21.
-
-Substitui o caminho antigo, em que os scripts de chunks importavam os `_flush` privados de
-`scripts/build_data_chunks*.py` e trocavam a global de saída deles por monkeypatch. As
-regras de concatenação são as mesmas daqueles `_flush`:
-  - STACK_KEYS (x_hw, y_hw, a_hw)       -> np.stack, eixo de batch novo ([C,H,W] -> [B,C,H,W]);
+amostra dos parsers smooth (`smooth_layouts`, `elem_smooth`). Regras de concatenação:
+  - STACK_KEYS (x_hw, y_hw)             -> np.stack, eixo de batch novo ([C,H,W] -> [B,C,H,W]);
   - INDEX_KEYS (edge_index, cross_edge_index) -> concat no eixo 1 ([2,E] -> [2,E_tot]);
   - demais chaves                        -> concat no eixo 0;
   - 'dim' = (H, W) da 1ª amostra (dim_H/dim_W do dict por amostra não entram no chunk).
@@ -26,7 +22,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-STACK_KEYS = frozenset({'x_hw', 'y_hw', 'a_hw'})
+STACK_KEYS = frozenset({'x_hw', 'y_hw'})
 INDEX_KEYS = frozenset({'edge_index', 'cross_edge_index'})
 
 LAYOUT_BY_ARCH = {

@@ -5,16 +5,9 @@ Constantes de material e geometria do motor BLDC — sem NENHUMA dependência
 de projeto (não importa femm/shapely/matplotlib/DatagenConfig/etc.), só
 literais Python puros.
 
-Extraído de src/data_gen/motor_model.py em 2026-08-13: MATERIAL_ID/
-PERMEABILITY/MAGNETIZATION viviam como atributos de classe de BLDC_Process,
-e N_POLES_SECTOR de BLDC_FEMM_Model_Sym120 — mas motor_model.py tem
-`import femm` na primeira linha (necessário só pras classes que desenham no
-FEMM de verdade), então importar essas classes só pra ler 3 dicts/1 inteiro
-arrastava femm (+ matplotlib/shapely/pandas) junto. Isso quebrava a promessa
-de src/data_gen/parsers/ans_parsing.py e
-src/data_gen/parsers/bipartite_structure.py de rodar 100% sem FEMM (ver docstring
-desses módulos e CLAUDE.md "Raw -- malha real do FEMM v2") -- eles usavam
-BLDC_Process/BLDC_FEMM_Model_Sym120_Annular só por essas constantes.
+Separado de motor_model.py porque aquele importa `femm` (COM, só Windows): os
+parsers (src/data_gen/parsers/) e o pós-processamento leem estas constantes e rodam
+sem FEMM.
 
 motor_model.py importa daqui (BLDC_FEMM_Model_Sym120.N_POLES_SECTOR,
 WINDING_SECTOR, STACK_LENGTH_MM) em vez de literais duplicados -- fonte única.
@@ -27,9 +20,7 @@ PERMEABILITY  = {'iron_1008': 5000.0, 'N35p': 1.05, 'N35n': 1.05,'copper': 0.999
 MATERIAL_ID   = {'iron_1008': 0,      'N35p': 2,    'N35n': 2,   'copper': 3,     'vacuum': 1  }
 
 # Definição completa (no FEMM) dos materiais que NÃO existem na biblioteca
-# padrão do FEMM 4.2 — foram inseridos à mão no matlib.dat da máquina original
-# (D:\femm42\bin\matlib.dat). Valores copiados do matlib.dat e conferidos
-# idênticos ao [BlockProps] do raw oficial mesh_ans_138x276 (2026-10-07).
+# padrão do FEMM 4.2. Valores iguais aos do [BlockProps] do raw.
 # Usados por BLDC_FEMM_Model._get_material (motor_model.py) via mi_addmaterial
 # + mi_addbhpoint quando o material não está na biblioteca local; se estiver,
 # a biblioteca precisa bater com estes valores (senão erro).
@@ -58,8 +49,7 @@ FEMM_MATERIAL_DEFS = {
     ),
 }
 
-# Comprimento axial do pacote (stack length) [mm] -- FIXO (2026-10-21; antes sorteado em
-# U[5, 10] mm no sampler 'legacy' e 1 mm nos demais). Fonte única: coluna stack_length do
+# Comprimento axial do pacote (stack length) [mm] -- FIXO. Fonte única: coluna stack_length do
 # valid_designs.csv, profundidade do problema planar (mi_probdef) e L do torque pelo campo.
 STACK_LENGTH_MM = 15.0
 
@@ -75,8 +65,7 @@ def stack_length_mm(motor_params: dict) -> float:
 # BLDC_FEMM_Model_Sym120 em motor_model.py para a matemática completa.
 N_POLES_SECTOR = 14   # 120 / (360/42)
 
-# Enrolamento do setor 120° (2026-10-14, validado em tests/proto_currents_sample.py e
-# tests/proto_rotating_field.py): 1 célula 12 ranhuras / 14 polos, camada dupla
+# Enrolamento do setor 120°: 1 célula 12 ranhuras / 14 polos, camada dupla
 # concentrada. Dente k -> (fase, sinal); a bobina do dente k são os circuitos
 # coil_k_0 (ida, +sinal·I_fase, lado de θ menor) e coil_k_1 (volta, −sinal·I_fase).
 # Layout clássico do 12/14 com B <-> C trocados, para que ABC com θe crescente gire

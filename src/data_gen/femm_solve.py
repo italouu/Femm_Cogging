@@ -32,10 +32,9 @@ def save_ans_gzip_sample(motor_params: dict, tmp_dir: Path, out_path: Path) -> d
 
     Compressão: gzip padrão da stdlib, cópia em bytes crus (`'rb'`/`'wb'`,
     sem tradução de encoding/newline) -- formato portável, decompressível
-    em qualquer SO. Quem for parsear o conteúdo depois (Linux, ao que tudo
-    indica) deve abrir com `encoding='utf-8'` explícito, nunca depender do
-    encoding padrão do SO (nesta sessão, prints no console Windows já
-    quebraram por causa disso -- cp1252 não é UTF-8).
+    em qualquer SO. Quem parsear o conteúdo deve abrir com `encoding='utf-8'`
+    explícito (read_ans), nunca depender do encoding padrão do SO (cp1252 no
+    Windows).
     """
     tmp_dir = Path(tmp_dir)
     out_path = Path(out_path)

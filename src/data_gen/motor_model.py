@@ -37,8 +37,9 @@ class BLDC_Process:
         self.slot_Rs               = motor_params['slot_Rs']['value']
         self.pole_embrance         = motor_params['pole_embrance']['value']
         self.pole_thickness        = motor_params['pole_thickness']['value']
-        # correntes de fase (2026-10-14): amplitude [A] e ângulo elétrico θe [graus] do
-        # sistema trifásico equilibrado (ver phase_currents). Ausentes (CSV antigo) -> 0 A.
+        # correntes de fase: amplitude [A] e ângulo elétrico θe [graus] do sistema
+        # trifásico equilibrado (ver phase_currents). Ausentes (raw gerado com
+        # DatagenConfig.current_peak = 0, sem as colunas current_*) -> 0 A.
         self.current_amplitude     = float(motor_params.get('current_amplitude', {'value': 0.0})['value'])
         self.current_angle         = float(motor_params.get('current_angle', {'value': 0.0})['value'])
 
@@ -247,13 +248,13 @@ class BLDC_Process:
     @staticmethod
     def add_phase_currents(samples, i_peak, seed=42):
         """Acrescenta as correntes de fase a `samples` (saída de qualquer generate_samples*),
-        in place, e devolve `samples` (2026-10-14).
+        in place, e devolve `samples`.
 
         Sistema trifásico equilibrado: amplitude I ~ U[0, i_peak] [A] e ângulo elétrico
         θe ~ U[0, 360) [graus] — colunas 'current_amplitude' e 'current_angle'. Garante
         |Ia|, |Ib|, |Ic| <= i_peak (sortear Ia, Ib independentes deixaria Ic chegar a
         2·i_peak). Gerador próprio (seed + rótulo fixo), sorteado depois da geometria:
-        com o mesmo seed, geometria e rotor_phase saem idênticos aos de antes.
+        a geometria e o rotor_phase dependem só do seed, com ou sem correntes.
         """
         n = len(next(iter(samples.values()))['value'])
         rng = np.random.default_rng([seed, 0x1A])
@@ -264,8 +265,8 @@ class BLDC_Process:
     @staticmethod
     def phase_currents(amplitude, angle_deg):
         """{'A','B','C'} -> corrente [A]: Ia = I·cos θe, Ib = I·cos(θe − 120°),
-        Ic = I·cos(θe + 120°) (Ia + Ib + Ic = 0). `+ 0.0` evita −0.0 (I = 0 dá o .ans
-        idêntico ao de antes das correntes)."""
+        Ic = I·cos(θe + 120°) (Ia + Ib + Ic = 0). `+ 0.0` evita −0.0 (com I = 0 o .ans
+        sai idêntico ao de um modelo sem circuitos)."""
         th = np.deg2rad(angle_deg)
         return {ph: float(amplitude * np.cos(th - shift)) + 0.0
                 for ph, shift in (('A', 0.0), ('B', 2 * np.pi / 3), ('C', -2 * np.pi / 3))}
@@ -294,10 +295,10 @@ class BLDC_Process:
         return result
 
 # --------------------------------------------------------------------------- #
-# Biblioteca de materiais do FEMM (matlib.dat) — reprodutibilidade (2026-10-07)
+# Biblioteca de materiais do FEMM (matlib.dat) — reprodutibilidade
 # --------------------------------------------------------------------------- #
-# iron_1008/vacuum/copper foram inseridos à mão no matlib.dat da máquina
-# original; numa instalação limpa do FEMM mi_getmaterial não os encontra.
+# iron_1008/vacuum/copper não fazem parte da biblioteca padrão do FEMM: numa
+# instalação limpa mi_getmaterial não os encontra.
 # _femm_library_materials() lê o matlib.dat da instalação registrada no COM
 # (a mesma que femm.openfemm() abre) e BLDC_FEMM_Model._get_material decide
 # entre mi_getmaterial (biblioteca) e mi_addmaterial (FEMM_MATERIAL_DEFS).
@@ -396,10 +397,9 @@ class BLDC_FEMM_Model(BLDC_Process):
         self._explicit_materials = set()   # já criados via mi_addmaterial neste documento
 
     def _get_material(self, name):
-        """Substitui femm.mi_getmaterial(name) (2026-10-07).
+        """Substitui femm.mi_getmaterial(name).
 
-        - name na biblioteca local do FEMM -> mi_getmaterial (como antes; o .ans
-          sai idêntico). Se name também estiver em FEMM_MATERIAL_DEFS, as
+        - name na biblioteca local do FEMM -> mi_getmaterial. Se name também estiver em FEMM_MATERIAL_DEFS, as
           propriedades da biblioteca precisam bater com a definição — senão
           ValueError (evita reproduzir com outra curva BH sem perceber).
         - fora da biblioteca (instalação limpa) ou FORCE_EXPLICIT_MATERIALS ->
@@ -502,11 +502,7 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
     círculo completo (360 graus) — contorno periódico (BdryFormat=4) nos dois
     cortes radiais em vez de A=0 em toda a fronteira externa. BLDC_FEMM_Model
     só fornece os materiais e os primitivos de desenho (_create_sec,
-    _create_coils); o desenho do motor inteiro (360°) saiu na limpeza de
-    2026-10-21 (sem uso).
-
-    Promovido de tests/proto_femm_sym120.py (validado 2026-07-22, promovido
-    2026-07-23) — mesma classe, mesmo nome, sem alterações de geometria.
+    _create_coils).
 
     Por que 120 graus é o período correto (42 polos / 36 ranhuras):
       - passo de polo = 360/42 = 8.571 graus; passo de ranhura = 360/36 = 10 graus
@@ -521,17 +517,12 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
     o corte é feito desenhando só o lóbulo vp da ranhura 0 e só o lóbulo vn
     da ranhura 12 — sem precisar recortar o perfil arredondado da ranhura.
 
-    Os polos NÃO precisam ser cortados: o polo 0 já começa exatamente em
-    theta=0 (pole_offset=0 no modelo completo), então 14 polos completos
-    fecham exatamente em 120 graus.
-    [ATUALIZADO 2026-10-05] o parágrafo acima só vale para phase=0. Até essa
-    data draw_motor ignorava self.phase (polos com phase=0 fixo — herança do
-    protótipo de 2026-07-22, teste isolado com fase 0), então rotor_phase
-    sorteado nunca chegava à simulação. Agora os polos são girados pela fase
-    (_pole_pieces): o polo que cruza 120° é partido em dois pedaços, um em cada
-    ponta do setor, com a magnetização do polo inteiro; o corte periódico da
-    faixa dos ímãs se adapta (modo "poles" em _draw_periodic_cuts). Validado
-    em tests/inspect_femm_phase_sym120.py (wrap exato nos cortes, |ΔA|~1e-12).
+    Os polos são girados pela fase do rotor (_pole_pieces): com phase=0 o polo 0
+    começa exatamente em theta=0 e 14 polos completos fecham em 120 graus; com
+    outra fase o polo que cruza 120° é partido em dois pedaços, um em cada ponta
+    do setor, com a magnetização do polo inteiro, e o corte periódico da faixa
+    dos ímãs se adapta (modo "poles" em _draw_periodic_cuts). A periodicidade
+    vale para qualquer fase (A idêntico nos dois cortes, |ΔA| ~ 1e-12).
     """
 
     N_POLES_SECTOR = _MOTOR_N_POLES_SECTOR   # 120 / (360/42) == 14
@@ -584,14 +575,14 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
     _POLE_CUT_TOL_DEG = 0.01   # pedaço de polo mais estreito que isso é colado no corte
 
     def _pole_pieces(self):
-        """Polos do setor girados pela fase do rotor (2026-10-05).
+        """Polos do setor girados pela fase do rotor.
 
         Polo k em θ = (k·passo + phase) mod 120°, largura passo·pole_embrance,
         polaridade alternada pela paridade de k (14 polos, número par — a
         periodicidade de 120° vale para qualquer fase). Um polo que cruza 120°
         vira dois pedaços, [θ, 120°] e [0°, θ+largura−120°]; pedaços mais
         estreitos que _POLE_CUT_TOL_DEG são colados no corte (evita elemento
-        degenerado). Com phase=0 dá exatamente os polos do desenho antigo.
+        degenerado). Com phase=0 o polo 0 começa em 0° e nenhum polo é partido.
 
         Retorna [(a1, a2, centro_do_polo, direction, k)] em graus, a1/a2 em
         [0, 120]; centro_do_polo já trazido para o referencial do pedaço (−120°
@@ -609,8 +600,8 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
             if sector - a1 < tol:                      # pedaço do fim minúsculo: polo todo no início
                 a1, a2, center = 0.0, a2 - sector, center - sector
             elif 0.0 < a1 < tol:                       # começa logo depois de 0°: encosta no corte
-                a1 = 0.0                               # (fresta de vácuo de ~µm explodia a malha —
-                                                       #  sample 943: 0,0018° -> 78k nós; 2026-10-05)
+                a1 = 0.0                               # (uma fresta de vácuo de ~µm entre o corte e o
+                                                       #  polo refina a malha: 0,0018° -> 78k nós)
             if abs(a2 - sector) < tol:                 # termina no corte: encosta exatamente em 120°
                 pieces.append((a1, sector, center, direction, k))
             elif a2 < sector:                          # cabe inteiro no setor
@@ -657,7 +648,7 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
         r = self.stator_outer_diameter / 2 - (self.slot_Hs0 + self.slot_Hs1 + self.slot_Hs2 / 2)
         step = 2 * np.pi / self.number_stator_slots
         ang_offset = step / 2 - self.slotoppener_ang / 2
-        # correntes de fase (2026-10-14): bobina do dente i = coil_i_0 (+sinal·I_fase) e
+        # correntes de fase: bobina do dente i = coil_i_0 (+sinal·I_fase) e
         # coil_i_1 (−sinal·I_fase), tabela WINDING_SECTOR (motor_constants.py)
         i_ph = self.phase_currents(self.current_amplitude, self.current_angle)
 
@@ -719,7 +710,7 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
 
         # label de vácuo dentro da cunha do furo (FEMM exige material em toda
         # região fechada — sem label = erro "material not defined", não vira
-        # buraco automaticamente); igual ao (0,0) do modelo original
+        # buraco automaticamente)
         r_bore_lab = (self._bore_start_radius() + r_in2) / 2
         ang_bore = np.deg2rad(60)
         self._get_material(self.material_gap)
@@ -852,9 +843,7 @@ class BLDC_FEMM_Model_Sym120_Annular(BLDC_FEMM_Model_Sym120):
     vácuo na fatia remanescente, corte periódico até esse raio) já é
     parametrizado no pai.
 
-    Promovido de tests/proto_femm_sym120_annular.py (validado 2026-07-22,
-    promovido 2026-07-23). Usada como base do método de geração via malha
-    real do FEMM (ver src/data_gen/femm_solve.py).
+    É o modelo usado na geração do raw (src/data_gen/femm_solve.py).
     """
 
     def _bore_start_radius(self):

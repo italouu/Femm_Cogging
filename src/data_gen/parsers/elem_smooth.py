@@ -1,7 +1,7 @@
 """
 parsers/elem_smooth.py
 ----------------------
-FNO_BipartiteGNN_Elem com gabarito B SUAVIZADO do FEMM (2026-10-10) -- versão
+FNO_BipartiteGNN_Elem com gabarito B SUAVIZADO do FEMM -- versão
 smooth de `elem_structure.py` (bipartite com papéis trocados: elementos =
 grafo principal, vértices = auxiliar), coerente com os datasets das outras 4 archs
 `<DatagenConfig.dataset>/<arch>` (`smooth_layouts.py`).
@@ -15,13 +15,10 @@ vértices, arestas cruzadas, contagens) e troca só o gabarito:
                    point_b(smooth=True) no centróide = média dos 3 valores
                    nodais suavizados (b1,b2, P1 descontínuo) do elemento.
                    Mesmo campo do y_hw, só amostrado no centróide em vez do
-                   pixel (decisão do usuário 2026-10-10; alternativas
-                   descartadas: curl(A) P0 exato, ou P1 completo [M,6], que
-                   exigiria mudar a arch).
+                   pixel (1 valor por elemento, a saída da arch).
 
-Referencial (2026-10-17): node_y e y_hw são POLARES (Br, Bθ), girados pelo
-ângulo atan2(y, x) do centróide / centro do pixel (ans_parsing._to_polar).
-Antes eram (Bx, By).
+Referencial: node_y e y_hw são POLARES (Br, Bθ), girados pelo ângulo atan2(y, x)
+do centróide / centro do pixel (ans_parsing._to_polar).
 
 Layout/chaves idênticos ao de elem_structure.py -- loader/collate/
 Normalizer/step_fn/metric_fn/arch reaproveitados sem mudança (contrato do
@@ -88,7 +85,7 @@ def parse_all_layouts(ans_gz_path: Path, r_in: float, r_ext: float,
                               ang_1: float = 0.0, ang_2: float = 120.0,
                               n_r: int = 138, n_a: int = 276) -> dict:
     """1 `.ans.gz` -> {arch: dict_de_arrays} dos 5 datasets smooth (as 4 de SMOOTH_ARCHS +
-    ELEM_ARCH) numa passada (2026-10-22): `.ans` lido uma vez, layout bipartite e B
+    ELEM_ARCH) numa passada: `.ans` lido uma vez, layout bipartite e B
     suavizado calculados uma vez; a Elem é derivada do bipartite e reaproveita o y_hw
     (mesma conta de parse_elem_smooth, resultado idêntico)."""
     ans = read_ans(ans_gz_path)

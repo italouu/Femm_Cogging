@@ -209,7 +209,13 @@ def mesh_surface_quadrature(xy, tri, b1, b2, n_sub=2):
 
 def surface_values_p1(tri, B_node, bary):
     """|B| [M,K] da superfície P1 contínua definida pelos valores nodais B_node [S,2]
-    (interpolação linear das componentes no triângulo)."""
+    (interpolação linear das componentes no triângulo).
+
+    B_node vem em componentes POLARES (Br, Bθ), cada nó na base do seu próprio ângulo
+    (modelos nodais e o piso P1_nos), enquanto a superfície do FEMM
+    (mesh_surface_quadrature) interpola as componentes CARTESIANAS b1, b2. A base polar
+    gira dentro do triângulo, então as duas interpolações não coincidem exatamente
+    (|·| idem). Efeito no L1_A/L2_A não medido."""
     V = B_node[tri]                                      # [M,3,2]
     return np.hypot(V[..., 0] @ bary.T, V[..., 1] @ bary.T)
 

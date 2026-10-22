@@ -109,6 +109,10 @@ def femm_solve(row, theta_e, work_dir: Path, gz_out: Path):
         model.draw_motor(); femm.mi_zoomnatural(); femm.mi_saveas(str(work_dir / 'model.fem'))
         femm.mi_createmesh(); femm.mi_analyze(); femm.mi_loadsolution()
         lab = block_labels(work_dir / 'model.ans')
+        # Rotor = rótulos com r > r_m. O rótulo do ar do entreferro fica exatamente em
+        # r = (RID + SOD)/4 = r_m (motor_model.py, r_avg); a seleção depende de o raio dele,
+        # relido do .ans, não passar de r_m em ponto flutuante — funciona porque rótulo e
+        # r_m saem da mesma conta (conferido igual em 100 amostras), e o > estrito o exclui.
         for x, y in lab[np.hypot(lab[:, 0], lab[:, 1]) > r_m]:
             femm.mo_selectblock(x, y)
         t22 = float(np.atleast_1d(femm.mo_blockintegral(22))[0])

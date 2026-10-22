@@ -120,7 +120,10 @@ def hardware_info():
 # --------------------------------------------------------------------------- #
 def femm_solve_timed(row, work_dir: Path):
     """Mesma sequência de femm_solve.save_ans_gzip_sample; cronometra openfemm, geometria e
-    malha à parte (fora da comparação) e o mi_analyze (solução). Retorna (tempos s, .ans)."""
+    malha à parte (fora da comparação) e o mi_analyze (solução). Retorna (tempos s, .ans).
+
+    O tempo "solve" é o do mi_analyze; se o mi_analyze refaz a malha, "solve" = malha +
+    solução. Teste: tests/check_analyze_remesh.py (resultado ainda não registrado)."""
     import femm
     from src.data_gen.motor_constants import stack_length_mm
     from src.data_gen.motor_model import BLDC_FEMM_Model_Sym120_Annular

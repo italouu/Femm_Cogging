@@ -86,7 +86,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from scripts.build_smooth_ans_chunks_direct import MAX_SAMPLES
+from scripts.build_chunks_main import MAX_SAMPLES
 from src.configs.datagen import DatagenConfig
 from src.data_gen.parsers.ans_parsing import read_ans
 from src.postprocess.fields import elem_to_nodes, gap_radius_mm, mag

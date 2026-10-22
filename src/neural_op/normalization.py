@@ -26,7 +26,7 @@ _LAYOUTS = {
         'node_y':    (_GRID_Y, ()),
         'edge_attr': (('delta_r', 'delta_c', 'center_dist', 'delta_mu'), ()),
     },
-    # node_x lido em _interpolate_fno_to_nodes_v2 (colunas 0, 1); elem_x não é interpolado
+    # node_x lido em _interpolate_fno_to_bipartite_nodes (colunas 0, 1); elem_x não é interpolado
     'FNO_BipartiteGNN': {
         'x_hw':            (_GRID_X, ()),
         'y_hw':            (_GRID_Y, ()),
@@ -38,7 +38,7 @@ _LAYOUTS = {
     },
     # FNO_BipartiteGNN_Elem._fno_at: node_x = elementos (centróide, colunas 0, 1) e
     # elem_x = vértices (colunas 0, 1; posição, não interpolada)
-    # (contrato do layout Elem: docstring de src/data_gen/parsers/femm_mesh_elem.py)
+    # (contrato do layout Elem: docstring de src/data_gen/parsers/elem_structure.py)
     'FNO_BipartiteGNN_Elem': {
         'x_hw':            (_GRID_X, ()),
         'y_hw':            (_GRID_Y, ()),
@@ -138,7 +138,7 @@ class Normalizer:
         arestas; caches sem versão, sem edge_attr/cross_edge_attr, não são reaproveitados)."""
         import glob
         import hashlib
-        from src.neural_op.dataloaders.grid_loader import split_chunk_paths
+        from src.neural_op.dataloaders.loaders import split_chunk_paths
         chunk_dir = Path(f'data/torch/data_chunks/{dataset}')
         all_paths = sorted(glob.glob(f'data/torch/data_chunks/{dataset}/data_chunk_*.pt'))
         if not all_paths:
@@ -205,7 +205,7 @@ class Normalizer:
 
     def encode_batch(self, batch):
         """Encode de todas as chaves conhecidas de um batch — tuple (x,y) do
-        loader 'grid' ou dict dos loaders 'mesh_v1'/'femm_mesh_v2'. Usado pelo CUDAPrefetcher,
+        loader 'grid' ou dict dos loaders 'vertex'/'bipartite'. Usado pelo CUDAPrefetcher,
         transparente para step_fn (loss passa a ser calculada em espaço
         normalizado sem nenhuma mudança nos step_fn de cada arch)."""
         if isinstance(batch, dict):

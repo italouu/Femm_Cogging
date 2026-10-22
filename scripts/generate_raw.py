@@ -1,17 +1,17 @@
 """
-generate_data_femm_mesh_v2.py
--------------------------------
+generate_raw.py
+---------------
 Gera o raw: sorteia as geometrias (BLDC_Process.generate_samples) e as correntes de fase
 (add_phase_currents), grava valid_designs.csv e, para cada amostra, desenha + malha +
 mi_analyze() e salva o `.ans` INTEIRO (texto puro do FEMM, sem extração/derivação)
 comprimido em gzip em data/raw/<dataset>/sample_XXXXXX.ans.gz -- ver
-src/data_gen/femm_mesh.py::save_ans_gzip_sample. Sem pós-processamento COM (sem
+src/data_gen/femm_solve.py::save_ans_gzip_sample. Sem pós-processamento COM (sem
 mi_loadsolution/mo_*). Retomável: amostras já presentes são puladas.
 
-Os chunks de treino saem desse raw por scripts/build_smooth_datasets.py.
+Os chunks de treino saem desse raw por scripts/build_datasets.py.
 
 Execução (a partir da raiz do projeto):
-    python -m scripts.generate_data_femm_mesh_v2
+    python -m scripts.generate_raw
 """
 import csv
 import math
@@ -27,19 +27,19 @@ from src.configs.datagen import DatagenConfig
 _dg = DatagenConfig()
 DATASET     = _dg.dataset
 N_SAMPLES   = _dg.n_samples
-MAX_WORKERS = _dg.femm_mesh_max_workers
+MAX_WORKERS = _dg.raw_max_workers
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-TEMP_DIR     = PROJECT_ROOT / "data" / "temp"          # só workdirs tmp_femm_mesh_v2_*/ (scratch por amostra)
+TEMP_DIR     = PROJECT_ROOT / "data" / "temp"          # só workdirs tmp_raw_*/ (scratch por amostra)
 OUT_DIR      = PROJECT_ROOT / "data" / "raw" / DATASET
 
 
 def _generate_one_ans_sample(idx, motor_params_list, out_dir):
     # import local: cada worker é um processo novo (Windows spawn)
-    from src.data_gen.femm_mesh import save_ans_gzip_sample
+    from src.data_gen.femm_solve import save_ans_gzip_sample
 
     motor_params = BLDC_Process.extract_params_at_index(motor_params=motor_params_list, code=idx)
-    tmp_dir = TEMP_DIR / f"tmp_femm_mesh_v2_{idx}"
+    tmp_dir = TEMP_DIR / f"tmp_raw_{idx}"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"sample_{idx:06d}.ans.gz"
 

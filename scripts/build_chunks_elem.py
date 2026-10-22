@@ -1,10 +1,10 @@
 """
-build_elem_smooth_chunks.py
----------------------------
+build_chunks_elem.py
+--------------------
 Chunks do FNO_BipartiteGNN_Elem com gabarito B SUAVIZADO do FEMM (2026-10-10):
 raw -> chunks direto, pool novo por chunk, escrita atômica (src/data_gen/chunks.py),
-retomável. Parser: parse_ans_gzip_sample_elem_smooth
-(src/data_gen/parsers/femm_mesh_elem_smooth.py). O scripts.build_smooth_datasets gera
+retomável. Parser: parse_elem_smooth
+(src/data_gen/parsers/elem_smooth.py). O scripts.build_datasets gera
 este dataset junto com os outros 4 numa passada só; este script gera só a Elem.
 
 Raw: data/raw/<DatagenConfig.dataset>/ (o mesmo das outras 4 archs), amostras em
@@ -18,8 +18,8 @@ elemento; estrutura (grafo dual, vértices, arestas cruzadas) idêntica à do
 protótipo sem smooth.
 
 Execução (raiz do projeto; Windows ou VM Linux):
-    python -m scripts.build_elem_smooth_chunks
-    python -m scripts.build_elem_smooth_chunks --max-samples 64 --out-name _smoke_FNO_BipartiteGNN_Elem
+    python -m scripts.build_chunks_elem
+    python -m scripts.build_chunks_elem --max-samples 64 --out-name _smoke_FNO_BipartiteGNN_Elem
 """
 import argparse
 import csv
@@ -27,12 +27,12 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-from scripts.build_smooth_ans_chunks_direct import (
+from scripts.build_chunks_main import (
     RAW_DIR, CHUNKS_ROOT, N_R, N_A, ANG_1, ANG_2, CHUNK_SIZE, MAX_WORKERS, MAX_SAMPLES,
 )
 from src.configs.datagen import DatagenConfig
 from src.data_gen.chunks import sample_idx as _sample_idx, write_chunk
-from src.data_gen.parsers.femm_mesh_elem_smooth import parse_ans_gzip_sample_elem_smooth
+from src.data_gen.parsers.elem_smooth import parse_elem_smooth
 
 MIN_FREE_GB = 55   # valor de scripts/build_elem_proto_chunks.py (chunks de 4000 amostras ~47 GB)
 N_RAW_EXPECTED = DatagenConfig().n_samples   # precheck com max_samples=None: raw completo
@@ -40,7 +40,7 @@ OUT_NAME  = 'FNO_BipartiteGNN_Elem'
 
 
 def _parse_one(path: Path, r_in: float, r_ext: float) -> dict:
-    return parse_ans_gzip_sample_elem_smooth(path, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2,
+    return parse_elem_smooth(path, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2,
                                              n_r=N_R, n_a=N_A)
 
 
@@ -90,8 +90,8 @@ def precheck(out_name=OUT_NAME, max_samples=MAX_SAMPLES) -> bool:
     import numpy as np
     from src.data_gen.parsers.ans_b_smoothing import element_b, nodal_b
     from src.data_gen.parsers.ans_parsing import read_ans, _to_polar
-    from src.data_gen.parsers.femm_mesh_elem import parse_ans_gzip_sample_elem
-    from src.data_gen.parsers.femm_mesh_smooth import parse_ans_gzip_sample_smooth
+    from src.data_gen.parsers.elem_structure import parse_elem_structure
+    from src.data_gen.parsers.smooth_layouts import parse_smooth_layouts
 
     ok = True
     print("\n=== Precheck (chunks elem smooth) ===", flush=True)
@@ -116,8 +116,8 @@ def precheck(out_name=OUT_NAME, max_samples=MAX_SAMPLES) -> bool:
     r_in, r_ext = float(row['inner_diameter [mm]']) / 2, float(row['outer_diameter [mm]']) / 2
     kw = dict(ang_1=ANG_1, ang_2=ANG_2, n_r=N_R, n_a=N_A)
     d = _parse_one(p, r_in, r_ext)
-    e = parse_ans_gzip_sample_elem(p, r_in, r_ext, **kw)
-    sb = parse_ans_gzip_sample_smooth(p, r_in, r_ext, **kw)['FNO_BipartiteGNN']
+    e = parse_elem_structure(p, r_in, r_ext, **kw)
+    sb = parse_smooth_layouts(p, r_in, r_ext, **kw)['FNO_BipartiteGNN']
 
     ans = read_ans(p)
     mesh = ans.mesh

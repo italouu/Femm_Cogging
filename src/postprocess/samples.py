@@ -28,9 +28,9 @@ from src.configs.datagen import DatagenConfig
 from src.data_gen.parsers.ans_b_smoothing import element_b, nodal_b
 from src.data_gen.parsers.ans_parsing import (_node_material_priority, _parse_label_materials,
                                               read_ans)
-from src.data_gen.parsers.femm_mesh_elem_smooth import parse_ans_gzip_sample_elem_smooth
-from src.data_gen.parsers.femm_mesh_smooth import parse_ans_gzip_sample_smooth
-from src.neural_op.dataloaders.grid_loader import split_chunk_paths
+from src.data_gen.parsers.elem_smooth import parse_elem_smooth
+from src.data_gen.parsers.smooth_layouts import parse_smooth_layouts
+from src.neural_op.dataloaders.loaders import split_chunk_paths
 from src.postprocess.metrics import grid_mesh_overlay, mesh_surface_quadrature
 
 _dg = DatagenConfig()
@@ -74,7 +74,7 @@ def samples_with_subset(split_run_dir: Path, max_samples=None, n_samples=None):
     ordem do split de `split_run_dir` (config.json + split.json de uma run da
     bateria); max_samples -> dividido igualmente entre os subsets não vazios.
     n_samples: nº de amostras do raw usadas no dataset da run (as n_samples primeiras,
-    como MAX_SAMPLES em scripts/build_smooth_ans_chunks_direct.py); None = todas."""
+    como MAX_SAMPLES em scripts/build_chunks_main.py); None = todas."""
     cfg = json.loads((split_run_dir / 'config.json').read_text())
     split = json.loads((split_run_dir / 'split.json').read_text())
     ans = sorted(RAW_DIR.glob('sample_*.ans.gz'), key=_sample_idx)[:n_samples]
@@ -112,10 +112,10 @@ def parse_smooth(path, row, with_elem=False, with_overlay=False, ans=None):
     r_in = float(row['inner_diameter [mm]']) / 2
     r_ext = float(row['outer_diameter [mm]']) / 2
     kw = dict(ang_1=ANG_1, ang_2=ANG_2, n_r=N_R, n_a=N_A, ans=ans)
-    s = parse_ans_gzip_sample_smooth(path, r_in, r_ext, **kw)
+    s = parse_smooth_layouts(path, r_in, r_ext, **kw)
     out = dict(v1=s['FNO_GNN'], bip=s['FNO_BipartiteGNN'])
     if with_elem:
-        out['elem'] = parse_ans_gzip_sample_elem_smooth(path, r_in, r_ext, **kw)
+        out['elem'] = parse_elem_smooth(path, r_in, r_ext, **kw)
         lines, nodes, elems = ans.lines, ans.nodes, ans.elems
         label_material_id, _, _ = _parse_label_materials(lines)
         out['elem_mat'] = label_material_id[elems[:, 3]]

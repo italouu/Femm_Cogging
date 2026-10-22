@@ -2,7 +2,7 @@
 chunks.py
 ---------
 Montagem e gravação dos chunks de treino (`data_chunk_XXXX.pt`) a partir dos dicts por
-amostra dos parsers smooth (`femm_mesh_smooth`, `femm_mesh_elem_smooth`) -- 2026-10-21.
+amostra dos parsers smooth (`smooth_layouts`, `elem_smooth`) -- 2026-10-21.
 
 Substitui o caminho antigo, em que os scripts de chunks importavam os `_flush` privados de
 `scripts/build_data_chunks*.py` e trocavam a global de saída deles por monkeypatch. As
@@ -14,12 +14,12 @@ regras de concatenação são as mesmas daqueles `_flush`:
 
 Layouts (montagem dos buffers, com os offsets de índice de cada amostra no chunk):
   'grid'      FNO2d                         -- só grade, sem índices;
-  'mesh_v1'   FNO_GNN, GNN_PostBase         -- grafo de vértices: edge_index + nº de nós
+  'vertex'   FNO_GNN, GNN_PostBase         -- grafo de vértices: edge_index + nº de nós
               acumulado (L); acrescenta E_L (nº de arestas por amostra);
   'bipartite' FNO_BipartiteGNN, FNO_BipartiteGNN_Elem -- dois grafos: edge_index + L
               acumulado; cross_edge_index linha 0 + elem_L acumulado, linha 1 + L acumulado
               (convenção "linha 0 = grafo auxiliar (elem_*), linha 1 = principal (node_*)",
-              válida nos dois papéis -- ver parsers/femm_mesh_elem.py).
+              válida nos dois papéis -- ver parsers/elem_structure.py).
 """
 from pathlib import Path
 
@@ -31,8 +31,8 @@ INDEX_KEYS = frozenset({'edge_index', 'cross_edge_index'})
 
 LAYOUT_BY_ARCH = {
     'FNO2d':                 'grid',
-    'FNO_GNN':               'mesh_v1',
-    'GNN_PostBase':          'mesh_v1',
+    'FNO_GNN':               'vertex',
+    'GNN_PostBase':          'vertex',
     'FNO_BipartiteGNN':      'bipartite',
     'FNO_BipartiteGNN_Elem': 'bipartite',
 }
@@ -51,7 +51,7 @@ def _bufs_grid(samples: list) -> dict:
     return {k: [s[k] for s in samples] for k in samples[0] if k not in ('dim_H', 'dim_W')}
 
 
-def _bufs_mesh_v1(samples: list) -> dict:
+def _bufs_vertex(samples: list) -> dict:
     keys = [k for k in samples[0] if k not in ('dim_H', 'dim_W')]
     bufs = {k: [] for k in keys}
     bufs['E_L'] = []
@@ -85,7 +85,7 @@ def _bufs_bipartite(samples: list) -> dict:
     return bufs
 
 
-_BUFS = {'grid': _bufs_grid, 'mesh_v1': _bufs_mesh_v1, 'bipartite': _bufs_bipartite}
+_BUFS = {'grid': _bufs_grid, 'vertex': _bufs_vertex, 'bipartite': _bufs_bipartite}
 
 
 def merge(bufs: dict, dim: tuple) -> dict:

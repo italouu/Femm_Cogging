@@ -1,13 +1,13 @@
 """
-parsers/femm_mesh_v2.py
-------------------------
+parsers/bipartite_structure.py
+------------------------------
 Construtor da ESTRUTURA do layout bipartido (FNO_BipartiteGNN) a partir do `.ans.gz`
-bruto (scripts/generate_data_femm_mesh_v2.py / src/data_gen/femm_mesh.py::
+bruto (scripts/generate_raw.py / src/data_gen/femm_solve.py::
 save_ans_gzip_sample) -- sem FEMM aberto, sem chamada COM: grafo de vértices, grafo de
 elementos, arestas (malha + wrap periódico), arestas cruzadas, node_x/elem_x e x_hw.
 O gabarito (node_y/y_hw) NÃO é calculado aqui: sai como None e é preenchido pelos
-parsers smooth (femm_mesh_smooth, femm_mesh_elem_smooth); o curl(A) exato por elemento
-do torque fica em femm_mesh_elem (target_field='B'). Até 2026-10-22 este parser tinha
+parsers smooth (smooth_layouts, elem_smooth); o curl(A) exato por elemento
+do torque fica em elem_structure (target_field='B'). Até 2026-10-22 este parser tinha
 também um gabarito próprio (target_field='B': média nodal do curl(A) + interpolação
 baricêntrica em y_hw), sem uso no pipeline atual.
 
@@ -97,14 +97,14 @@ def _grid_const_per_element(trifinder, elem_field: np.ndarray, centroids: np.nda
 # pipeline completo por amostra
 # ---------------------------------------------------------------------------
 
-def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
+def parse_bipartite_structure(ans_gz_path: Path, r_in: float, r_ext: float,
                            ang_1: float = 0.0, ang_2: float = 120.0,
                            n_r: int = 138, n_a: int = 276,
                            ans: AnsData = None) -> dict:
     """Estrutura do layout bipartido (os dois grafos + x_hw) de UMA amostra a partir do
     `sample_XXXXXX.ans.gz` bruto. Sem FEMM aberto, sem chamada COM -- só lê o arquivo e
     faz numpy/matplotlib.tri puro. `node_y`/`y_hw` saem como None, para o chamador
-    preencher (parsers smooth: femm_mesh_smooth, femm_mesh_elem_smooth).
+    preencher (parsers smooth: smooth_layouts, elem_smooth).
 
     `ans` (2026-10-22): `.ans` já lido (ans_parsing.read_ans) -- evita descomprimir/ler o
     arquivo de novo; None = lê de `ans_gz_path` (read_ans, em memória).

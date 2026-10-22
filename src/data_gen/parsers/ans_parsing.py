@@ -4,7 +4,7 @@ ans_parsing.py
 Funções puras de parsing/geometria sobre o `.ans` do FEMM (nós, elementos,
 materiais, correntes, arestas, grade H×W) -- SEM `import femm` (COM), sem
 sessão FEMM aberta, só numpy sobre dados já em memória/disco. Usadas pelos
-parsers smooth (femm_mesh_v2/femm_mesh_smooth/femm_mesh_elem*) e pelo
+parsers smooth (bipartite_structure/smooth_layouts/elem_structure*) e pelo
 pós-processamento (src/postprocess/), que rodam sem FEMM (Linux).
 """
 import gzip
@@ -363,7 +363,7 @@ def _element_b_from_A(nodes: np.ndarray, elems: np.ndarray, node_A: np.ndarray):
     """B=curl(A) constante por elemento (P1 linear) -- fórmula fechada
     validada em tests/proto_femm_element_b_check.py (bate com
     mo_getb(smooth='off') a ~1e-16). Gabarito exato por elemento do torque
-    (femm_mesh_elem.parse_ans_gzip_sample_elem, target_field='B').
+    (elem_structure.parse_elem_structure, target_field='B').
 
     Bx=dA/dy, By=-dA/dx. `nodes[:, :2]` está em mm (convenção mi_probdef do
     projeto) -- convertido pra metro aqui, senão o erro é de ~1000x (achado
@@ -394,8 +394,8 @@ def _element_b_from_A(nodes: np.ndarray, elems: np.ndarray, node_A: np.ndarray):
 def _grid_polar_xy(r_in: float, r_ext: float, ang_1_rad: float, ang_2_rad: float,
                     n_r: int, n_a: int):
     """Coordenadas (x,y) do centro de cada pixel da grade H×W (flattened,
-    ordem row-major r depois c) -- usado pelos parsers (femm_mesh_v2,
-    femm_mesh_smooth, femm_mesh_elem_smooth) e pelo pós-processamento."""
+    ordem row-major r depois c) -- usado pelos parsers (bipartite_structure,
+    smooth_layouts, elem_smooth) e pelo pós-processamento."""
     dr = (r_ext - r_in) / n_r
     da = (ang_2_rad - ang_1_rad) / n_a
     r_vals = r_in + (np.arange(n_r) + 0.5) * dr

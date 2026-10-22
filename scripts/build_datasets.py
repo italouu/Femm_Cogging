@@ -1,24 +1,24 @@
 """
-build_smooth_datasets.py
-------------------------
+build_datasets.py
+-----------------
 Gera os 5 datasets da bateria bldc (src/configs/batteries/bldc.py) com um comando, direto
 do raw (data/raw/<DatagenConfig.dataset>/, BLDC_138x276 com correntes), nas MAX_SAMPLES
 primeiras amostras (None = todas; 6000 -> 188 chunks):
-  - FNO2d, FNO_GNN, GNN_PostBase, FNO_BipartiteGNN  (layouts de femm_mesh_smooth)
-  - FNO_BipartiteGNN_Elem                           (layout de femm_mesh_elem_smooth)
+  - FNO2d, FNO_GNN, GNN_PostBase, FNO_BipartiteGNN  (layouts de smooth_layouts)
+  - FNO_BipartiteGNN_Elem                           (layout de elem_smooth)
 Saída: data/torch/data_chunks/<DatagenConfig.dataset>/<arch>/data_chunk_XXXX.pt
 Retomável: chunks já presentes são pulados (pode rodar de novo após interrupção).
 
 Ordem: precheck do parser Elem (amostra 0) + disco -> 5 datasets numa passada -> contagem final.
 Passada única (2026-10-22): cada amostra é lida e parseada UMA vez
-(femm_mesh_elem_smooth.parse_ans_gzip_sample_all) e o chunk de cada arch que faltar é gravado
+(elem_smooth.parse_all_layouts) e o chunk de cada arch que faltar é gravado
 (escrita atômica, src/data_gen/chunks.py) -- antes, os 4 datasets e a Elem eram duas passadas
-pelo raw (scripts.build_smooth_ans_chunks_direct + scripts.build_elem_smooth_chunks, que
+pelo raw (scripts.build_chunks_main + scripts.build_chunks_elem, que
 continuam executáveis sozinhos). Chunks idênticos aos das duas passadas (torch.equal).
 Medido em 2026-10-13 (Windows local, 6 workers): ~15 s/chunk nos 4 datasets e ~15 s/chunk
 na Elem; ~0,86 GB + ~0,36 GB por chunk -> 2000 amostras ≈ 32 min, ≈ 77 GB.
 
-Execução (raiz do projeto):  python -m scripts.build_smooth_datasets
+Execução (raiz do projeto):  python -m scripts.build_datasets
 """
 import csv
 import math
@@ -26,12 +26,12 @@ import shutil
 import time
 from concurrent.futures import ProcessPoolExecutor
 
-from scripts import build_elem_smooth_chunks as elem
-from scripts import build_smooth_ans_chunks_direct as smooth
+from scripts import build_chunks_elem as elem
+from scripts import build_chunks_main as smooth
 from src.configs.datagen import DatagenConfig
 from src.data_gen.chunks import LAYOUT_BY_ARCH, sample_idx as _sample_idx, write_chunk
-from src.data_gen.parsers.femm_mesh_elem_smooth import parse_ans_gzip_sample_all
-from src.data_gen.parsers.femm_mesh_smooth import SMOOTH_ARCHS
+from src.data_gen.parsers.elem_smooth import parse_all_layouts
+from src.data_gen.parsers.smooth_layouts import SMOOTH_ARCHS
 
 GB_PER_CHUNK = 0.86 + 0.36   # 4 datasets + Elem, medido 2026-10-13
 ARCHS = (*SMOOTH_ARCHS, elem.OUT_NAME)
@@ -39,7 +39,7 @@ ARCHS = (*SMOOTH_ARCHS, elem.OUT_NAME)
 
 def _parse_one(path, r_in: float, r_ext: float) -> dict:
     """Worker: 1 .ans.gz -> {arch: dict de arrays} das 5 archs."""
-    return parse_ans_gzip_sample_all(path, r_in, r_ext, ang_1=smooth.ANG_1, ang_2=smooth.ANG_2,
+    return parse_all_layouts(path, r_in, r_ext, ang_1=smooth.ANG_1, ang_2=smooth.ANG_2,
                                      n_r=smooth.N_R, n_a=smooth.N_A)
 
 

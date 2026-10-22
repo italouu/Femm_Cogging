@@ -240,18 +240,18 @@ class CUDAPrefetcher:
         return len(self.loader)
 
 
-# ── Streaming dataset do grafo de vértices (mode='mesh_v1') ──────────────────
+# ── Streaming dataset do grafo de vértices (mode='vertex') ──────────────────
 
-class ChunkMeshV1Dataset(IterableDataset):
+class ChunkVertexDataset(IterableDataset):
     """
-    Versão de ChunkStreamDataset que preserva dados de grafo (mode='mesh_v1':
+    Versão de ChunkStreamDataset que preserva dados de grafo (mode='vertex':
     grafo de vértices da malha do FEMM -- FNO_GNN, GNN_PostBase).
 
     Lê quad_chunk_*.pt do disco um a um e emite dicts individuais com
     grade (x_hw, y_hw) + grafo (node_x, node_y, edge_index, edge_attr).
 
     edge_index emitido com índices locais à amostra (0..L[i]-1).
-    mesh_v1_collate é responsável por re-offsetar ao montar o batch.
+    vertex_collate é responsável por re-offsetar ao montar o batch.
 
     Estratégia de memória:
       - x_hw, y_hw, node_x, node_y, edge_attr são views do chunk — storage
@@ -372,17 +372,17 @@ class ChunkMeshV1Dataset(IterableDataset):
                     t.join(timeout=0.05)
 
 
-# ── Grafo duplo (mode='femm_mesh_v2') ────────────────────────────────────────
+# ── Grafo duplo (mode='bipartite') ────────────────────────────────────────
 
-class ChunkFemmMeshV2Dataset(IterableDataset):
+class ChunkBipartiteDataset(IterableDataset):
     """
-    Versão de ChunkMeshV1Dataset para o grafo duplo do mode='femm_mesh_v2'
-    (vértices + elementos + arestas cruzadas, ver src/data_gen/femm_mesh_v2.py
-    e src/neural_op/archs/femm_mesh_v2_gnn.py).
+    Versão de ChunkVertexDataset para o grafo duplo do mode='bipartite'
+    (vértices + elementos + arestas cruzadas, ver src/data_gen/parsers/bipartite_structure.py
+    e src/neural_op/archs/fno_bipartite_gnn.py).
 
     edge_index (vértice-vértice) e cross_edge_index (elemento->vértice) são
     emitidos com índices LOCAIS à amostra (0..L[i]-1 / 0..elem_L[i]-1) --
-    femm_mesh_v2_collate re-offseta os dois espaços ao montar o batch.
+    bipartite_collate re-offseta os dois espaços ao montar o batch.
     """
 
     def __init__(self, chunk_paths, buffer_size, prefetch_chunks=2):
@@ -516,9 +516,9 @@ class ChunkFemmMeshV2Dataset(IterableDataset):
                     t.join(timeout=0.05)
 
 
-def femm_mesh_v2_collate(samples):
+def bipartite_collate(samples):
     """
-    Collate para ChunkFemmMeshV2Dataset.
+    Collate para ChunkBipartiteDataset.
 
     Re-offseta DOIS espaços de índice: edge_index (vértice-vértice, por nó)
     e cross_edge_index (elemento->vértice -- linha 0 por elemento, linha 1
@@ -566,9 +566,9 @@ def femm_mesh_v2_collate(samples):
 # ── build_loaders ─────────────────────────────────────────────────────────────
 
 
-def mesh_v1_collate(samples):
+def vertex_collate(samples):
     """
-    Collate para ChunkMeshV1Dataset.
+    Collate para ChunkVertexDataset.
 
     Cada amostra chega com edge_index de índices locais (0..L[i]-1).
     Esta função re-offseta os índices para o espaço global do batch.
@@ -654,9 +654,9 @@ def build_loaders(chunk_paths, batch_size, train_split,
     prefetch_factor: int             batches pré-buscados por worker
     seed           : int|None        semente para o split reproduzível
     mode           : str             'grid' usa ChunkStreamDataset + collate padrão;
-                                     'mesh_v1' usa ChunkMeshV1Dataset + mesh_v1_collate;
-                                     'femm_mesh_v2' usa ChunkFemmMeshV2Dataset +
-                                     femm_mesh_v2_collate
+                                     'vertex' usa ChunkVertexDataset + vertex_collate;
+                                     'bipartite' usa ChunkBipartiteDataset +
+                                     bipartite_collate
     test_split     : float|None      None → teste = complemento de train_split;
                                      float → fração fixa de chunks para teste
                                      (ver split_chunk_paths)
@@ -667,13 +667,13 @@ def build_loaders(chunk_paths, batch_size, train_split,
     """
     if mode == 'grid':
         cls, collate_fn = ChunkStreamDataset, None
-    elif mode == 'femm_mesh_v2':
-        cls, collate_fn = ChunkFemmMeshV2Dataset, femm_mesh_v2_collate
-    elif mode == 'mesh_v1':
-        cls, collate_fn = ChunkMeshV1Dataset, mesh_v1_collate
+    elif mode == 'bipartite':
+        cls, collate_fn = ChunkBipartiteDataset, bipartite_collate
+    elif mode == 'vertex':
+        cls, collate_fn = ChunkVertexDataset, vertex_collate
     else:
         raise ValueError(f"mode de loader desconhecido: {mode!r} "
-                         f"(esperado 'grid', 'mesh_v1' ou 'femm_mesh_v2')")
+                         f"(esperado 'grid', 'vertex' ou 'bipartite')")
 
     # No Windows, shared memory entre processos (necessária com num_workers > 0)
     # falha para tensores grandes (erro 1455 = ERROR_COMMITMENT_LIMIT).
@@ -690,7 +690,7 @@ def build_loaders(chunk_paths, batch_size, train_split,
             "Nenhum chunk encontrado. Verifique se os arquivos data_chunk_*.pt estão em "
             "data/torch/data_chunks/<dataset>/ e se o campo 'dataset' em NnCfg aponta "
             "para o subdiretório correto. Gere os datasets antes do treino: "
-            "python -m scripts.build_smooth_datasets"
+            "python -m scripts.build_datasets"
         )
 
     train_paths, test_paths = split_chunk_paths(paths, train_split, seed, test_split)

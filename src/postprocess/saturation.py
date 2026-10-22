@@ -14,7 +14,7 @@ Conferido contra o μ do pós-processador do FEMM (mo_getpointvalues) -- ver che
 (amostra 224, 300 elementos de aço: diferença relativa máx. 3e-15; 0 reparos na curva).
 
 Ponto de operação por elemento de aço: |B| suavizado no centróide (mesmo gabarito da Elem,
-femm_mesh_elem_smooth) e μ_eff = |B| / (μ0·H(|B|)).
+elem_smooth) e μ_eff = |B| / (μ0·H(|B|)).
 """
 import gzip
 from pathlib import Path

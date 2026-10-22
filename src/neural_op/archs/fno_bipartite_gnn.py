@@ -5,12 +5,12 @@ from src.neural_op.archs.interp import interpolate_grid_to_nodes
 from src.neural_op.archs.fno_gnn import _rescale_fno_to_node_space
 
 
-def _interpolate_fno_to_nodes_v2(fno_out, node_x, L):
+def _interpolate_fno_to_bipartite_nodes(fno_out, node_x, L):
     """
     Idêntica em espírito a fno_gnn.py::_interpolate_fno_to_nodes, mas node_x
     aqui tem layout [r_base, c_base] (colunas 0,1) -- não
-    [mu_r, M, área dual, r_base, c_base, J] (colunas 3,4) do mesh_v1 (grafo de
-    vértices). Ver src/data_gen/parsers/femm_mesh_v2.py.
+    [mu_r, M, área dual, r_base, c_base, J] (colunas 3,4) do layout vertex (grafo
+    de vértices). Ver src/data_gen/parsers/bipartite_structure.py.
 
     fno_out : [B, C, H, W]
     node_x  : [S_tot, 2]  colunas 0,1 = r_base, c_base ∈ [0,1]
@@ -25,14 +25,14 @@ class FNO_BipartiteGNN(torch.nn.Module):
     FNO (grade) + GNN de grafo duplo -- vértices iterados (n_layers de
     message passing) + elementos estáticos (nunca atualizados, injetados a
     cada camada via arestas cruzadas) -- ver
-    src/neural_op/archs/_blocks.py::BipartiteGNN e src/data_gen/femm_mesh_v2.py
+    src/neural_op/archs/_blocks.py::BipartiteGNN e src/data_gen/parsers/bipartite_structure.py
     para o contrato de dados. Decisão de arquitetura registrada na conversa
     de 2026-08-10 (ver CLAUDE.md).
 
     Pipeline
     --------
     x_hw  →  FNO2d  →  y_hw_fno                       (predição na grade regular)
-                ↓  _interpolate_fno_to_nodes_v2
+                ↓  _interpolate_fno_to_bipartite_nodes
     [node_x | y_fno@nodes]  →  BipartiteGNN(+elem_x via arestas cruzadas)  →  Δ
     y_nodes = y_fno@nodes + Δ
 
@@ -73,7 +73,7 @@ class FNO_BipartiteGNN(torch.nn.Module):
     def forward(self, x_hw, node_x, elem_x, edge_index, edge_attr,
                 cross_edge_index, cross_edge_attr, L, return_components=False):
         y_hw_fno     = self.fno(x_hw)
-        fno_at_nodes = _interpolate_fno_to_nodes_v2(y_hw_fno, node_x, L)
+        fno_at_nodes = _interpolate_fno_to_bipartite_nodes(y_hw_fno, node_x, L)
         fno_at_nodes = _rescale_fno_to_node_space(fno_at_nodes, self.normalizer)
         gnn_input    = torch.cat([node_x, fno_at_nodes], dim=-1)
         delta        = self.gnn(gnn_input, elem_x, edge_index, edge_attr,

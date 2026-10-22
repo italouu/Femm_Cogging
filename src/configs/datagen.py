@@ -12,7 +12,7 @@ class DatagenConfig:
     ang_1: int = 0
     ang_2: int = 120
 
-    # Geração do raw (scripts/generate_data_femm_mesh_v2.py): desenha + malha + mi_analyze()
+    # Geração do raw (scripts/generate_raw.py): desenha + malha + mi_analyze()
     # e salva o .ans inteiro em data/raw/<dataset>/sample_XXXXXX.ans.gz. Geometrias sorteadas
     # por BLDC_Process.generate_samples.
     distribution: str = 'uniform'
@@ -25,10 +25,10 @@ class DatagenConfig:
 
     # Prepare / chunks
     chunk_size: int = 32
-    # workers do parse raw -> chunks (scripts/build_smooth_ans_chunks_direct.py,
-    # scripts/build_elem_smooth_chunks.py, scripts/build_smooth_datasets.py; até 2026-10-22
+    # workers do parse raw -> chunks (scripts/build_chunks_main.py,
+    # scripts/build_chunks_elem.py, scripts/build_datasets.py; até 2026-10-22
     # npz_max_workers)
     chunk_max_workers: int = 6
 
-    # workers da geração do raw (scripts/generate_data_femm_mesh_v2.py)
-    femm_mesh_max_workers: int = 8
+    # workers da geração do raw (scripts/generate_raw.py)
+    raw_max_workers: int = 8

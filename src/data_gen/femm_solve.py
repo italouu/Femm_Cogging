@@ -1,9 +1,9 @@
 """
-femm_mesh.py
-------------
+femm_solve.py
+-------------
 Geração do raw: desenha o setor de 120° (BLDC_FEMM_Model_Sym120_Annular), malha, resolve
 (mi_analyze) e salva o `.ans` inteiro comprimido em gzip -- ver save_ans_gzip_sample.
-Chamado por scripts/generate_data_femm_mesh_v2.py (Windows, pyfemm).
+Chamado por scripts/generate_raw.py (Windows, pyfemm).
 """
 
 import gzip

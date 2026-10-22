@@ -854,7 +854,7 @@ class BLDC_FEMM_Model_Sym120_Annular(BLDC_FEMM_Model_Sym120):
 
     Promovido de tests/proto_femm_sym120_annular.py (validado 2026-07-22,
     promovido 2026-07-23). Usada como base do método de geração via malha
-    real do FEMM (ver src/data_gen/femm_mesh.py).
+    real do FEMM (ver src/data_gen/femm_solve.py).
     """
 
     def _bore_start_radius(self):

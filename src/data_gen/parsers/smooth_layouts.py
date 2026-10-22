@@ -1,6 +1,6 @@
 """
-parsers/femm_mesh_smooth.py
-----------------------------
+parsers/smooth_layouts.py
+-------------------------
 Layouts das 4 archs de SMOOTH_ARCHS (FNO2d, FNO_GNN, GNN_PostBase,
 FNO_BipartiteGNN) a partir do raw (`.ans.gz`), com o gabarito B da suavização
 do pós-processador do FEMM
@@ -37,7 +37,7 @@ layout bipartite: node_x, elem_x, arestas, arestas cruzadas, contagens) não
 dependem do gabarito.
 
 Sem node_A/a_hw (2026-10-21): o layout v1 deixou de carregar o potencial A,
-que nenhum código do pipeline atual lia (só os eval_fn antigos). O femm_mesh_v2 só dá a
+que nenhum código do pipeline atual lia (só os eval_fn antigos). O bipartite_structure só dá a
 estrutura (o gabarito próprio dele, curl(A)/interpolação, saiu em 2026-10-22).
 """
 from pathlib import Path
@@ -52,7 +52,7 @@ from src.data_gen.parsers.ans_parsing import (
     _build_bidirectional_edge_attrs, _grid_polar_xy, _MU_BY_ID, _MAGNET_ID,
     _node_current_density, _to_polar,
 )
-from src.data_gen.parsers.femm_mesh_v2 import parse_ans_gzip_sample, _build_trifinder
+from src.data_gen.parsers.bipartite_structure import parse_bipartite_structure, _build_trifinder
 
 SMOOTH_ARCHS = ('FNO2d', 'FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN')
 
@@ -89,7 +89,7 @@ def _grid_smooth_b(mesh, B1, B2, b1, b2, trifinder, centroids, Xg, Yg):
     return bx.astype(np.float32), by.astype(np.float32)
 
 
-def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
+def parse_smooth_layouts(ans_gz_path: Path, r_in: float, r_ext: float,
                                   ang_1: float = 0.0, ang_2: float = 120.0,
                                   n_r: int = 138, n_a: int = 276,
                                   ans: AnsData = None) -> dict:
@@ -101,11 +101,11 @@ def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
 
 
 def _parse_smooth(ans: AnsData, r_in, r_ext, ang_1, ang_2, n_r, n_a):
-    """Corpo de parse_ans_gzip_sample_smooth. Devolve (layouts, smooth), smooth = B
+    """Corpo de parse_smooth_layouts. Devolve (layouts, smooth), smooth = B
     suavizado do FEMM já calculado (B1, B2, b1, b2) -- reaproveitado pela Elem
-    (femm_mesh_elem_smooth.parse_ans_gzip_sample_all)."""
+    (elem_smooth.parse_all_layouts)."""
     # --- layout bipartite (estrutura; node_y/y_hw substituídos abaixo) ---
-    bip = parse_ans_gzip_sample(None, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
+    bip = parse_bipartite_structure(None, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
                                  n_r=n_r, n_a=n_a, ans=ans)
 
     lines, nodes, elems = ans.lines, ans.nodes, ans.elems
@@ -168,7 +168,7 @@ def _parse_smooth(ans: AnsData, r_in, r_ext, ang_1, ang_2, n_r, n_a):
         node_J,                              # J [A/mm²] (2026-10-14; antes node_x [S,5])
     ], axis=1)
 
-    mesh_v1 = {
+    vertex = {
         'node_x':     node_x,
         'node_y':     node_y,
         'edge_index': edge_index,
@@ -187,8 +187,8 @@ def _parse_smooth(ans: AnsData, r_in, r_ext, ang_1, ang_2, n_r, n_a):
     }
     layouts = {
         'FNO2d':            grid,
-        'FNO_GNN':          mesh_v1,
-        'GNN_PostBase':     mesh_v1,
+        'FNO_GNN':          vertex,
+        'GNN_PostBase':     vertex,
         'FNO_BipartiteGNN': bip,
     }
     return layouts, dict(B1=B1, B2=B2, b1=b1, b2=b2)

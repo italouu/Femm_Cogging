@@ -3,7 +3,7 @@ Interpolação grade H×W → nós da malha (B1, bateria definitiva 2026-10-03).
 
 Função única usada por todos os pontos que levam a saída do FNO (grade) para
 as posições dos nós: _interpolate_fno_to_nodes (fno_gnn.py),
-_interpolate_fno_to_nodes_v2 (femm_mesh_v2_gnn.py), GNN_PostBase e o
+_interpolate_fno_to_bipartite_nodes (fno_bipartite_gnn.py), GNN_PostBase e o
 pós-processamento (src/postprocess/) — evita divergência entre treino e avaliação.
 
 Convenção da grade (src/data_gen/parsers/ans_parsing.py::_grid_polar_xy): grade

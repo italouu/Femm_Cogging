@@ -1,18 +1,18 @@
 """
-build_smooth_ans_chunks_direct.py
----------------------------------
+build_chunks_main.py
+--------------------
 Chunks dos 4 datasets com gabarito B SUAVIZADO do FEMM (node_y por prioridade
 de material, y_hw = point_b smooth, polares) -- raw -> chunks direto, sem
 staging .npz: pool novo por chunk, escrita atômica (src/data_gen/chunks.py),
-retomável. Parser: parse_ans_gzip_sample_smooth (src/data_gen/parsers/
-femm_mesh_smooth.py; CLAUDE.md "Suavização de B do FEMM a partir do `.ans`").
+retomável. Parser: parse_smooth_layouts (src/data_gen/parsers/
+smooth_layouts.py; CLAUDE.md "Suavização de B do FEMM a partir do `.ans`").
 
 Raw de origem: data/raw/<DatagenConfig.dataset>/ -- chunking fixo (CHUNK_SIZE
 amostras, mesma ordem), então o split_seed=12 dá o mesmo split treino/teste.
 Saída: data/torch/data_chunks/<DatagenConfig.dataset>/<arch>/data_chunk_XXXX.pt
 
 Execução (a partir da raiz do projeto):
-    python -m scripts.build_smooth_ans_chunks_direct
+    python -m scripts.build_chunks_main
 """
 import csv
 import time
@@ -20,7 +20,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 from src.configs.datagen import DatagenConfig
-from src.data_gen.parsers.femm_mesh_smooth import parse_ans_gzip_sample_smooth, SMOOTH_ARCHS
+from src.data_gen.parsers.smooth_layouts import parse_smooth_layouts, SMOOTH_ARCHS
 from src.data_gen.chunks import LAYOUT_BY_ARCH, sample_idx as _sample_idx, write_chunk
 
 _dg = DatagenConfig()
@@ -34,7 +34,7 @@ CHUNK_SIZE   = _dg.chunk_size
 MAX_WORKERS  = _dg.chunk_max_workers
 
 # Todas as amostras do raw (BLDC_138x276: 6000 -> 188 chunks, 187 × 32 + 1 × 16). Usado também
-# por scripts/build_elem_smooth_chunks.py, scripts/build_smooth_datasets.py e
+# por scripts/build_chunks_elem.py, scripts/build_datasets.py e
 # scripts/postprocess.py. None = todas.
 MAX_SAMPLES = None
 
@@ -44,7 +44,7 @@ CHUNKS_ROOT = Path("data/torch/data_chunks") / OUT_DATASET
 
 def _parse_one(path: Path, r_in: float, r_ext: float) -> dict:
     """Worker: 1 .ans.gz -> {arch: dict de arrays}."""
-    return parse_ans_gzip_sample_smooth(path, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2,
+    return parse_smooth_layouts(path, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2,
                                          n_r=N_R, n_a=N_A)
 
 

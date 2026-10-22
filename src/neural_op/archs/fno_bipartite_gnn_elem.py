@@ -1,12 +1,12 @@
 """
-femm_mesh_elem_gnn.py
----------------------
+fno_bipartite_gnn_elem.py
+-------------------------
 FNO_BipartiteGNN com os papéis dos grafos TROCADOS (criada em 2026-10-07): o
 grafo de ELEMENTOS é o principal (iterado n_layers, saída (Br, Bθ) por elemento
 no dataset; (Bx, By) só no gabarito target_field='B' do torque) e o de VÉRTICES
 é o auxiliar (estático, injetado a cada camada por arestas cruzadas vértice ->
 elemento). Contrato de dados: bloco "CONTRATO DO LAYOUT Elem" da docstring de
-src/data_gen/parsers/femm_mesh_elem.py (chaves node_* = elementos, elem_* = vértices).
+src/data_gen/parsers/elem_structure.py (chaves node_* = elementos, elem_* = vértices).
 
 A REDE É A MESMA da FNO_BipartiteGNN (subclasse; mesmo FNO2d + BipartiteGNN de
 _blocks.py, mesmos hiperparâmetros) -- a diferença está toda no layout dos dados,
@@ -28,8 +28,8 @@ MAE por ELEMENTO).
 """
 import torch
 
-from src.neural_op.archs.femm_mesh_v2_gnn import (
-    FNO_BipartiteGNN, _interpolate_fno_to_nodes_v2,
+from src.neural_op.archs.fno_bipartite_gnn import (
+    FNO_BipartiteGNN, _interpolate_fno_to_bipartite_nodes,
 )
 from src.neural_op.archs.fno_gnn import _rescale_fno_to_node_space
 
@@ -37,7 +37,7 @@ from src.neural_op.archs.fno_gnn import _rescale_fno_to_node_space
 class FNO_BipartiteGNN_Elem(FNO_BipartiteGNN):
 
     def _fno_at(self, y_hw_fno, pos, counts):
-        out = _interpolate_fno_to_nodes_v2(y_hw_fno, pos, counts)
+        out = _interpolate_fno_to_bipartite_nodes(y_hw_fno, pos, counts)
         return _rescale_fno_to_node_space(out, self.normalizer)
 
     def forward(self, x_hw, node_x, elem_x, edge_index, edge_attr,

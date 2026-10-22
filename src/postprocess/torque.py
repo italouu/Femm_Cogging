@@ -17,7 +17,7 @@ Método (inalterado):
            sinal: torque no rotor externo), L = stack length do design (coluna stack_length do
            valid_designs.csv, fallback motor_constants.STACK_LENGTH_MM) -- a mesma profundidade
            do mi_probdef em femm_solve (até 2026-10-21: L = 1 mm e profundidade 0).
-  gt     : B exato curl(A) por elemento (parse_ans_gzip_sample_elem) -- o method_check é
+  gt     : B exato curl(A) por elemento (parse_elem_structure) -- o method_check é
            gt × FEMM T22 (mede o erro do próprio método da faixa, sem modelo).
   smooth : B suavizado no centróide (gabarito da Elem).
   pred   : saída do modelo levada aos elementos -- Elem: por elemento; demais: valores
@@ -153,13 +153,13 @@ def parse_torque_sample(path, row):
     """1 .ans.gz -> layouts para os modelos (samples.parse_smooth com Elem) + o que o torque
     usa: gt exato por elemento (xy), smooth no centróide (xy), material, centróide, área.
     O `.ans` é lido uma vez (read_ans) e passado aos dois parsers."""
-    from src.data_gen.parsers.femm_mesh_elem import parse_ans_gzip_sample_elem
+    from src.data_gen.parsers.elem_structure import parse_elem_structure
     from src.data_gen.parsers.ans_parsing import read_ans
     from src.postprocess.samples import ANG_1, ANG_2, N_A, N_R, parse_smooth
     ans = read_ans(path)
     lay = parse_smooth(path, row, with_elem=True, ans=ans)
     r_in, r_ext = float(row['inner_diameter [mm]']) / 2, float(row['outer_diameter [mm]']) / 2
-    d_ex = parse_ans_gzip_sample_elem(path, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2, n_r=N_R,
+    d_ex = parse_elem_structure(path, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2, n_r=N_R,
                                       n_a=N_A, ans=ans)
     nodes, elems = ans.nodes, ans.elems
     cen = nodes[elems[:, :3], :2].mean(axis=1).astype(np.float64)

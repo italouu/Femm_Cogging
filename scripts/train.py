@@ -2,7 +2,7 @@ import glob
 import torch
 from src.configs.training import NnCfg
 from src.neural_op.archs import ARCH_REGISTRY
-from src.neural_op.dataloaders.grid_loader import build_loaders, CUDAPrefetcher
+from src.neural_op.dataloaders.loaders import build_loaders, CUDAPrefetcher
 from src.neural_op.losses import LOSS_REGISTRY
 from src.neural_op.normalization import Normalizer
 from src.neural_op.training_utils import fit

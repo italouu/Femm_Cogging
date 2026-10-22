@@ -140,9 +140,9 @@ class FNO_GNNConfig:
 
 @dataclass
 class FNO_BipartiteGNNConfig:
-    """Config de FNO_BipartiteGNN (src/neural_op/archs/femm_mesh_v2_gnn.py) --
+    """Config de FNO_BipartiteGNN (src/neural_op/archs/fno_bipartite_gnn.py) --
     grafo duplo vértices (iterado) + elementos (estático, injetado via
-    arestas cruzadas), mode='femm_mesh_v2' (ver src/data_gen/femm_mesh_v2.py
+    arestas cruzadas), mode='bipartite' (ver src/data_gen/parsers/bipartite_structure.py
     e CLAUDE.md/conversa 2026-08-10 sobre a arquitetura)."""
     # Defaults = run bipartite_mae da bateria bldc (src/configs/batteries/bldc.py), conferidos campo a campo.
     fno_modes1: int = 69
@@ -161,7 +161,7 @@ class FNO_BipartiteGNNConfig:
     # todos auto-detectados em NnCfg.__post_init__ (helper _detect_chunk_dims)
     # a partir dos chunks reais do dataset — ver FNO_GNNConfig para o mesmo
     # padrão. Defaults abaixo batem com o layout fixo de
-    # src/data_gen/femm_mesh_v2.py (node_x=[r,c], edge_attr=3 colunas,
+    # src/data_gen/parsers/bipartite_structure.py (node_x=[r,c], edge_attr=3 colunas,
     # elem_x=5 colunas, cross_edge_attr=1 coluna) — só usados se este
     # arch_cfg for reconstruído fora de NnCfg (ex: postprocess/inference.load_model).
     edge_dim:       int = field(default=3, init=False)
@@ -178,11 +178,11 @@ class FNO_BipartiteGNNConfig:
 
 @dataclass
 class FNO_BipartiteGNN_ElemConfig:
-    """Config de FNO_BipartiteGNN_Elem (src/neural_op/archs/femm_mesh_elem_gnn.py)
+    """Config de FNO_BipartiteGNN_Elem (src/neural_op/archs/fno_bipartite_gnn_elem.py)
     -- mesma rede da FNO_BipartiteGNN com os papéis trocados no layout dos dados:
     elementos = grafo principal (saída (Br, Bθ) por elemento), vértices = auxiliar
     estático. Dataset: BLDC_138x276/FNO_BipartiteGNN_Elem
-    (scripts/build_smooth_datasets.py). Mesmos campos de FNO_BipartiteGNNConfig."""
+    (scripts/build_datasets.py). Mesmos campos de FNO_BipartiteGNNConfig."""
     # Defaults = run elem_mae da bateria bldc (src/configs/batteries/bldc.py), conferidos campo a campo.
     fno_modes1: int = 69
     fno_modes2: int = 139
@@ -197,7 +197,7 @@ class FNO_BipartiteGNN_ElemConfig:
     gnn_n_layers: int = 3
 
     # auto-detectados em NnCfg.__post_init__; defaults = layout de
-    # src/data_gen/parsers/femm_mesh_elem.py (node_x de elemento com 5 colunas,
+    # src/data_gen/parsers/elem_structure.py (node_x de elemento com 5 colunas,
     # elem_x de vértice com 2)
     edge_dim:       int = field(default=3, init=False)
     grid_in_ch:     int = field(default=2, init=False)
@@ -288,11 +288,11 @@ class GNN_PostBaseConfig:
 # │ arch                  │ loader_mode  │ arch_cfg                    │
 # ├───────────────────────┼──────────────┼─────────────────────────────┤
 # │ FNO2d                 │ grid         │ FNOConfig                   │
-# │ FNO_GNN               │ mesh_v1      │ FNO_GNNConfig               │
-# │ GNN_PostBase          │ mesh_v1      │ GNN_PostBaseConfig          │
+# │ FNO_GNN               │ vertex       │ FNO_GNNConfig               │
+# │ GNN_PostBase          │ vertex       │ GNN_PostBaseConfig          │
 # │                       │              │   (base FNO2d congelada)    │
-# │ FNO_BipartiteGNN      │ femm_mesh_v2 │ FNO_BipartiteGNNConfig      │
-# │ FNO_BipartiteGNN_Elem │ femm_mesh_v2 │ FNO_BipartiteGNN_ElemConfig │
+# │ FNO_BipartiteGNN      │ bipartite    │ FNO_BipartiteGNNConfig      │
+# │ FNO_BipartiteGNN_Elem │ bipartite    │ FNO_BipartiteGNN_ElemConfig │
 # └───────────────────────┴──────────────┴─────────────────────────────┘
 # Losses — LOSS_REGISTRY (src/neural_op/losses.py) / LOSS_CFG_REGISTRY (src/configs/loss.py):
 # 'mse' (MseLossCfg) e 'mae' (MaeLossCfg), sem campos, sobre a saída final do modelo.

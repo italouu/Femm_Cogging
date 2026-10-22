@@ -12,7 +12,7 @@ e N_POLES_SECTOR de BLDC_FEMM_Model_Sym120 — mas motor_model.py tem
 FEMM de verdade), então importar essas classes só pra ler 3 dicts/1 inteiro
 arrastava femm (+ matplotlib/shapely/pandas) junto. Isso quebrava a promessa
 de src/data_gen/parsers/ans_parsing.py e
-src/data_gen/parsers/femm_mesh_v2.py de rodar 100% sem FEMM (ver docstring
+src/data_gen/parsers/bipartite_structure.py de rodar 100% sem FEMM (ver docstring
 desses módulos e CLAUDE.md "Raw -- malha real do FEMM v2") -- eles usavam
 BLDC_Process/BLDC_FEMM_Model_Sym120_Annular só por essas constantes.
 

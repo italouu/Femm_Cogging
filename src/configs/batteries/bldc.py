@@ -5,9 +5,9 @@ Bateria BLDC_138x276 (2026-10-14) — gabarito B suavizado do FEMM COM correntes
 (5 archs × mse/mae, 500 épocas, 70/30; removida em 2026-10-21), só trocando
 dataset/problem. Cada run escrita por inteiro.
 
-Raw: data/raw/BLDC_138x276/ (6000 amostras, I_pico = 10 A) — scripts.generate_data_femm_mesh_v2.
+Raw: data/raw/BLDC_138x276/ (6000 amostras, I_pico = 10 A) — scripts.generate_raw.
 Chunks: data/torch/data_chunks/BLDC_138x276/<arch>/ (188 chunks: 187×32 + 1×16) —
-python -m scripts.build_smooth_datasets. Split 70/30: train_split=0.70 → int(131,6) = 131
+python -m scripts.build_datasets. Split 70/30: train_split=0.70 → int(131,6) = 131
 chunks de treino; test_split=None → teste = complemento (57 chunks).
 Logs: data/logs/BLDC_138x276/<arch>/run_XXXX/.
 

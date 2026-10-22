@@ -168,7 +168,7 @@ class GNN(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# Grafo duplo (mode='femm_mesh_v2', ver src/data_gen/femm_mesh_v2.py e
+# Grafo duplo (mode='bipartite', ver src/data_gen/parsers/bipartite_structure.py e
 # CLAUDE.md/conversa 2026-08-10): vértices (iterado) + elementos (estático,
 # nunca atualizado, só injeta via arestas cruzadas). EdgeMessageBlock isola
 # só a parte de "mensagem" do EdgeConvLayer (gate × transform + soma) — sem

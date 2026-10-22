@@ -10,8 +10,8 @@ do FEMM (a malha é dada para os dois lados: geometria e malha ficam fora da com
   femm_solve_timed    — redesenha (fase do rotor, amplitude e ângulo da corrente do CSV), gera
                         a malha (fora do cronômetro) e cronometra só o mi_analyze.
   preprocess_timed    — .ans resolvido -> entradas de cada arch, por etapa, com as MESMAS
-                        funções dos parsers smooth (femm_mesh_v2 / femm_mesh_smooth /
-                        femm_mesh_elem); check_preprocess confere igualdade com os parsers.
+                        funções dos parsers smooth (bipartite_structure / smooth_layouts /
+                        elem_structure); check_preprocess confere igualdade com os parsers.
   encode_timed        — numpy -> GPU + z-score (inference._enc), por arch.
   time_inference      — best.pth, torch.inference_mode, lote 1 e potências de 2 até OOM;
                         forward + desnormalização (+ grade -> nós no FNO2d).
@@ -33,8 +33,8 @@ from src.data_gen.parsers.ans_parsing import (
     _node_dual_area, _parse_label_currents, _parse_label_materials, _parse_solution,
     _wrap_edge_pairs, read_ans,
 )
-from src.data_gen.parsers.femm_mesh_elem import _build_dual_edges
-from src.data_gen.parsers.femm_mesh_v2 import _build_trifinder, _grid_const_per_element
+from src.data_gen.parsers.elem_structure import _build_dual_edges
+from src.data_gen.parsers.bipartite_structure import _build_trifinder, _grid_const_per_element
 from src.neural_op.archs.interp import interpolate_grid_to_nodes
 from src.postprocess.inference import DEVICE, _dec, _enc
 
@@ -119,7 +119,7 @@ def hardware_info():
 # FEMM: só o mi_analyze no cronômetro
 # --------------------------------------------------------------------------- #
 def femm_solve_timed(row, work_dir: Path):
-    """Mesma sequência de femm_mesh.save_ans_gzip_sample; cronometra openfemm, geometria e
+    """Mesma sequência de femm_solve.save_ans_gzip_sample; cronometra openfemm, geometria e
     malha à parte (fora da comparação) e o mi_analyze (solução). Retorna (tempos s, .ans)."""
     import femm
     from src.data_gen.motor_constants import stack_length_mm
@@ -181,7 +181,7 @@ def preprocess_timed(ans_path, r_in, r_ext, ang_1=0.0, ang_2=120.0, n_r=138, n_a
     elem_J = _parse_label_currents(lines, elems, area)[elems[:, 3]]
     t['materials'] = _now() - s
 
-    # x_hw (femm_mesh_v2.parse_ans_gzip_sample)
+    # x_hw (bipartite_structure.parse_bipartite_structure)
     s = _now()
     centroids = nodes[elems[:, :3], :2].mean(axis=1)
     Xg, Yg = _grid_polar_xy(r_in, r_ext, a1, a2, n_r, n_a)
@@ -202,7 +202,7 @@ def preprocess_timed(ans_path, r_in, r_ext, ang_1=0.0, ang_2=120.0, n_r=138, n_a
     wrap_1, wrap_2 = _wrap_edge_pairs(nodes, ang_1, ang_2)
     t['graph_topology'] = _now() - s
 
-    # v1 (FNO_GNN / GNN_PostBase; femm_mesh_smooth): material por prioridade
+    # v1 (FNO_GNN / GNN_PostBase; smooth_layouts): material por prioridade
     s = _now()
     node_material_id = _node_material_priority(elems, elem_material_id, nodes.shape[0])
     node_dual_area = _node_dual_area(elems, area, nodes.shape[0])
@@ -218,7 +218,7 @@ def preprocess_timed(ans_path, r_in, r_ext, ang_1=0.0, ang_2=120.0, n_r=138, n_a
                       r_base.astype(np.float32), c_base.astype(np.float32), node_J], axis=1)
     t['v1_graph'] = _now() - s
 
-    # bipartite (femm_mesh_v2.parse_ans_gzip_sample)
+    # bipartite (bipartite_structure.parse_bipartite_structure)
     s = _now()
     rb32, cb32 = r_base.astype(np.float32), c_base.astype(np.float32)
     i = np.concatenate([edges_undirected[:, 0], wrap_1])
@@ -244,7 +244,7 @@ def preprocess_timed(ans_path, r_in, r_ext, ang_1=0.0, ang_2=120.0, n_r=138, n_a
     cei = np.stack([tri_idx, vtx_idx], axis=0)
     t['bip_graph'] = _now() - s
 
-    # Elem (femm_mesh_elem.parse_ans_gzip_sample_elem): elementos = grafo principal
+    # Elem (elem_structure.parse_elem_structure): elementos = grafo principal
     s = _now()
     nx_el = elem_x[:, [3, 4, 0, 1, 2, 5]].astype(np.float32)
     rc, cc = elem_x[:, 3].astype(np.float64), elem_x[:, 4].astype(np.float64)

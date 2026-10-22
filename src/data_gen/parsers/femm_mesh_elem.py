@@ -13,8 +13,7 @@ Gabarito por elemento:
   - dataset (femm_mesh_elem_smooth, target_field=None aqui): (Br, Bθ) do B
     suavizado do FEMM no centróide; y_hw = B suavizado no centro do pixel;
   - target_field='B' (gabarito do torque, postprocess/torque.py): (Bx, By) do
-    curl(A) EXATO por elemento P1 (_element_b_from_A), sem média nodal; y_hw =
-    interpolação baricêntrica do B médio nodal (parse_ans_gzip_sample).
+    curl(A) EXATO por elemento P1 (_element_b_from_A), sem média nodal; y_hw = None.
 
 =============================================================================
 CONTRATO DO LAYOUT Elem (FNO_BipartiteGNN_Elem) -- fonte única (2026-10-21).
@@ -135,20 +134,20 @@ def parse_ans_gzip_sample_elem(ans_gz_path: Path, r_in: float, r_ext: float,
     """1 `.ans.gz` -> layout com papéis trocados (ver docstring do módulo).
     Mesmo formato de dict de parse_ans_gzip_sample (dim_H/dim_W escalares).
 
-    target_field='B' (padrão): node_y = curl(A) exato por elemento e y_hw do
-    parse_ans_gzip_sample(target_field='B') -- é o gabarito usado pelo
-    postprocess/torque.py. None (2026-10-21): sem gabarito (node_y/y_hw = None),
-    para o parser smooth (femm_mesh_elem_smooth) preencher.
+    target_field='B' (padrão): node_y = curl(A) exato por elemento -- é o gabarito usado
+    pelo postprocess/torque.py; y_hw = None (até 2026-10-22, a interpolação baricêntrica
+    do B médio nodal do femm_mesh_v2, sem leitor). None (2026-10-21): sem gabarito
+    (node_y/y_hw = None), para o parser smooth (femm_mesh_elem_smooth) preencher.
 
     `ans` (2026-10-22): `.ans` já lido (read_ans); None = lê de `ans_gz_path`. `bip`: layout
-    bipartite da mesma amostra já calculado (parse_ans_gzip_sample com o mesmo target_field
-    e a mesma janela) -- a Elem só reorganiza as chaves dele; None = calcula aqui."""
+    bipartite da mesma amostra já calculado (parse_ans_gzip_sample, mesma janela) -- a Elem
+    só reorganiza as chaves dele; None = calcula aqui."""
     assert target_field in ('B', None), f"target_field inválido: {target_field!r}"
     if ans is None:
         ans = read_ans(ans_gz_path)
     if bip is None:
         bip = parse_ans_gzip_sample(None, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
-                                    n_r=n_r, n_a=n_a, target_field=target_field, ans=ans)
+                                    n_r=n_r, n_a=n_a, ans=ans)
     nodes, elems = ans.nodes, ans.elems
     assert nodes.shape[0] == bip['node_x'].shape[0], "contagem de nós divergente"
     assert elems.shape[0] == bip['elem_x'].shape[0], "contagem de elementos divergente"
@@ -157,8 +156,7 @@ def parse_ans_gzip_sample_elem(ans_gz_path: Path, r_in: float, r_ext: float,
     ex = bip['elem_x']                     # mu_r, M, area, r_base_c, c_base_c, J
     node_x = ex[:, [3, 4, 0, 1, 2, 5]].astype(np.float32)
     rc, cc = ex[:, 3].astype(np.float64), ex[:, 4].astype(np.float64)
-    # A em float32, como em parse_ans_gzip_sample (node_A) -- média nodal deste
-    # B por elemento reproduz exatamente o node_y da bateria
+    # A em float32 (como era o node_A do femm_mesh_v2 até 2026-10-22)
     node_y = None   # target_field=None: preenchido pelo chamador
     if target_field == 'B':
         elem_Bx, elem_By = _element_b_from_A(nodes, elems, nodes[:, 2].astype(np.float32))

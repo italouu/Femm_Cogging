@@ -37,8 +37,8 @@ layout bipartite: node_x, elem_x, arestas, arestas cruzadas, contagens) não
 dependem do gabarito.
 
 Sem node_A/a_hw (2026-10-21): o layout v1 deixou de carregar o potencial A,
-que nenhum código do pipeline atual lia (só os eval_fn antigos); o gabarito do femm_mesh_v2 (curl(A)/interpolação) não é mais
-calculado (target_field=None).
+que nenhum código do pipeline atual lia (só os eval_fn antigos). O femm_mesh_v2 só dá a
+estrutura (o gabarito próprio dele, curl(A)/interpolação, saiu em 2026-10-22).
 """
 from pathlib import Path
 
@@ -107,7 +107,7 @@ def _parse_smooth(ans: AnsData, r_in, r_ext, ang_1, ang_2, n_r, n_a):
     (femm_mesh_elem_smooth.parse_ans_gzip_sample_all)."""
     # --- layout bipartite (estrutura; node_y/y_hw substituídos abaixo) ---
     bip = parse_ans_gzip_sample(None, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
-                                 n_r=n_r, n_a=n_a, target_field=None, ans=ans)
+                                 n_r=n_r, n_a=n_a, ans=ans)
 
     lines, nodes, elems = ans.lines, ans.nodes, ans.elems
     label_material_id, _, label_M = _parse_label_materials(lines)

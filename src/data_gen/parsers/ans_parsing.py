@@ -394,8 +394,8 @@ def _build_bidirectional_edge_attrs(nodes: np.ndarray, edges_undirected: np.ndar
 def _element_b_from_A(nodes: np.ndarray, elems: np.ndarray, node_A: np.ndarray):
     """B=curl(A) constante por elemento (P1 linear) -- fórmula fechada
     validada em tests/proto_femm_element_b_check.py (bate com
-    mo_getb(smooth='off') a ~1e-16), reaproveitada aqui pro pipeline
-    femm_mesh_v2 (src/data_gen/parsers/femm_mesh_v2.py, target_field='B').
+    mo_getb(smooth='off') a ~1e-16). Gabarito exato por elemento do torque
+    (femm_mesh_elem.parse_ans_gzip_sample_elem, target_field='B').
 
     Bx=dA/dy, By=-dA/dx. `nodes[:, :2]` está em mm (convenção mi_probdef do
     projeto) -- convertido pra metro aqui, senão o erro é de ~1000x (achado
@@ -422,31 +422,6 @@ def _element_b_from_A(nodes: np.ndarray, elems: np.ndarray, node_A: np.ndarray):
     dAdy = (A0 * c0 + A1 * c1 + A2 * c2) / area2
     return dAdy.astype(np.float32), (-dAdx).astype(np.float32)
 
-
-def _node_mean_of_elements(elems: np.ndarray, elem_field: np.ndarray, n_nodes: int) -> np.ndarray:
-    """Média simples (NÃO ponderada por área/ângulo) de um campo constante-
-    por-elemento nos nós incidentes -- caracterização empírica do B
-    suavizado nodal do FEMM (mo_getb default): testado contra 3 candidatos
-    de recuperação nodal em 6 nós internos, média simples foi
-    consistentemente a mais próxima (ver CLAUDE.md "Extração de dados direto
-    do arquivo .ans" -> "O que é exatamente o B suavizado do nó?").
-
-    `elem_field` pode ser [n_elems] ou [n_elems, C]; retorna sempre
-    [n_nodes, C] (C=1 se a entrada for 1D).
-    """
-    field = elem_field if elem_field.ndim == 2 else elem_field[:, None]
-    acc = np.zeros((n_nodes, field.shape[1]), dtype=np.float64)
-    count = np.zeros(n_nodes, dtype=np.float64)
-    for corner in range(3):
-        idx = elems[:, corner]
-        np.add.at(acc, idx, field)
-        np.add.at(count, idx, 1.0)
-    return (acc / count[:, None]).astype(np.float32)
-
-
-# ---------------------------------------------------------------------------
-# grade H×W a partir da malha (trifinder + interpolação baricêntrica)
-# ---------------------------------------------------------------------------
 
 def _grid_polar_xy(r_in: float, r_ext: float, ang_1_rad: float, ang_2_rad: float,
                     n_r: int, n_a: int):

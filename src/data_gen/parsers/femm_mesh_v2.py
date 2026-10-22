@@ -1,16 +1,15 @@
 """
 parsers/femm_mesh_v2.py
 ------------------------
-Deriva o grafo de vértices + grafo de elementos (dual, não iterado) + grade
-H×W a partir do `.ans.gz` bruto salvo por mode='femm_mesh_v2'
-(scripts/generate_data_femm_mesh_v2.py / src/data_gen/femm_mesh.py::
-save_ans_gzip_sample) -- sem FEMM aberto, sem nenhuma chamada COM, só o
-arquivo já salvo em disco.
-
-Base estrutural dos parsers smooth (femm_mesh_smooth, femm_mesh_elem):
-eles chamam parse_ans_gzip_sample(target_field=None) e preenchem node_y/y_hw
-com o B suavizado. target_field='B' (curl(A) exato) é o gabarito do torque
-(femm_mesh_elem, src/postprocess/torque.py).
+Construtor da ESTRUTURA do layout bipartido (FNO_BipartiteGNN) a partir do `.ans.gz`
+bruto (scripts/generate_data_femm_mesh_v2.py / src/data_gen/femm_mesh.py::
+save_ans_gzip_sample) -- sem FEMM aberto, sem chamada COM: grafo de vértices, grafo de
+elementos, arestas (malha + wrap periódico), arestas cruzadas, node_x/elem_x e x_hw.
+O gabarito (node_y/y_hw) NÃO é calculado aqui: sai como None e é preenchido pelos
+parsers smooth (femm_mesh_smooth, femm_mesh_elem_smooth); o curl(A) exato por elemento
+do torque fica em femm_mesh_elem (target_field='B'). Até 2026-10-22 este parser tinha
+também um gabarito próprio (target_field='B': média nodal do curl(A) + interpolação
+baricêntrica em y_hw), sem uso no pipeline atual.
 
 Decisão de design (em relação ao grafo único de vértices do layout v1):
 
@@ -27,19 +26,10 @@ Decisão de design (em relação ao grafo único de vértices do layout v1):
 
 Grafo 1 -- vértices/campo (nós da malha real):
     node_x [S,2]  r_base, c_base
-    node_y [S,2] (target_field='B') ou None (target_field=None)
+    node_y        None (preenchido pelo chamador)
     edge_index [2,E]  bidirecional -- malha real + wrap periódico θ=0/120°
     edge_attr [E,3]  delta_r, delta_c, center_dist  (SEM delta_mu -- mu_r
                      não é mais feature de vértice, não tem o que subtrair)
-
-target_field='B' (2026-08-13, ver CLAUDE.md "Grafo duplo vértices+elementos"):
-    node_y [S,2]  Bx,By -- calculado a partir de A via curl(A) fechado por
-                  elemento P1 (_element_b_from_A, coordenadas reais em
-                  metros, sem ambiguidade de rotação), agregado por nó via
-                  média simples dos elementos incidentes
-                  (_node_mean_of_elements). y_hw por interpolação
-                  baricêntrica (barycentric, não constante-por-elemento) --
-                  ver _grid_barycentric.
 
 Grafo 2 -- elementos/centróides (1 nó por triângulo, SEM arestas internas):
     elem_x [M,6]  mu_r, M, area, r_base_centróide, c_base_centróide, J
@@ -57,15 +47,12 @@ Grade H×W (amostrada só do grafo, sem COM):
                   elemento; fallback pro elemento de centróide mais
                   próximo se o pixel cair fora da triangulação -- SEM
                   fallback por nó, nó não carrega material nesse design)
-    y_hw [2,H,W]  Bx, By (target_field='B') -- interpolação baricêntrica
-                  nos 3 nós do elemento que contém o pixel (mesma função de
-                  forma do FEM linear); None com target_field=None
+    y_hw          None (preenchido pelo chamador)
 
 r_in/r_ext/ang_1/ang_2 (janela de amostragem) são passados pelo chamador --
 essa função não abre FEMM nem instancia o modelo geométrico, só lê o
-arquivo; quem chama pode obter r_in/r_ext de valid_designs.csv (colunas
-'inner_diameter [mm]'/'outer_diameter [mm]', ver
-tests/proto_femm_mesh_v2_element_b_plot.py::_read_r_bounds_mm).
+arquivo; quem chama obtém r_in/r_ext de valid_designs.csv (colunas
+'inner_diameter [mm]'/'outer_diameter [mm]').
 """
 import gzip
 import shutil
@@ -78,7 +65,7 @@ from scipy.spatial import cKDTree
 from src.data_gen.parsers.ans_parsing import (
     AnsData, _parse_solution,
     _build_edges, _element_areas, _wrap_edge_pairs, _grid_polar_xy,
-    _element_b_from_A, _node_mean_of_elements, _parse_label_materials,
+    _parse_label_materials,
     _parse_label_currents,
 )
 
@@ -108,21 +95,6 @@ def _grid_const_per_element(trifinder, elem_field: np.ndarray, centroids: np.nda
     return out
 
 
-def _grid_barycentric(tri, node_field: np.ndarray, Xg: np.ndarray, Yg: np.ndarray) -> np.ndarray:
-    """Amostra um campo nodal contínuo (A) na grade via interpolação
-    baricêntrica -- mesma função de forma do FEM linear dentro do elemento
-    que contém o pixel; validado MAE≈0 contra point-query (ver docstring do
-    módulo). Fallback pro nó mais próximo nos poucos pixels fora da malha."""
-    interp = mtri.LinearTriInterpolator(tri, node_field)
-    out = np.ma.filled(interp(Xg, Yg).astype(np.float32), np.nan)
-    invalid = np.isnan(out)
-    if invalid.any():
-        node_xy = np.stack([tri.x, tri.y], axis=1)
-        nearest = cKDTree(node_xy).query(np.stack([Xg[invalid], Yg[invalid]], axis=1))[1]
-        out[invalid] = node_field[nearest]
-    return out
-
-
 # ---------------------------------------------------------------------------
 # pipeline completo por amostra
 # ---------------------------------------------------------------------------
@@ -130,18 +102,11 @@ def _grid_barycentric(tri, node_field: np.ndarray, Xg: np.ndarray, Yg: np.ndarra
 def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
                            ang_1: float = 0.0, ang_2: float = 120.0,
                            n_r: int = 138, n_a: int = 276,
-                           tmp_dir: Path = None, target_field: str | None = 'B',
-                           ans: AnsData = None) -> dict:
-    """Deriva os dois grafos + grade H×W de UMA amostra a partir do
-    `sample_XXXXXX.ans.gz` bruto. Sem FEMM aberto, sem chamada COM --
-    só descompacta o arquivo e faz numpy/matplotlib.tri puro.
-
-    `target_field`: 'B' -- ver docstring do
-    módulo. Só afeta `node_y`/`y_hw`; o resto do dict (grafo de elementos,
-    arestas cruzadas, x_hw) é idêntico nos dois casos. None (2026-10-21): não
-    calcula gabarito nenhum (nem curl(A)/média nodal nem interpolação na grade)
-    -- `node_y`/`y_hw` saem como None, para o chamador preencher (parsers
-    smooth: femm_mesh_smooth, femm_mesh_elem).
+                           tmp_dir: Path = None, ans: AnsData = None) -> dict:
+    """Estrutura do layout bipartido (os dois grafos + x_hw) de UMA amostra a partir do
+    `sample_XXXXXX.ans.gz` bruto. Sem FEMM aberto, sem chamada COM -- só lê o arquivo e
+    faz numpy/matplotlib.tri puro. `node_y`/`y_hw` saem como None, para o chamador
+    preencher (parsers smooth: femm_mesh_smooth, femm_mesh_elem_smooth).
 
     `ans` (2026-10-22): `.ans` já lido (ans_parsing.read_ans) -- evita descomprimir/ler o
     arquivo de novo; None = lê de `ans_gz_path` (descompactado em `tmp_dir`).
@@ -150,7 +115,6 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     L/elem_L/E_L/C_L (contagens por amostra, pra agrupamento em chunks) e
     dim_H/dim_W.
     """
-    assert target_field in ('B', None), f"target_field inválido: {target_field!r}"
     if ans is not None:
         lines, nodes, elems = ans.lines, ans.nodes, ans.elems
     else:
@@ -183,7 +147,6 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
     th_node = np.arctan2(nodes[:, 1], nodes[:, 0])
     r_base = ((r_node - r_in) / (r_ext - r_in)).astype(np.float32)
     c_base = ((th_node - ang_1_rad) / (ang_2_rad - ang_1_rad)).astype(np.float32)
-    node_A = nodes[:, 2].astype(np.float32)
 
     edges_undirected = _build_edges(elems)
     wrap_idx_1, wrap_idx_2 = _wrap_edge_pairs(nodes, ang_1, ang_2)
@@ -208,15 +171,6 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
 
     node_x = np.stack([r_base, c_base], axis=1).astype(np.float32)
 
-    node_Bx = node_By = None
-    if target_field == 'B':
-        elem_Bx, elem_By = _element_b_from_A(nodes, elems, node_A)
-        node_Bx = _node_mean_of_elements(elems, elem_Bx, n_nodes)
-        node_By = _node_mean_of_elements(elems, elem_By, n_nodes)
-        node_y = np.concatenate([node_Bx, node_By], axis=1)
-    else:
-        node_y = None   # preenchido pelo chamador
-
     # --- grafo 2: elementos/centróides (sem arestas internas) ---
     n_elems = elems.shape[0]
     centroids = nodes[elems[:, :3], :2].mean(axis=1)
@@ -238,26 +192,17 @@ def parse_ans_gzip_sample(ans_gz_path: Path, r_in: float, r_ext: float,
 
     # --- grade H×W ---
     Xg, Yg = _grid_polar_xy(r_in, r_ext, ang_1_rad, ang_2_rad, n_r, n_a)
-    tri, trifinder = _build_trifinder(nodes, elems)
+    _, trifinder = _build_trifinder(nodes, elems)
     Mu_hw = _grid_const_per_element(trifinder, elem_mu, centroids, Xg, Yg).reshape(n_r, n_a)
     M_hw = _grid_const_per_element(trifinder, elem_M, centroids, Xg, Yg).reshape(n_r, n_a)
     J_hw = _grid_const_per_element(trifinder, elem_J, centroids, Xg, Yg).reshape(n_r, n_a)
-    if target_field == 'B':
-        # interpolação baricêntrica do campo nodal (Bx/By, a média-por-nó
-        # calculada acima), não constante-por-elemento (estilo Mu_r/M).
-        Bx_hw = _grid_barycentric(tri, node_Bx[:, 0], Xg, Yg).reshape(n_r, n_a)
-        By_hw = _grid_barycentric(tri, node_By[:, 0], Xg, Yg).reshape(n_r, n_a)
-        y_hw = np.stack([Bx_hw, By_hw], axis=0)
-    else:
-        y_hw = None     # preenchido pelo chamador
-
     return {
-        'node_x': node_x, 'node_y': node_y,
+        'node_x': node_x, 'node_y': None,     # gabarito: preenchido pelo chamador
         'edge_index': edge_index, 'edge_attr': edge_attr,
         'elem_x': elem_x,
         'cross_edge_index': cross_edge_index, 'cross_edge_attr': cross_edge_attr,
         'x_hw': np.stack([Mu_hw, M_hw, J_hw], axis=0).astype(np.float32),
-        'y_hw': y_hw,
+        'y_hw': None,
         'L': np.array([n_nodes], dtype=np.int64),
         'elem_L': np.array([n_elems], dtype=np.int64),
         'E_L': np.array([edge_index.shape[1]], dtype=np.int64),

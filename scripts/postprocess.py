@@ -172,11 +172,11 @@ def _floor_points(kind, lay):
     """O gabarito na própria representação (piso de cada tipo de superfície)."""
     mq, ov = lay['mesh_quad'], lay['overlay']
     if kind == 'grade':
-        yh = lay['v1']['y_hw']
+        yh = lay['vertex']['y_hw']
         return np.hypot(yh[0], yh[1]).ravel()[ov['cell']], ov['mag'], ov['w']
     M, K = mq['mag'].shape
     if kind == 'P1_nos':
-        mm = surface_values_p1(lay['tri'], lay['v1']['node_y'].astype(np.float64), mq['bary'])
+        mm = surface_values_p1(lay['tri'], lay['vertex']['node_y'].astype(np.float64), mq['bary'])
     else:   # P0_elem: B suavizado no centróide (gabarito da Elem)
         mm = np.repeat(_mag_np(lay['elem']['node_y'].astype(np.float64))[:, None], K, axis=1)
     return mm.ravel(), mq['mag'].ravel(), np.repeat((mq['area'] / K)[:, None], K, axis=1).ravel()
@@ -209,7 +209,7 @@ def run_eval(out_dir: Path, max_samples=None, subset='test'):
     """Erro de superfície (docs/claude/avaliacao.md §1): superfície discreta de cada
     modelo × superfície do FEMM (B suavizado P1 descontínuo); L1_A, L2_A, B_ref.
     Secundário: erro de |B| ponto a ponto nos nós (gabarito node_y do
-    layout v1, área dual) -> runs[k]['nodal'] e floor_nodal (piso da grade: y_hw
+    layout de vértices, área dual) -> runs[k]['nodal'] e floor_nodal (piso da grade: y_hw
     interpolado nos nós, floor_nodes); não substitui a superfície.
     Saída: eval_smooth.json (runs + floor_surface + floor_nodal) e eval_smooth_per_sample.npz
     (por run e por piso: [n_amostras, 2] = L1_A, L2_A em T; nodal_*: [n_amostras, 4] =
@@ -249,7 +249,7 @@ def run_eval(out_dir: Path, max_samples=None, subset='test'):
                 ts = to_torch_sample(lay)
                 ids.append(idx)
                 subs.append(sub)
-                n_nodes.append(int(lay['v1']['node_x'].shape[0]))
+                n_nodes.append(int(lay['vertex']['node_x'].shape[0]))
                 n_elems.append(int(len(lay['tri'])))
                 for kd in SURF_KINDS:
                     a = Accum()
@@ -257,9 +257,9 @@ def run_eval(out_dir: Path, max_samples=None, subset='test'):
                     acc_floor[(kd, sub)] = merge([acc_floor[(kd, sub)], a])
                     r_ = a.report()
                     per_floor[kd].append((r_['L1_area'], r_['L2_area']))
-                # nodal (secundário): gabarito e área dual do layout v1
-                area_n = lay['v1']['node_x'][:, 2].astype(np.float64)
-                mag_tn = _mag_np(lay['v1']['node_y'].astype(np.float64))
+                # nodal (secundário): gabarito e área dual do layout de vértices
+                area_n = lay['vertex']['node_x'][:, 2].astype(np.float64)
+                mag_tn = _mag_np(lay['vertex']['node_y'].astype(np.float64))
                 a = Accum()
                 a.add(mag(floor_nodes(ts)), mag_tn, area_n)
                 acc_floor_nodal[sub] = merge([acc_floor_nodal[sub], a])
@@ -307,7 +307,7 @@ def run_eval(out_dir: Path, max_samples=None, subset='test'):
         res['runs'][k]['nodal'] = reports(lambda ss, k=k: merge([acc_nodal[(k, s)] for s in ss]))
     res['floor_nodal'] = reports(lambda ss: merge([acc_floor_nodal[s] for s in ss]))
     res['nodal_metric'] = ('erro de |B| ponto a ponto nos nós (secundário): gabarito node_y do '
-                           'layout v1, área dual do nó; FNO2d interpolado nos nós (modo da '
+                           'layout de vértices, área dual do nó; FNO2d interpolado nos nós (modo da '
                            'bateria), Elem -> nós por elem_to_nodes; piso = y_hw do gabarito '
                            f'interpolado nos nós ({INTERP_MODE})')
     # estatística da malha
@@ -373,7 +373,7 @@ def run_figures(data_dir: Path, fig_dir: Path):
         lay = parse_smooth(sample_path(idx), rows[idx], with_elem=True)
         nodes, elems = _mesh(idx)
         tri = mtri.Triangulation(nodes[:, 0], nodes[:, 1], triangles=elems[:, :3])
-        gt = _mag_np(lay['v1']['node_y'].astype(np.float64))
+        gt = _mag_np(lay['vertex']['node_y'].astype(np.float64))
         preds = _node_mags(runs, lay, to_torch_sample(lay))
         preds = {a: preds[a] for a in ARCHS}
         r_m, _ = gap_radius_mm(rows[idx])
@@ -567,6 +567,7 @@ def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_int=None, d_ca
 
 TORQUE_TMP = Path('data/temp')     # soluções FEMM das varreduras (torque_theta_e{,_batch}/)
 TORQUE_WORKERS, TORQUE_FEMM_WORKERS = 6, 8
+THETA_E_N, THETA_E_SEED = 5, 0     # amostras padrão do theta-e (teste, 1 por faixa de 2 A)
 
 
 def _torque_runs(loss, archs):
@@ -593,9 +594,11 @@ def _femm_batch_one(idx, k, th, row, work_dir=TORQUE_TMP):
 
 
 def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
-               idxs=(15,), n_theta=None, n_samples=80, n_per_chunk=8, limit=None,
+               idxs=None, n_theta=None, n_samples=80, n_per_chunk=8, limit=None,
                raw_dir=None, work_dir=None, subset='test'):
-    """Torque: theta-e (varredura θe de amostras), batch (n_samples amostras do subset
+    """Torque: theta-e (varredura θe das amostras idxs; None = THETA_E_N amostras do TESTE do
+    split.json da run de referência, 1 por faixa de 2 A da corrente, seed THETA_E_SEED --
+    select_batch_samples), batch (n_samples amostras do subset
     estratificadas por corrente × n_theta ângulos, resumo da fundamental) ou scatter (torque
     das n_per_chunk primeiras amostras de cada chunk do subset). FEMM T22 × gt × smooth ×
     modelos da loss escolhida. subset: 'test' (padrão) ou 'val'.
@@ -614,6 +617,9 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
     mNm = lambda v: np.asarray(v) * 1e3
     if mode == 'theta-e':
         n_theta = n_theta or 24
+        if idxs is None:
+            idxs = select_batch_samples(split_run, rows, THETA_E_N, seed=THETA_E_SEED, subset='test')
+            print(f'  theta-e: amostras do teste {idxs}', flush=True)
         for idx in idxs:
             row, sw = rows[idx], _torque_sweep_dir(idx, work_dir)
             th_all = torque_thetas(n_theta)
@@ -879,7 +885,7 @@ def _timing_infer(out_json, runs, n_samples, n_warmup, n_reps, max_batch, subset
                            [True] * len(first)))
     ts = [to_torch_sample(l) for l in lays]
     del lays
-    n_nodes = np.array([t['v1']['node_x'].shape[0] for t in ts])
+    n_nodes = np.array([t['vertex']['node_x'].shape[0] for t in ts])
     i_med = int(np.argsort(n_nodes)[len(n_nodes) // 2])
     torch.cuda.set_per_process_memory_fraction(MEM_FRACTION, 0)
     for r in runs.values():
@@ -978,7 +984,9 @@ def run_train_table(out_dir: Path):
               f"{f(r['median_metric_time_s'], '.2f'):>6s} "
               f"{f(None if r['wall_time_s'] is None else r['wall_time_s'] / 3600, '.2f'):>7s} "
               f"{f(r['best_epoch'], 'd'):>5s} {f(r['last_epoch'], 'd'):>5s}  {r['stop_reason']}  "
-              f"{r['hardware']['device']}")
+              f"{r['hardware']['gpu_name'] or r['hardware']['device']} @ {r['hardware']['hostname']} "
+              f"(torch {r['hardware']['torch_version']}, CUDA {r['hardware']['cuda_version']}, "
+              f"cuDNN {r['hardware']['cudnn_version']})")
     if res['missing']:
         print('campos ausentes (null):')
         for k, m in res['missing'].items():
@@ -1018,8 +1026,10 @@ if __name__ == '__main__':
     p_rg.add_argument('--fig', type=Path, default=OUT_ROOT / 'plots', help='diretório da figura')
     p_tq = sp.add_parser('torque', help='torque FEMM × gabarito × modelos (theta-e/batch/scatter)')
     p_tq.add_argument('mode', choices=('theta-e', 'batch', 'scatter'))
-    p_tq.add_argument('--idx', type=int, nargs='+', default=[15, 128, 130, 142, 151],
-                      help='theta-e: índices das amostras no raw')
+    p_tq.add_argument('--idx', type=int, nargs='+', default=None,
+                      help='theta-e: índices das amostras no raw (default: 5 amostras do conjunto de '
+                           'TESTE do split.json da run de referência, 1 por faixa de 2 A de corrente, '
+                           'seed 0 — select_batch_samples)')
     p_tq.add_argument('--loss', default='mae', choices=('mse', 'mae'))
     p_tq.add_argument('--archs', nargs='+', default=None, help='default: as 5 archs')
     p_tq.add_argument('--femm', action='store_true', help='resolve as varreduras no FEMM antes')

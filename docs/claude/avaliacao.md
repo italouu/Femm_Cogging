@@ -138,7 +138,7 @@ $$ T = -\,\frac{3\,L}{\mu_0\,(r_2 - r_1)}\sum_{e} r_e\, B_{r,e}\, B_{\theta,e}\,
 
 | Modo | Amostras | Saída |
 |---|---|---|
-| `theta-e` | `--idx` (padrão 15, 128, 130, 142, 151), `--n-theta` 24 ângulos $\theta_e = 360k/n$ | `theta_e_s<IDX>_<loss>.json`: curvas e RMS de cada uma contra o FEMM e contra o `gt` |
+| `theta-e` | `--idx`; padrão: 5 amostras do conjunto de **teste** do `split.json` da run de referência, 1 por faixa de 2 A de corrente, `seed=0` (`select_batch_samples`; no split atual: 2263, 2265, 3889, 3940, 5395); `--n-theta` 24 ângulos $\theta_e = 360k/n$ | `theta_e_s<IDX>_<loss>.json`: curvas e RMS de cada uma contra o FEMM e contra o `gt` |
 | `batch` | 80 amostras do subset estratificadas por corrente (16 por faixa de 2 A, `seed=0`) × 16 ângulos | `theta_e_batch_<loss>{,_summary}.json` |
 | `scatter` | 8 primeiras amostras de cada chunk do subset, com $\theta_e$ do CSV, sem FEMM | `scatter_<loss>.json` |
 
@@ -217,4 +217,4 @@ Saída: `dados/timing.json`, com hardware, `femm_preproc`, `inference` e `table`
 |---|---|---|
 | `figures [--data] [--out]` | curvas de treino (`mae_graph`; FNO2d `mae_hw`); barras de $L1_A$/$L2_A$ com o piso de cada representação; $|\mathbf B|$ nos nós dos 5 modelos mae nas amostras P50/P95 do $L1_A$ de `FNO_BipartiteGNN_mae` (setor e zoom no entreferro) | `plots/1_curvas_treino`, `2_barras_erro`, `3_campo_*`; `dados/figures_smooth.json` |
 | `surface IDX [LOSS]` / `surface --pct P [LOSS]` | §1 em 1 amostra (ou na amostra do percentil P do eval) e mapa da densidade do erro por triângulo $\sum e\,w/\sum w$ (`surface_error_per_triangle`), com o piso da grade e os contornos de material | `dados/surface_error/sample_*.{json,npz}`, `plots/surface_error/*.png` |
-| `train-table` | tabela das 10 runs só a partir dos logs (`config.json`, `run_summary.json`, `epochs.csv`): parâmetros, pico de GPU, medianas de tempo por época, melhor/última época, motivo da parada | `dados/train_table.json` |
+| `train-table` | tabela das 10 runs só a partir dos logs (`config.json`, `run_summary.json`, `epochs.csv`): parâmetros, pico de GPU, medianas de tempo por época, melhor/última época, motivo da parada, hardware (`device`, `gpu_name`, versões de torch/CUDA/cuDNN, `hostname`) | `dados/train_table.json` |

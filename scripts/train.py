@@ -1,4 +1,3 @@
-import functools
 import glob
 import torch
 from src.configs.training import NnCfg
@@ -11,8 +10,6 @@ from src.neural_op.monitor import TrainingMonitor
 from src.training.model_manager import ModelManager
 
 # ── Configuração ───────────────────────────────────────────────────────────────
-from src.configs.training import FNOConfig
-from src.configs.monitor import MonitorCfg
 
 def run(_nn):
     """

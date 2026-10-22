@@ -1,10 +1,8 @@
 from dataclasses import dataclass, field, fields, MISSING
 from typing import Any, Optional
 
-from src.configs.monitor import MonitorCfg   # noqa: F401  re-exportado daqui por retrocompatibilidade
-from src.configs.loss    import (            # noqa: F401  re-exportado daqui por retrocompatibilidade
-    MseLossCfg, MaeLossCfg, LOSS_CFG_REGISTRY,
-)
+from src.configs.monitor import MonitorCfg
+from src.configs.loss    import MaeLossCfg, LOSS_CFG_REGISTRY
 
 
 def _detect_chunk_dims(dataset: str) -> dict:

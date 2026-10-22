@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 from src.neural_op.archs._blocks import GNN
 from src.neural_op.archs.fno import FNO2d
 from src.neural_op.archs.interp import interpolate_grid_to_nodes

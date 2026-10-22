@@ -26,8 +26,9 @@ class DatagenConfig:
     # Prepare / chunks
     chunk_size: int = 32
     # workers do parse raw -> chunks (scripts/build_smooth_ans_chunks_direct.py,
-    # scripts/build_elem_smooth_chunks.py)
-    npz_max_workers: int = 6
+    # scripts/build_elem_smooth_chunks.py, scripts/build_smooth_datasets.py; até 2026-10-22
+    # npz_max_workers)
+    chunk_max_workers: int = 6
 
     # workers da geração do raw (scripts/generate_data_femm_mesh_v2.py)
     femm_mesh_max_workers: int = 8

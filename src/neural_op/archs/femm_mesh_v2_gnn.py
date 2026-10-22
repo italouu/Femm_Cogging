@@ -1,8 +1,6 @@
 import torch
-import torch.nn.functional as F
 from src.neural_op.archs._blocks import BipartiteGNN
 from src.neural_op.archs.fno import FNO2d
-from src.neural_op.losses import LOSS_REGISTRY
 from src.neural_op.archs.interp import interpolate_grid_to_nodes
 from src.neural_op.archs.fno_gnn import _rescale_fno_to_node_space
 

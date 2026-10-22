@@ -31,7 +31,7 @@ OUT_DATASET  = _dg.dataset
 N_R, N_A     = _dg.n_r, _dg.n_a
 ANG_1, ANG_2 = _dg.ang_1, _dg.ang_2
 CHUNK_SIZE   = _dg.chunk_size
-MAX_WORKERS  = _dg.npz_max_workers
+MAX_WORKERS  = _dg.chunk_max_workers
 
 # Todas as amostras do raw (BLDC_138x276: 6000 -> 188 chunks, 187 × 32 + 1 × 16). Usado também
 # por scripts/build_elem_smooth_chunks.py, scripts/build_smooth_datasets.py e
@@ -61,7 +61,7 @@ def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, chunks_root=CHUNKS_ROOT,
 
     groups = [ans_paths[i:i + chunk_size] for i in range(0, len(ans_paths), chunk_size)]
 
-    print(f"\n=== Chunks com B suavizado do FEMM, direto do raw ===")
+    print("\n=== Chunks com B suavizado do FEMM, direto do raw ===")
     print(f"  origem  : {RAW_DIR}  ({len(ans_paths)} amostras)")
     print(f"  destino : {chunks_root}/{{{','.join(SMOOTH_ARCHS)}}}")
     print(f"  chunks  : {len(groups)} x {chunk_size}  |  workers: {max_workers}")

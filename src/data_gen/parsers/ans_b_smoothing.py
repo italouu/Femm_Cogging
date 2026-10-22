@@ -27,7 +27,6 @@ Uso:
 from __future__ import annotations
 
 import gzip
-import re
 from dataclasses import dataclass, field
 
 import numpy as np

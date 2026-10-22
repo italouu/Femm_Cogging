@@ -30,12 +30,12 @@ from pathlib import Path
 from scripts.build_smooth_ans_chunks_direct import (
     RAW_DIR, CHUNKS_ROOT, N_R, N_A, ANG_1, ANG_2, CHUNK_SIZE, MAX_WORKERS, MAX_SAMPLES,
 )
-from src.data_gen.chunks import sample_idx as _sample_idx, write_chunk
-MIN_FREE_GB = 55   # valor de scripts/build_elem_proto_chunks.py (chunks de 4000 amostras ~47 GB)
 from src.configs.datagen import DatagenConfig
-N_RAW_EXPECTED = DatagenConfig().n_samples   # precheck com max_samples=None: raw completo
+from src.data_gen.chunks import sample_idx as _sample_idx, write_chunk
 from src.data_gen.parsers.femm_mesh_elem_smooth import parse_ans_gzip_sample_elem_smooth
 
+MIN_FREE_GB = 55   # valor de scripts/build_elem_proto_chunks.py (chunks de 4000 amostras ~47 GB)
+N_RAW_EXPECTED = DatagenConfig().n_samples   # precheck com max_samples=None: raw completo
 OUT_NAME  = 'FNO_BipartiteGNN_Elem'
 TMP_PARSE = Path("data/temp") / f"{DatagenConfig().dataset}_elem_smooth_parse"
 
@@ -55,7 +55,7 @@ def run(max_samples=MAX_SAMPLES, chunk_size=CHUNK_SIZE, out_name=OUT_NAME):
         rows = list(csv.DictReader(f))
 
     groups = [ans_paths[i:i + chunk_size] for i in range(0, len(ans_paths), chunk_size)]
-    print(f"\n=== Chunks FNO_BipartiteGNN_Elem (B suavizado) direto do raw ===")
+    print("\n=== Chunks FNO_BipartiteGNN_Elem (B suavizado) direto do raw ===")
     print(f"  origem  : {RAW_DIR}  ({len(ans_paths)} amostras)")
     print(f"  destino : {out_dir}")
     print(f"  chunks  : {len(groups)} x {chunk_size}  |  workers: {MAX_WORKERS}")

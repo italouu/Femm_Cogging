@@ -8,12 +8,15 @@ parsers smooth (femm_mesh_v2/femm_mesh_smooth/femm_mesh_elem*) e pelo
 pós-processamento (src/postprocess/), que rodam sem FEMM (Linux).
 """
 import gzip
+import io
 import shutil
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 
 from src.data_gen.motor_constants import MATERIAL_ID, PERMEABILITY, MAGNETIZATION
+from src.data_gen.parsers.ans_b_smoothing import AnsMesh, load_ans_lines
 
 _N_MATERIALS = len(set(MATERIAL_ID.values()))  # 4: ferro,ar,ima,cobre
 _MAGNET_ID = MATERIAL_ID['N35p']                # == MATERIAL_ID['N35n']
@@ -30,7 +33,11 @@ for _name, _mid in MATERIAL_ID.items():
 def _parse_solution(ans_path):
     with open(ans_path) as f:
         lines = f.readlines()
+    return _parse_solution_lines(lines)
 
+
+def _parse_solution_lines(lines):
+    """_parse_solution sobre as linhas já lidas (readlines, com '\\n')."""
     def section(name):
         return next(i for i, l in enumerate(lines) if l.strip().startswith(name))
 
@@ -54,6 +61,27 @@ def _read_ans_gz(ans_gz_path: Path, tmp_dir: Path):
         return _parse_solution(str(tmp_ans))
     finally:
         tmp_ans.unlink(missing_ok=True)
+
+
+class AnsData(NamedTuple):
+    """`.ans` de uma amostra lido uma vez (read_ans): saída de _parse_solution + AnsMesh do
+    load_ans. Passado aos parsers (`ans=`) para não descomprimir/ler o arquivo de novo."""
+    lines: list
+    nodes: np.ndarray       # [S,3] x, y, A
+    elems: np.ndarray       # [M,4] n1, n2, n3, label
+    mesh: AnsMesh
+
+
+def read_ans(ans_gz_path: Path) -> AnsData:
+    """Descomprime o `.ans.gz` uma vez, em memória (2026-10-22). Cada leitor decodifica o
+    texto como antes: _parse_solution com o open() padrão (codificação do sistema, readlines),
+    load_ans com utf-8/errors='replace' -- arrays idênticos aos das leituras separadas."""
+    with gzip.open(ans_gz_path, 'rb') as f:
+        raw = f.read()
+    lines = io.TextIOWrapper(io.BytesIO(raw)).readlines()
+    _, nodes, elems = _parse_solution_lines(lines)
+    text = io.TextIOWrapper(io.BytesIO(raw), encoding='utf-8', errors='replace').read()
+    return AnsData(lines, nodes, elems, load_ans_lines(text.splitlines()))
 
 
 def _parse_block_materials(lines):
@@ -231,11 +259,15 @@ def _node_material_stats(nodes: np.ndarray, elems: np.ndarray, area: np.ndarray,
     frac_dom = np.divide(area_per_mat.max(axis=1), total,
                           out=np.ones(n_nodes, dtype=np.float64), where=total > 0)
 
+    return node_material_id, frac_dom.astype(np.float32), _node_dual_area(elems, area, n_nodes)
+
+
+def _node_dual_area(elems: np.ndarray, area: np.ndarray, n_nodes: int) -> np.ndarray:
+    """Área lumped do nó (mm^2): soma de 1/3 da área dos triângulos incidentes."""
     node_dual_area = np.zeros(n_nodes, dtype=np.float64)
     for corner in range(3):
         np.add.at(node_dual_area, elems[:, corner], area / 3.0)
-
-    return node_material_id, frac_dom.astype(np.float32), node_dual_area.astype(np.float32)
+    return node_dual_area.astype(np.float32)
 
 
 def _node_magnet_polarity(nodes: np.ndarray, elems: np.ndarray, area: np.ndarray,

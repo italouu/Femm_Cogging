@@ -82,7 +82,11 @@ def load_ans(path) -> AnsMesh:
     opener = gzip.open if path.endswith('.gz') else open
     with opener(path, 'rt', encoding='utf-8', errors='replace') as f:
         lines = f.read().splitlines()
+    return load_ans_lines(lines)
 
+
+def load_ans_lines(lines: list) -> AnsMesh:
+    """load_ans sobre o texto já lido (lista de linhas, sem '\\n')."""
     length_conv, problem_type, frequency = None, 'planar', 0.0
     mu_x, mu_y, H_c, pp_J = [], [], [], []
     pts, bls = [], []

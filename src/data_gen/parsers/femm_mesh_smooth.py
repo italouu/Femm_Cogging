@@ -45,9 +45,9 @@ from pathlib import Path
 import numpy as np
 from scipy.spatial import cKDTree
 
-from src.data_gen.parsers.ans_b_smoothing import load_ans, element_b, nodal_b, point_b
+from src.data_gen.parsers.ans_b_smoothing import element_b, nodal_b, point_b
 from src.data_gen.parsers.ans_parsing import (
-    _read_ans_gz, _parse_label_materials, _build_edges, _element_areas, _node_material_stats,
+    AnsData, read_ans, _parse_label_materials, _build_edges, _element_areas, _node_dual_area,
     _node_magnet_polarity, _node_material_priority, _wrap_edge_pairs,
     _build_bidirectional_edge_attrs, _grid_polar_xy, _MU_BY_ID, _MAGNET_ID,
     _node_current_density, _to_polar,
@@ -92,17 +92,24 @@ def _grid_smooth_b(mesh, B1, B2, b1, b2, trifinder, centroids, Xg, Yg):
 def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
                                   ang_1: float = 0.0, ang_2: float = 120.0,
                                   n_r: int = 138, n_a: int = 276,
-                                  tmp_dir: Path = None) -> dict:
+                                  tmp_dir: Path = None, ans: AnsData = None) -> dict:
     """Retorna {arch: dict_de_arrays} para as 4 archs de SMOOTH_ARCHS -- ver
-    docstring do módulo."""
-    ans_gz_path = Path(ans_gz_path)
-    tmp_dir = Path(tmp_dir) if tmp_dir is not None else ans_gz_path.parent
+    docstring do módulo. `ans`: `.ans` já lido (read_ans); None = lê de `ans_gz_path`
+    (`tmp_dir` não é mais usado, 2026-10-22: leitura em memória)."""
+    if ans is None:
+        ans = read_ans(ans_gz_path)
+    return _parse_smooth(ans, r_in, r_ext, ang_1, ang_2, n_r, n_a)[0]
 
+
+def _parse_smooth(ans: AnsData, r_in, r_ext, ang_1, ang_2, n_r, n_a):
+    """Corpo de parse_ans_gzip_sample_smooth. Devolve (layouts, smooth), smooth = B
+    suavizado do FEMM já calculado (B1, B2, b1, b2) -- reaproveitado pela Elem
+    (femm_mesh_elem_smooth.parse_ans_gzip_sample_all)."""
     # --- layout bipartite (estrutura; node_y/y_hw substituídos abaixo) ---
-    bip = parse_ans_gzip_sample(ans_gz_path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
-                                 n_r=n_r, n_a=n_a, tmp_dir=tmp_dir, target_field=None)
+    bip = parse_ans_gzip_sample(None, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
+                                 n_r=n_r, n_a=n_a, target_field=None, ans=ans)
 
-    lines, nodes, elems = _read_ans_gz(ans_gz_path, tmp_dir)
+    lines, nodes, elems = ans.lines, ans.nodes, ans.elems
     label_material_id, _, label_M = _parse_label_materials(lines)
     elem_material_id = label_material_id[elems[:, 3]]
     elem_M = label_M[elems[:, 3]]
@@ -110,7 +117,7 @@ def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
     assert n_nodes == bip['node_x'].shape[0], "ordem/contagem de nós divergente entre layouts"
 
     # --- B suavizado do FEMM (só .ans) ---
-    mesh = load_ans(ans_gz_path)
+    mesh = ans.mesh
     assert np.array_equal(mesh.p, elems[:, :3]), "conectividade divergente entre leitores do .ans"
     B1, B2 = element_b(mesh)
     b1, b2 = nodal_b(mesh, B1, B2)
@@ -139,7 +146,7 @@ def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
     c_base = (th_node - ang_1_rad) / (ang_2_rad - ang_1_rad)
 
     area = _element_areas(nodes, elems)
-    _, _frac_dom, node_dual_area = _node_material_stats(nodes, elems, area, elem_material_id)
+    node_dual_area = _node_dual_area(elems, area, n_nodes)
     node_mu = _MU_BY_ID[node_material_id]
     node_M = np.where(node_material_id == _MAGNET_ID,
                       _node_magnet_polarity(nodes, elems, area, elem_material_id, elem_M),
@@ -179,9 +186,10 @@ def parse_ans_gzip_sample_smooth(ans_gz_path: Path, r_in: float, r_ext: float,
         'dim_H': bip['dim_H'],
         'dim_W': bip['dim_W'],
     }
-    return {
+    layouts = {
         'FNO2d':            grid,
         'FNO_GNN':          mesh_v1,
         'GNN_PostBase':     mesh_v1,
         'FNO_BipartiteGNN': bip,
     }
+    return layouts, dict(B1=B1, B2=B2, b1=b1, b2=b2)

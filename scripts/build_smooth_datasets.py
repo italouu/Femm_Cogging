@@ -9,23 +9,83 @@ mesh_ans_138x276), nas MAX_SAMPLES primeiras amostras (None = todas; 6000 -> 188
 Saída: data/torch/data_chunks/<DatagenConfig.dataset>/<arch>/data_chunk_XXXX.pt
 Retomável: chunks já presentes são pulados (pode rodar de novo após interrupção).
 
-Ordem: precheck do parser Elem (amostra 0) + disco -> 4 datasets -> Elem -> contagem final.
+Ordem: precheck do parser Elem (amostra 0) + disco -> 5 datasets numa passada -> contagem final.
+Passada única (2026-10-22): cada amostra é lida e parseada UMA vez
+(femm_mesh_elem_smooth.parse_ans_gzip_sample_all) e o chunk de cada arch que faltar é gravado
+(escrita atômica, src/data_gen/chunks.py) -- antes, os 4 datasets e a Elem eram duas passadas
+pelo raw (scripts.build_smooth_ans_chunks_direct + scripts.build_elem_smooth_chunks, que
+continuam executáveis sozinhos). Chunks idênticos aos das duas passadas (torch.equal).
 Medido em 2026-10-13 (Windows local, 6 workers): ~15 s/chunk nos 4 datasets e ~15 s/chunk
 na Elem; ~0,86 GB + ~0,36 GB por chunk -> 2000 amostras ≈ 32 min, ≈ 77 GB.
 
 Execução (raiz do projeto):  python -m scripts.build_smooth_datasets
 """
+import csv
 import math
 import shutil
 import time
+from concurrent.futures import ProcessPoolExecutor
 
 from scripts import build_elem_smooth_chunks as elem
 from scripts import build_smooth_ans_chunks_direct as smooth
 from src.configs.datagen import DatagenConfig
+from src.data_gen.chunks import LAYOUT_BY_ARCH, sample_idx as _sample_idx, write_chunk
+from src.data_gen.parsers.femm_mesh_elem_smooth import parse_ans_gzip_sample_all
 from src.data_gen.parsers.femm_mesh_smooth import SMOOTH_ARCHS
 
 GB_PER_CHUNK = 0.86 + 0.36   # 4 datasets + Elem, medido 2026-10-13
 ARCHS = (*SMOOTH_ARCHS, elem.OUT_NAME)
+
+
+def _parse_one(path, r_in: float, r_ext: float) -> dict:
+    """Worker: 1 .ans.gz -> {arch: dict de arrays} das 5 archs."""
+    return parse_ans_gzip_sample_all(path, r_in, r_ext, ang_1=smooth.ANG_1, ang_2=smooth.ANG_2,
+                                     n_r=smooth.N_R, n_a=smooth.N_A)
+
+
+def run(max_samples=smooth.MAX_SAMPLES, chunk_size=smooth.CHUNK_SIZE,
+        chunks_root=smooth.CHUNKS_ROOT, max_workers=smooth.MAX_WORKERS):
+    """Gera os chunks que faltam das 5 archs numa passada pelo raw (retomável por chunk)."""
+    ans_paths = sorted(smooth.RAW_DIR.glob("sample_*.ans.gz"), key=_sample_idx)
+    if max_samples is not None:
+        ans_paths = ans_paths[:max_samples]
+    with open(smooth.RAW_DIR / "valid_designs.csv", newline='') as f:
+        rows = list(csv.DictReader(f))
+
+    groups = [ans_paths[i:i + chunk_size] for i in range(0, len(ans_paths), chunk_size)]
+    print("\n=== Chunks dos 5 datasets smooth, direto do raw (passada única) ===")
+    print(f"  origem  : {smooth.RAW_DIR}  ({len(ans_paths)} amostras)")
+    print(f"  destino : {chunks_root}/{{{','.join(ARCHS)}}}")
+    print(f"  chunks  : {len(groups)} x {chunk_size}  |  workers: {max_workers}")
+
+    t0 = time.time()
+    feitos = 0
+    for chunk_idx, group in enumerate(groups):
+        name = f"data_chunk_{chunk_idx:04d}.pt"
+        missing = [a for a in ARCHS if not (chunks_root / a / name).exists()]
+        if not missing:
+            continue
+
+        t = time.time()
+        with ProcessPoolExecutor(max_workers=min(max_workers, len(group))) as ex:
+            futs = []
+            for p in group:
+                row = rows[_sample_idx(p)]
+                futs.append(ex.submit(_parse_one, p,
+                                      float(row['inner_diameter [mm]']) / 2,
+                                      float(row['outer_diameter [mm]']) / 2))
+            layouts = [f.result() for f in futs]   # ordem preservada
+
+        for arch in missing:
+            write_chunk(chunks_root / arch, chunk_idx, [l[arch] for l in layouts],
+                        LAYOUT_BY_ARCH[arch])
+        del layouts
+
+        feitos += 1
+        print(f"  chunk {chunk_idx + 1}/{len(groups)} ok  ({time.time() - t:.0f}s, "
+              f"total {(time.time() - t0) / 60:.1f} min)", flush=True)
+
+    print(f"\n=== Resumo: {feitos} chunk(s) gerado(s) nesta execução ===")
 
 
 def main():
@@ -50,8 +110,7 @@ def main():
         raise SystemExit(2)
 
     t0 = time.time()
-    smooth.run(max_samples=n_samples, chunks_root=smooth.CHUNKS_ROOT)   # explícito: o default de run() é fixado na definição
-    elem.run(max_samples=n_samples)
+    run(max_samples=n_samples)
 
     print(f"\n=== Contagem final ({(time.time() - t0) / 60:.1f} min) ===")
     ok = True

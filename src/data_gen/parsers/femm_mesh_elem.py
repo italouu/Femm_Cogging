@@ -62,9 +62,8 @@ from pathlib import Path
 
 import numpy as np
 
-from src.data_gen.parsers.ans_parsing import _element_b_from_A, _wrap_edge_pairs
+from src.data_gen.parsers.ans_parsing import AnsData, read_ans, _element_b_from_A, _wrap_edge_pairs
 from src.data_gen.parsers.femm_mesh_v2 import parse_ans_gzip_sample
-from src.data_gen.parsers.ans_parsing import _read_ans_gz
 
 
 def check_elem_layout(d: dict, n_elems: int = None):
@@ -130,21 +129,26 @@ def _build_dual_edges(nodes: np.ndarray, elems: np.ndarray, ang_1: float, ang_2:
 def parse_ans_gzip_sample_elem(ans_gz_path: Path, r_in: float, r_ext: float,
                                 ang_1: float = 0.0, ang_2: float = 120.0,
                                 n_r: int = 138, n_a: int = 276,
-                                tmp_dir: Path = None, target_field: str | None = 'B') -> dict:
+                                tmp_dir: Path = None, target_field: str | None = 'B',
+                                ans: AnsData = None, bip: dict = None) -> dict:
     """1 `.ans.gz` -> layout com papéis trocados (ver docstring do módulo).
     Mesmo formato de dict de parse_ans_gzip_sample (dim_H/dim_W escalares).
 
     target_field='B' (padrão): node_y = curl(A) exato por elemento e y_hw do
     parse_ans_gzip_sample(target_field='B') -- é o gabarito usado pelo
     postprocess/torque.py. None (2026-10-21): sem gabarito (node_y/y_hw = None),
-    para o parser smooth (femm_mesh_elem_smooth) preencher."""
-    ans_gz_path = Path(ans_gz_path)
-    tmp_dir = Path(tmp_dir) if tmp_dir is not None else ans_gz_path.parent
+    para o parser smooth (femm_mesh_elem_smooth) preencher.
 
+    `ans` (2026-10-22): `.ans` já lido (read_ans); None = lê de `ans_gz_path`. `bip`: layout
+    bipartite da mesma amostra já calculado (parse_ans_gzip_sample com o mesmo target_field
+    e a mesma janela) -- a Elem só reorganiza as chaves dele; None = calcula aqui."""
     assert target_field in ('B', None), f"target_field inválido: {target_field!r}"
-    bip = parse_ans_gzip_sample(ans_gz_path, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
-                                n_r=n_r, n_a=n_a, tmp_dir=tmp_dir, target_field=target_field)
-    _, nodes, elems = _read_ans_gz(ans_gz_path, tmp_dir)
+    if ans is None:
+        ans = read_ans(ans_gz_path)
+    if bip is None:
+        bip = parse_ans_gzip_sample(None, r_in, r_ext, ang_1=ang_1, ang_2=ang_2,
+                                    n_r=n_r, n_a=n_a, target_field=target_field, ans=ans)
+    nodes, elems = ans.nodes, ans.elems
     assert nodes.shape[0] == bip['node_x'].shape[0], "contagem de nós divergente"
     assert elems.shape[0] == bip['elem_x'].shape[0], "contagem de elementos divergente"
 

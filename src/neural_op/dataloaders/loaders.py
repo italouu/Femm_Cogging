@@ -10,7 +10,7 @@ from torch.utils.data import IterableDataset, DataLoader
 
 class ChunkStreamDataset(IterableDataset):
     """
-    Lê quad_chunk_*.pt do disco um a um — nunca mais de 1 chunk em memória
+    Lê data_chunk_*.pt do disco um a um — nunca mais de 1 chunk em memória
     por vez — e emite amostras individuais (x_hw, y_hw) através de um buffer
     de shuffle manual.
 
@@ -247,7 +247,7 @@ class ChunkVertexDataset(IterableDataset):
     Versão de ChunkStreamDataset que preserva dados de grafo (mode='vertex':
     grafo de vértices da malha do FEMM -- FNO_GNN, GNN_PostBase).
 
-    Lê quad_chunk_*.pt do disco um a um e emite dicts individuais com
+    Lê data_chunk_*.pt do disco um a um e emite dicts individuais com
     grade (x_hw, y_hw) + grafo (node_x, node_y, edge_index, edge_attr).
 
     edge_index emitido com índices locais à amostra (0..L[i]-1).

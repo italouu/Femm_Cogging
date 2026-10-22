@@ -23,9 +23,8 @@ Método (inalterado):
   pred   : saída do modelo levada aos elementos -- Elem: por elemento; demais: valores
            nodais -> média dos 3 vértices (fields.nodes_to_elem, P1 no centróide).
 Generalização: qualquer run/loss das 5 archs. Referencial: band_torque recebe (Bx, By);
-o gabarito smooth e as runs treinadas desde 2026-10-17 são POLARES (Br, Bθ) -> girados para
-xy pelo ângulo do ponto (centróide; nó, antes da média) — frame='polar'; runs antigas de
-alvo cartesiano: frame='xy'.
+o gabarito smooth e as saídas das runs são POLARES (Br, Bθ) -> girados para xy pelo ângulo
+do ponto (centróide; nó, antes da média).
 """
 import csv
 import gzip
@@ -175,7 +174,7 @@ def parse_torque_sample(path, row):
     return lay
 
 
-def pred_elem_xy(arch, run, lay, ts, frame='polar'):
+def pred_elem_xy(arch, run, lay, ts):
     """Saída do modelo -> (Bx, By) por elemento [M,2]."""
     from src.postprocess.fields import nodes_to_elem
     from src.postprocess.inference import predict
@@ -183,13 +182,11 @@ def pred_elem_xy(arch, run, lay, ts, frame='polar'):
     yp = yn.float().cpu().numpy().astype(np.float64)
     tq = lay['torque']
     if arch == 'FNO_BipartiteGNN_Elem':
-        return polar_to_xy(yp, tq['cen'][:, 0], tq['cen'][:, 1]) if frame == 'polar' else yp
-    if frame == 'polar':
-        yp = polar_to_xy(yp, tq['node_xy'][:, 0], tq['node_xy'][:, 1])
-    return nodes_to_elem(lay, yp)
+        return polar_to_xy(yp, tq['cen'][:, 0], tq['cen'][:, 1])
+    return nodes_to_elem(lay, polar_to_xy(yp, tq['node_xy'][:, 0], tq['node_xy'][:, 1]))
 
 
-def sample_torques(lay, row, runs, frame='polar'):
+def sample_torques(lay, row, runs):
     """{'gt', 'smooth', 'pred_<arch>'...}: torque (N·m, motor completo) de 1 solução."""
     from src.postprocess.inference import to_torch_sample
     tq = lay['torque']
@@ -198,7 +195,7 @@ def sample_torques(lay, row, runs, frame='polar'):
     out = dict(gt=g(tq['gt']), smooth=g(tq['smooth']))
     ts = to_torch_sample(lay)
     for r in runs.values():
-        out[f"pred_{r['arch']}"] = g(pred_elem_xy(r['arch'], r, lay, ts, frame))
+        out[f"pred_{r['arch']}"] = g(pred_elem_xy(r['arch'], r, lay, ts))
     return out
 
 

@@ -6,10 +6,10 @@ from src.neural_op.archs.interp import interpolate_grid_to_nodes
 
 def _interpolate_fno_to_nodes(fno_out, node_x, L):
     """
-    Interpolação bilinear da saída do FNO (grade regular) nas posições dos nós quadtree.
+    Interpolação bilinear da saída do FNO (grade H×W) nas posições dos nós da malha do FEMM.
 
     fno_out : [B, C, H, W]
-    node_x  : [S_tot, 5]   colunas 3,4 = r_base, c_base ∈ [0,1]
+    node_x  : [S_tot, C]   colunas 3,4 = r_base, c_base ∈ [0,1]
     L       : [B]           nós por amostra
     Retorna : [S_tot, C]    (interpolação: src/neural_op/archs/interp.py)
     """
@@ -30,7 +30,7 @@ def _rescale_fno_to_node_space(fno_at_nodes, normalizer):
 
 class FNO_GNN(torch.nn.Module):
     """
-    Arquitetura FNO + GNN para predição de B-field em resolução quadtree.
+    Arquitetura FNO + GNN para predição de B nos vértices da malha do FEMM.
 
     Pipeline
     --------

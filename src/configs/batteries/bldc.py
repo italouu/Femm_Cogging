@@ -40,7 +40,7 @@ def fno2d_mse(runs):
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
-            log_grad_norm=False, save_best=True, metrics_every_epoch=True),
+            save_best=True, metrics_every_epoch=True),
     )
 
 
@@ -62,7 +62,7 @@ def fno2d_mae(runs):
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
-            log_grad_norm=False, save_best=True, metrics_every_epoch=True),
+            save_best=True, metrics_every_epoch=True),
     )
 
 
@@ -85,7 +85,7 @@ def fno_gnn_mse(runs):
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
-            log_grad_norm=False, save_best=True, metrics_every_epoch=True),
+            save_best=True, metrics_every_epoch=True),
     )
 
 
@@ -107,7 +107,7 @@ def fno_gnn_mae(runs):
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
-            log_grad_norm=False, save_best=True, metrics_every_epoch=True),
+            save_best=True, metrics_every_epoch=True),
     )
 
 
@@ -129,7 +129,7 @@ def postbase_mse(runs):
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
-            log_grad_norm=False, save_best=True, metrics_every_epoch=True),
+            save_best=True, metrics_every_epoch=True),
     )
 
 
@@ -150,7 +150,7 @@ def postbase_mae(runs):
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
-            log_grad_norm=False, save_best=True, metrics_every_epoch=True),
+            save_best=True, metrics_every_epoch=True),
     )
 
 
@@ -173,7 +173,7 @@ def bipartite_mse(runs):
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
-            log_grad_norm=False, save_best=True, metrics_every_epoch=True),
+            save_best=True, metrics_every_epoch=True),
     )
 
 
@@ -195,7 +195,7 @@ def bipartite_mae(runs):
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
-            log_grad_norm=False, save_best=True, metrics_every_epoch=True),
+            save_best=True, metrics_every_epoch=True),
     )
 
 # ── FNO_BipartiteGNN_Elem ─────────────────────────────────────────────────────
@@ -217,7 +217,7 @@ def elem_mse(runs):
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
-            log_grad_norm=False, save_best=True, metrics_every_epoch=True),
+            save_best=True, metrics_every_epoch=True),
     )
 
 
@@ -239,7 +239,7 @@ def elem_mae(runs):
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
-            log_grad_norm=False, save_best=True, metrics_every_epoch=True),
+            save_best=True, metrics_every_epoch=True),
     )
 
 

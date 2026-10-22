@@ -16,7 +16,6 @@ class MonitorCfg:
                                                   # heartbeat ruidoso/pico isolado); 1 = antigo
     min_epochs:           int           = 100    # nenhum critério de parada age antes disso
                                                   # (ruído do início do treino); 0 = desativado
-    log_grad_norm:        bool          = False  # TODO: não implementado
     save_best:            bool          = True
     # calcula mae_hw/mae_graph (conjunto de validação, unidade física) em TODA época,
     # gravados em epochs.csv; False = só no heartbeat.

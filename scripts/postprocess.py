@@ -594,7 +594,7 @@ def _femm_batch_one(idx, k, th, row, work_dir=TORQUE_TMP):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=False,
+def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
                idxs=(15,), n_theta=None, n_samples=80, n_per_chunk=8, limit=None,
                raw_dir=None, work_dir=None, subset='test'):
     """Torque (P6): theta-e (varredura θe de amostras), batch (n_samples amostras do subset
@@ -610,7 +610,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
     rows = read_rows(raw_dir)
     runs = _torque_runs(loss, archs)
     split_run = find_runs(ROOT_S)[('FNO_BipartiteGNN_Elem', loss)]   # mesmo split em todas
-    meta = dict(loss=loss, frame=frame, split_run=str(split_run), subset=subset,
+    meta = dict(loss=loss, split_run=str(split_run), subset=subset,
                 runs={r['arch']: dict(run_dir=r['run_dir'], best_epoch=r['epoch']) for r in runs.values()})
     pk = [f"pred_{r['arch']}" for r in runs.values()]
     mNm = lambda v: np.asarray(v) * 1e3
@@ -635,7 +635,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
                 futs = [ex.submit(parse_torque_sample, sw / 'raw' / f'theta_{k:03d}.ans.gz', row)
                         for k in range(len(ref))]
                 for k, f in enumerate(futs):
-                    t = sample_torques(f.result(), row, runs, frame)
+                    t = sample_torques(f.result(), row, runs)
                     T['gt'].append(t['gt']); T['gt_smooth'].append(t['smooth'])
                     for kk in pk:
                         T[kk].append(t[kk])
@@ -681,7 +681,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
                 cur = dict(theta_e_deg=[], femm=[], gt=[], smooth=[], **{kk: [] for kk in pk})
                 for k, f in zip(ks, futs):
                     ref = json.loads((d / f'theta_{k:02d}.json').read_text())
-                    t = sample_torques(f.result(), rows[i], runs, frame)
+                    t = sample_torques(f.result(), rows[i], runs)
                     cur['theta_e_deg'].append(ref['theta_e_deg'])
                     cur['femm'].append(3 * ref['T22_sector'])
                     for kk in ['gt', 'smooth'] + pk:
@@ -715,7 +715,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, frame='polar', femm=
                 futs = [ex.submit(parse_torque_sample, raw_dir / f'sample_{i:06d}.ans.gz', rows[i])
                         for i in batch]
                 for i, f in zip(batch, futs):
-                    t = sample_torques(f.result(), rows[i], runs, frame)
+                    t = sample_torques(f.result(), rows[i], runs)
                     r = rows[i]
                     out['idx'].append(i); out['T_gt'].append(t['gt']); out['T_smooth'].append(t['smooth'])
                     for kk in pk:
@@ -1024,8 +1024,6 @@ if __name__ == '__main__':
                       help='theta-e: amostras (default: as dos JSONs antigos)')
     p_tq.add_argument('--loss', default='mae', choices=('mse', 'mae'))
     p_tq.add_argument('--archs', nargs='+', default=None, help='default: as 5 archs')
-    p_tq.add_argument('--frame', default='polar', choices=('polar', 'xy'),
-                      help='referencial da saída das runs (polar desde 2026-10-17)')
     p_tq.add_argument('--femm', action='store_true', help='resolve as varreduras no FEMM antes')
     p_tq.add_argument('--n-theta', type=int, default=None, help='default: 24 (theta-e) / 16 (batch)')
     p_tq.add_argument('--n-samples', type=int, default=80, help='batch: nº de amostras')
@@ -1072,7 +1070,7 @@ if __name__ == '__main__':
     elif a.cmd == 'regions':
         run_regions(a.out, a.fig, a.n, a.d_int, a.d_canto, a.ang_canto, a.subset)
     elif a.cmd == 'torque':
-        run_torque(a.mode, a.out, a.loss, a.archs, a.frame, a.femm, a.idx, a.n_theta,
+        run_torque(a.mode, a.out, a.loss, a.archs, a.femm, a.idx, a.n_theta,
                    a.n_samples, a.n_per_chunk, a.limit, a.raw_dir, a.work_dir, a.subset)
     elif a.cmd == 'saturation':
         run_saturation(a.out, a.fig, a.n, tuple(a.knee_frac), a.check_femm, a.subset)

@@ -46,7 +46,7 @@ ARCH_STAGES = {
     'FNO_BipartiteGNN_Elem': ('read_ans', 'materials', 'x_hw', 'node_pos', 'graph_topology', 'bip_graph',
                               'elem_graph'),
 }
-LAYOUT = {'FNO2d': 'v1', 'FNO_GNN': 'v1', 'GNN_PostBase': 'v1', 'FNO_BipartiteGNN': 'bip',
+LAYOUT = {'FNO2d': 'vertex', 'FNO_GNN': 'vertex', 'GNN_PostBase': 'vertex', 'FNO_BipartiteGNN': 'bip',
           'FNO_BipartiteGNN_Elem': 'elem'}
 
 
@@ -166,7 +166,7 @@ def check_mesh_vs_raw(nodes, elems, raw_gz):
 # pré-processamento por etapa (funções dos parsers smooth; só as entradas)
 # --------------------------------------------------------------------------- #
 def preprocess_timed(ans_path, r_in, r_ext, ang_1=0.0, ang_2=120.0, n_r=138, n_a=276):
-    """.ans -> entradas de cada layout (v1 / bip / elem), cronometrado por etapa.
+    """.ans -> entradas de cada layout (vertex / bip / elem), cronometrado por etapa.
     Retorna (tempos s {etapa}, arrays {layout: {chave: array}}, (nodes, elems))."""
     t = {}
     a1, a2 = np.deg2rad(ang_1), np.deg2rad(ang_2)
@@ -204,7 +204,7 @@ def preprocess_timed(ans_path, r_in, r_ext, ang_1=0.0, ang_2=120.0, n_r=138, n_a
     wrap_1, wrap_2 = _wrap_edge_pairs(nodes, ang_1, ang_2)
     t['graph_topology'] = _now() - s
 
-    # v1 (FNO_GNN / GNN_PostBase; smooth_layouts): material por prioridade
+    # vertex (FNO_GNN / GNN_PostBase; smooth_layouts): material por prioridade
     s = _now()
     node_material_id = _node_material_priority(elems, elem_material_id, nodes.shape[0])
     node_dual_area = _node_dual_area(elems, area, nodes.shape[0])
@@ -214,9 +214,9 @@ def preprocess_timed(ans_path, r_in, r_ext, ang_1=0.0, ang_2=120.0, n_r=138, n_a
                       0.0).astype(np.float32)
     node_J = _node_current_density(elems, area, elem_J.astype(np.float32), elem_material_id,
                                    node_material_id)
-    ei_v1, ea_v1 = _build_bidirectional_edge_attrs(nodes, edges_undirected, wrap_1, wrap_2,
+    ei_vertex, ea_vertex = _build_bidirectional_edge_attrs(nodes, edges_undirected, wrap_1, wrap_2,
                                                    r_base, c_base, node_mu, n_r, n_a)
-    nx_v1 = np.stack([node_mu.astype(np.float32), node_M, node_dual_area.astype(np.float32),
+    nx_vertex = np.stack([node_mu.astype(np.float32), node_M, node_dual_area.astype(np.float32),
                       r_base.astype(np.float32), c_base.astype(np.float32), node_J], axis=1)
     t['v1_graph'] = _now() - s
 
@@ -269,7 +269,7 @@ def preprocess_timed(ans_path, r_in, r_ext, ang_1=0.0, ang_2=120.0, n_r=138, n_a
 
     L_n = np.array([nodes.shape[0]], np.int64)
     arrays = dict(
-        v1=dict(x_hw=x_hw, node_x=nx_v1, edge_index=ei_v1, edge_attr=ea_v1, L=L_n),
+        vertex=dict(x_hw=x_hw, node_x=nx_vertex, edge_index=ei_vertex, edge_attr=ea_vertex, L=L_n),
         bip=dict(x_hw=x_hw, node_x=nx_bp, elem_x=elem_x, edge_index=ei_bp, edge_attr=ea_bp,
                  cross_edge_index=cei, cross_edge_attr=cea, L=L_n),
         elem=dict(x_hw=x_hw, node_x=nx_el, elem_x=nx_bp, edge_index=ei_el, edge_attr=ea_el,
@@ -281,7 +281,7 @@ def check_preprocess(arrays, ref):
     """Igualdade exata das entradas × parsers smooth (ref = samples.parse_smooth(...,
     with_elem=True) do mesmo .ans) -> {layout.chave: bool}."""
     out = {}
-    for lay, keys in (('v1', ('x_hw', 'node_x', 'edge_index', 'edge_attr', 'L')),
+    for lay, keys in (('vertex', ('x_hw', 'node_x', 'edge_index', 'edge_attr', 'L')),
                       ('bip', ('x_hw', 'node_x', 'elem_x', 'edge_index', 'edge_attr',
                                'cross_edge_index', 'cross_edge_attr', 'L')),
                       ('elem', ('x_hw', 'node_x', 'elem_x', 'edge_index', 'edge_attr',
@@ -310,7 +310,7 @@ def encode_timed(runs, arrays):
             for k in ('edge_index', 'L'):
                 g(k).to(DEVICE)
             _enc(nrm, g('edge_attr'), 'edge_attr').to(DEVICE)
-            if LAYOUT[arch] != 'v1':
+            if LAYOUT[arch] != 'vertex':
                 _enc(nrm, g('elem_x'), 'elem_x').to(DEVICE)
                 g('cross_edge_index').to(DEVICE)
                 _enc(nrm, g('cross_edge_attr'), 'cross_edge_attr').to(DEVICE)
@@ -334,7 +334,7 @@ def collate(samples, layout):
     no = eo = 0
     for s in samples:
         eis.append(s['edge_index'] + no)
-        if layout != 'v1':
+        if layout != 'vertex':
             c = s['cross_edge_index'].clone()
             c[0] += eo
             c[1] += no
@@ -342,7 +342,7 @@ def collate(samples, layout):
             eo += s['elem_x'].shape[0]
         no += s['node_x'].shape[0]
     out['edge_index'] = torch.cat(eis, 1)
-    if layout != 'v1':
+    if layout != 'vertex':
         out.update(cross_edge_index=torch.cat(ceis, 1), cross_edge_attr=torch.cat(cas, 0),
                    elem_x=torch.cat(exs, 0))
     return out
@@ -356,7 +356,7 @@ def _prepare(arch, nrm, batch):
         return dict(x=x, r=g['node_x'][:, 3], c=g['node_x'][:, 4], L=g['L'])
     out = dict(x=x, nx=_enc(nrm, g['node_x'], 'node_x'), ei=g['edge_index'],
                ea=_enc(nrm, g['edge_attr'], 'edge_attr'), L=g['L'])
-    if LAYOUT[arch] != 'v1':
+    if LAYOUT[arch] != 'vertex':
         out.update(ex=_enc(nrm, g['elem_x'], 'elem_x'), ci=g['cross_edge_index'],
                    ca=_enc(nrm, g['cross_edge_attr'], 'cross_edge_attr'))
     return out
@@ -367,7 +367,7 @@ def _forward(arch, model, nrm, inp):
     if arch == 'FNO2d':
         out_hw = _dec(nrm, model(inp['x']), 'y_hw')
         return interpolate_grid_to_nodes(out_hw, inp['r'], inp['c'], inp['L'])
-    if LAYOUT[arch] == 'v1':
+    if LAYOUT[arch] == 'vertex':
         _, yn = model(inp['x'], inp['nx'], inp['ei'], inp['ea'], inp['L'])
     else:
         _, yn = model(inp['x'], inp['nx'], inp['ex'], inp['ei'], inp['ea'], inp['ci'], inp['ca'], inp['L'])

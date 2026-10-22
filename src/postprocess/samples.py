@@ -84,7 +84,7 @@ def samples_with_subset(split_run_dir: Path, subset='test', max_samples=None, n_
 
 
 def parse_smooth(path, row, with_elem=False, with_overlay=False, ans=None):
-    """1 .ans.gz -> layouts do gabarito smooth {'v1': FNO_GNN, 'bip': FNO_BipartiteGNN}.
+    """1 .ans.gz -> layouts do gabarito smooth {'vertex': FNO_GNN, 'bip': FNO_BipartiteGNN}.
     with_elem: acrescenta 'elem' (layout FNO_BipartiteGNN_Elem, gabarito por elemento) e a
     malha para as projeções elemento <-> nó: 'tri' [M,3], 'elem_mat' [M], 'node_mat' [S]
     (material do nó por prioridade ferro>ímã>cobre>ar -- mesma regra do gabarito).
@@ -99,7 +99,7 @@ def parse_smooth(path, row, with_elem=False, with_overlay=False, ans=None):
     r_ext = float(row['outer_diameter [mm]']) / 2
     kw = dict(ang_1=ANG_1, ang_2=ANG_2, n_r=N_R, n_a=N_A, ans=ans)
     s = parse_smooth_layouts(path, r_in, r_ext, **kw)
-    out = dict(v1=s['FNO_GNN'], bip=s['FNO_BipartiteGNN'])
+    out = dict(vertex=s['FNO_GNN'], bip=s['FNO_BipartiteGNN'])
     if with_elem:
         out['elem'] = parse_elem_smooth(path, r_in, r_ext, **kw)
         lines, nodes, elems = ans.lines, ans.nodes, ans.elems

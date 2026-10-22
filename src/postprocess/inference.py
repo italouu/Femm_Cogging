@@ -100,11 +100,11 @@ def _bip_like(d):
 def to_torch_sample(s):
     """Layouts numpy de parse_smooth -> tensores CPU no formato de 1 amostra do chunk
     (+ 'elem' se parse_smooth(..., with_elem=True))."""
-    v1, bp = s['v1'], s['bip']
+    vx, bp = s['vertex'], s['bip']
     out = dict(
-        v1=dict(x_hw=_t(v1['x_hw'])[None], y_hw=_t(v1['y_hw']), node_x=_t(v1['node_x']),
-                node_y=_t(v1['node_y']), edge_index=_t(v1['edge_index']),
-                edge_attr=_t(v1['edge_attr']), L=_t(v1['L'])),
+        vertex=dict(x_hw=_t(vx['x_hw'])[None], y_hw=_t(vx['y_hw']), node_x=_t(vx['node_x']),
+                    node_y=_t(vx['node_y']), edge_index=_t(vx['edge_index']),
+                    edge_attr=_t(vx['edge_attr']), L=_t(vx['L'])),
         bip=dict(x_hw=_t(bp['x_hw'])[None], node_x=_t(bp['node_x']), elem_x=_t(bp['elem_x']),
                  edge_index=_t(bp['edge_index']), edge_attr=_t(bp['edge_attr']),
                  cross_edge_index=_t(bp['cross_edge_index']),
@@ -133,7 +133,7 @@ def predict(arch, model, normalizer, ts):
             _enc(normalizer, d['cross_edge_attr'], 'cross_edge_attr').to(DEVICE),
             d['L'].to(DEVICE))
         return _dec(normalizer, out_hw, 'y_hw')[0], _dec(normalizer, y_nodes, 'node_y')
-    d = ts['v1']
+    d = ts['vertex']
     x_in = _enc(normalizer, d['x_hw'], 'x_hw').to(DEVICE)
     if arch == 'FNO2d':
         out_hw = _dec(normalizer, model(x_in), 'y_hw')
@@ -149,6 +149,6 @@ def predict(arch, model, normalizer, ts):
 
 def floor_nodes(ts):
     """Piso da grade: y_hw do gabarito interpolado nos nós (INTERP_MODE)."""
-    yh = ts['v1']['y_hw'][None].to(DEVICE)
-    nx = ts['v1']['node_x'].to(DEVICE)
-    return interpolate_grid_to_nodes(yh, nx[:, 3], nx[:, 4], ts['v1']['L'].to(DEVICE)).cpu()
+    yh = ts['vertex']['y_hw'][None].to(DEVICE)
+    nx = ts['vertex']['node_x'].to(DEVICE)
+    return interpolate_grid_to_nodes(yh, nx[:, 3], nx[:, 4], ts['vertex']['L'].to(DEVICE)).cpu()

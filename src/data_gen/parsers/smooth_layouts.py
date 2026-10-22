@@ -126,7 +126,7 @@ def _parse_smooth(ans: AnsData, r_in, r_ext, ang_1, ang_2, n_r, n_a):
     bip['node_y'] = node_y
     bip['y_hw'] = y_hw
 
-    # --- layout v1 (grafo único de vértices, material por prioridade) ---
+    # --- layout vertex (grafo único de vértices, material por prioridade) ---
     r_node = np.hypot(nodes[:, 0], nodes[:, 1])
     th_node = np.arctan2(nodes[:, 1], nodes[:, 0])
     r_base = (r_node - r_in) / (r_ext - r_in)

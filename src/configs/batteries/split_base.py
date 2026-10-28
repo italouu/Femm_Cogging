@@ -69,7 +69,8 @@ BATTERY = BatteryCfg(
     name='split_base',
     n_repeats=1,
     runs=[
-        BatteryRun('split_base_mse', split_base_mse),
+        # mae primeiro (a mse vem depois)
         BatteryRun('split_base_mae', split_base_mae),
+        BatteryRun('split_base_mse', split_base_mse),
     ],
 )

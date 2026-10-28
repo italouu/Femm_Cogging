@@ -1,7 +1,8 @@
 """
 Bateria split — 2 runs do FNO_SplitGNN (mse/mae, 500 épocas), alvo polar (Br, Bθ) do
 gabarito B suavizado do FEMM em N_aux (centróides) e N_base (vértices por material).
-Mesmos hiperparâmetros das runs elem_* da bateria bldc. Cada run escrita por inteiro.
+Mesmos hiperparâmetros das runs elem_* da bateria bldc, exceto metrics_every_epoch=False
+(MAE de validação só a cada 10 épocas, no heartbeat). Cada run escrita por inteiro.
 
 Raw: data/raw/BLDC_138x276/ (6000 amostras) — scripts.generate_raw.
 Chunks: data/torch/data_chunks/BLDC_138x276/FNO_SplitGNN/ (188 chunks) —
@@ -34,7 +35,9 @@ def split_mse(runs):
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
-            save_best=True, metrics_every_epoch=True),
+            # [REMOVIDO] metrics_every_epoch=True -- motivo: a 2ª passada pela validação a cada
+            # época custa ~18 s (~11%) com leitura de disco; o MAE fica só no heartbeat.
+            save_best=True, metrics_every_epoch=False),
     )
 
 
@@ -56,7 +59,9 @@ def split_mae(runs):
         monitor_cfg=MonitorCfg(
             checkpoint_every=10, early_stop_patience=10, early_stop_min_delta=1e-6,
             gl_threshold=5.0, gl_patience=3, min_epochs=100,
-            save_best=True, metrics_every_epoch=True),
+            # [REMOVIDO] metrics_every_epoch=True -- motivo: a 2ª passada pela validação a cada
+            # época custa ~18 s (~11%) com leitura de disco; o MAE fica só no heartbeat.
+            save_best=True, metrics_every_epoch=False),
     )
 
 

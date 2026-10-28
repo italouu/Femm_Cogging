@@ -230,10 +230,16 @@ que devolve um `NnCfg` escrito por inteiro (`src/configs/battery.py`).
 - Dataset `BLDC_138x276/<arch>`, problem `BLDC_138x276`, split 60/30/10 (`train_split=0.60`, `val_split=0.30`), `split_seed=12`.
 
 `src/configs/batteries/split.py::BATTERY`: 2 runs do FNO_SplitGNN (`split_mse`,
-`split_mae`), com os mesmos hiperparâmetros das `elem_*`.
+`split_mae`), com os mesmos hiperparâmetros das `elem_*`, exceto `metrics_every_epoch=False`.
+Com isso o MAE só é calculado no heartbeat, a cada 10 épocas, o que economiza cerca de 11% da
+época.
 - Dataset `BLDC_138x276/FNO_SplitGNN`.
-- Pico de memória estimado em cerca de 36 GiB no lote 32 (medido 9,1 GiB no lote 8), contra
-  18,8 GiB da Elem.
+- Pico de memória estimado em cerca de 31 GiB no lote 32 para amostras medianas, e cerca de
+  34 GiB no pior caso (lote 8 medido × 4), contra 18,8 GiB da Elem.
+- As mensagens usam `SplitEdgeMessageBlock`, que aplica W nos nós antes de levar às arestas:
+  é a mesma conta e economiza cerca de 15% de memória. Com o `EdgeMessageBlock` original, o
+  pico chegava a cerca de 40 GiB e deu OOM na L40S.
+- Na VM, use `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
 
 `scripts/run_battery.py`:
 - pré-checa as runs sem dependência;

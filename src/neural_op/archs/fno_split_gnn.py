@@ -1,6 +1,9 @@
 """
 fno_split_gnn.py
 ----------------
+[PENDENTE EXCLUIR] substituída por fno_split_gnn_base.py (saída e loss só em N_base); fica
+até sair o resultado da run split_mae (CLAUDE.md, Pendências).
+
 FNO2d + GNN sobre o grafo dual de elementos (N_aux) e os vértices divididos por material
 (N_base) -- contrato de dados: docstring de src/data_gen/parsers/split_layout.py
 (node_* = N_aux, elem_* = N_base); docs/claude/modelos.md §4.

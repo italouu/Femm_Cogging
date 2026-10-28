@@ -433,6 +433,11 @@ bipartido. Os 5 layouts saem de uma passada.
   `scripts.build_chunks_split`:
   - parse de cerca de 1,4 s por amostra; cerca de 0,66 GB por chunk de 32, ou cerca de
     124 GB para os 188 chunks;
+  - 20,3 MB por amostra, dos quais 79% são arestas: atributos de Edge_aux e Edge_dual com
+    5,1 MB cada, e índices int64 com 2,9 MB cada;
+  - uma época lê cerca de 107 GiB (treino + validação), contra cerca de 62 GiB da Elem. Isso
+    passa um pouco do cache de disco da VM (cerca de 100 GiB), então parte dos chunks é relida
+    do disco a cada época (ver as pendências no `CLAUDE.md`);
   - precheck da amostra 0 contra a Elem e o layout de vértices (3.5).
 
 ### 4.2 Composição do chunk (`src/data_gen/chunks.py::write_chunk`, `merge`)

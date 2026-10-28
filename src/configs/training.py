@@ -201,6 +201,39 @@ class FNO_BipartiteGNN_ElemConfig:
 
 
 @dataclass
+class FNO_SplitGNNConfig:
+    """Config de FNO_SplitGNN (src/neural_op/archs/fno_split_gnn.py) -- grafo dual de
+    elementos (N_aux) + vértices divididos por material (N_base), os dois com estado.
+    Dataset: BLDC_138x276/FNO_SplitGNN (scripts/build_chunks_split.py). Mesmos campos de
+    FNO_BipartiteGNN_ElemConfig; edge_dim = Edge_dual, elem_in_ch = N_base,
+    cross_edge_dim = Edge_aux."""
+    # Defaults = run split_mae da bateria split (src/configs/batteries/split.py).
+    fno_modes1: int = 69
+    fno_modes2: int = 139
+    fno_conv_width: int = 6
+    fno_conv_layers: int = 4
+    fno_lift_width: int = 64
+    fno_lift_layers: int = 3
+    fno_proj_width: int = 64
+    fno_proj_layers: int = 3
+    data_res: tuple = (138, 276)
+    gnn_node_width: int = 32
+    gnn_n_layers: int = 3
+
+    # auto-detectados em NnCfg.__post_init__ (defaults só até lá)
+    edge_dim:       int = field(default=7, init=False)
+    grid_in_ch:     int = field(default=3, init=False)
+    grid_out_ch:    int = field(default=2, init=False)
+    node_in_ch:     int = field(default=7, init=False)
+    elem_in_ch:     int = field(default=7, init=False)
+    cross_edge_dim: int = field(default=7, init=False)
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        return _from_dict_generic(cls, d)
+
+
+@dataclass
 class GNN_PostBaseConfig:
     # Treino em duas etapas (não end-to-end): base_run_dir aponta para um run FNO2d já
     # treinado, congelado; só o GNN novo é treinado.
@@ -283,6 +316,7 @@ class GNN_PostBaseConfig:
 # │                       │              │   (base FNO2d congelada)    │
 # │ FNO_BipartiteGNN      │ bipartite    │ FNO_BipartiteGNNConfig      │
 # │ FNO_BipartiteGNN_Elem │ bipartite    │ FNO_BipartiteGNN_ElemConfig │
+# │ FNO_SplitGNN          │ bipartite    │ FNO_SplitGNNConfig          │
 # └───────────────────────┴──────────────┴─────────────────────────────┘
 # Losses — LOSS_REGISTRY (src/neural_op/losses.py) / LOSS_CFG_REGISTRY (src/configs/loss.py):
 # 'mse' (MseLossCfg) e 'mae' (MaeLossCfg), sem campos, sobre a saída final do modelo.

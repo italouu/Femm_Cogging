@@ -9,8 +9,12 @@ from src.neural_op.archs.fno_bipartite_gnn import (FNO_BipartiteGNN,
                                                   fno_bipartite_gnn_step,
                                                   fno_bipartite_gnn_metric_fn)
 from src.neural_op.archs.fno_bipartite_gnn_elem import FNO_BipartiteGNN_Elem
+from src.neural_op.archs.fno_split_gnn  import (FNO_SplitGNN,
+                                                fno_split_gnn_step,
+                                                fno_split_gnn_metric_fn)
 from src.configs.training               import (FNOConfig, FNO_GNNConfig, GNN_PostBaseConfig,
-                                                FNO_BipartiteGNNConfig, FNO_BipartiteGNN_ElemConfig)
+                                                FNO_BipartiteGNNConfig, FNO_BipartiteGNN_ElemConfig,
+                                                FNO_SplitGNNConfig)
 
 
 @dataclass
@@ -103,5 +107,16 @@ ARCH_REGISTRY: dict = {
         model_kwargs=_fno_kwargs,
         make_step_fn=lambda cfg, lcfg: fno_bipartite_gnn_step,
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
+    ),
+    # FNO_SplitGNN: grafo dual de elementos (N_aux) + vértices divididos por material
+    # (N_base), os dois com estado e saída. Chunk com as chaves do bipartite + elem_y
+    # (src/data_gen/parsers/split_layout.py); loader 'bipartite' repassa elem_y.
+    'FNO_SplitGNN': ArchEntry(
+        cls=FNO_SplitGNN,
+        cfg_cls=FNO_SplitGNNConfig,
+        loader_mode='bipartite',
+        model_kwargs=_fno_kwargs,
+        make_step_fn=lambda cfg, lcfg: fno_split_gnn_step,
+        metric_fn=lambda cfg: fno_split_gnn_metric_fn,
     ),
 }

@@ -257,3 +257,75 @@ class BipartiteGNN(nn.Module):
         for layer in self.layers:
             h = layer(h, elem_x, edge_index, edge_attr, cross_edge_index, cross_edge_attr)
         return self.proj(h)
+
+
+# ---------------------------------------------------------------------------
+# Grafo dual + vértices por material (FNO_SplitGNN, ver
+# src/data_gen/parsers/split_layout.py e docs/claude/modelos.md §3): os DOIS tipos de nó
+# têm estado e rede próprios. N_aux = elementos (Edge_dual entre si), N_base = vértices
+# divididos por material; Edge_aux liga os dois tipos e é usada nos dois sentidos.
+# Arestas estáticas (só os atributos do chunk), mensagens de EdgeMessageBlock.
+# ---------------------------------------------------------------------------
+
+class SplitGNNLayer(nn.Module):
+    """
+    Uma camada: os dois tipos de nó leem só o estado da camada k (atualização simultânea).
+
+    N_aux'  = upd_aux( [ h_aux  | Σ msg_dual(h_aux) | Σ msg_base→aux(h_base) ] )
+    N_base' = upd_base( [ h_base | Σ msg_aux→base(h_aux) ] )
+    """
+
+    def __init__(self, node_width, dual_edge_dim, aux_edge_dim, act=nn.GELU):
+        super().__init__()
+        self.msg_dual     = EdgeMessageBlock(node_width, node_width, dual_edge_dim, act)
+        self.msg_base_aux = EdgeMessageBlock(node_width, node_width, aux_edge_dim, act)
+        self.msg_aux_base = EdgeMessageBlock(node_width, node_width, aux_edge_dim, act)
+        self.upd_aux = NodeMLP(
+            in_ch=3 * node_width, out_ch=node_width, hidden_ch=node_width, n_layers=2, act=act,
+        )
+        self.upd_base = NodeMLP(
+            in_ch=2 * node_width, out_ch=node_width, hidden_ch=node_width, n_layers=2, act=act,
+        )
+
+    def forward(self, h_aux, h_base, edge_index, edge_attr,
+                base_to_aux, aux_to_base, cross_edge_attr):
+        n_aux, n_base = h_aux.size(0), h_base.size(0)
+        f_dual = self.msg_dual(h_aux, edge_index, edge_attr, n_aux)
+        f_ba   = self.msg_base_aux(h_base, base_to_aux, cross_edge_attr, n_aux)
+        f_ab   = self.msg_aux_base(h_aux, aux_to_base, cross_edge_attr, n_base)
+        return (self.upd_aux(torch.cat([h_aux, f_dual, f_ba], dim=-1)),
+                self.upd_base(torch.cat([h_base, f_ab], dim=-1)))
+
+
+class SplitGNN(nn.Module):
+    """
+    lift por tipo de nó -> n_layers SplitGNNLayer -> projeção por tipo de nó.
+
+    h_aux  = act( lift_aux(aux_features) ),  h_base = act( lift_base(base_features) )
+    for layer in layers: h_aux, h_base = layer(...)
+    out = proj_aux(h_aux), proj_base(h_base)
+
+    cross_edge_index: linha 0 = N_base, linha 1 = N_aux (convenção do layout).
+    """
+
+    def __init__(self, in_aux_features, in_base_features, out_features,
+                 dual_edge_dim, aux_edge_dim, node_width, n_layers, act=nn.GELU):
+        super().__init__()
+        self.lift_aux  = nn.Linear(in_aux_features, node_width)
+        self.lift_base = nn.Linear(in_base_features, node_width)
+        self.layers = nn.ModuleList([
+            SplitGNNLayer(node_width, dual_edge_dim, aux_edge_dim, act) for _ in range(n_layers)
+        ])
+        self.proj_aux  = nn.Linear(node_width, out_features)
+        self.proj_base = nn.Linear(node_width, out_features)
+        self.act = act()
+
+    def forward(self, aux_features, base_features, edge_index, edge_attr,
+                cross_edge_index, cross_edge_attr):
+        h_aux  = self.act(self.lift_aux(aux_features))
+        h_base = self.act(self.lift_base(base_features))
+        aux_to_base = cross_edge_index.flip(0)
+        for layer in self.layers:
+            h_aux, h_base = layer(h_aux, h_base, edge_index, edge_attr,
+                                  cross_edge_index, aux_to_base, cross_edge_attr)
+        return self.proj_aux(h_aux), self.proj_base(h_base)

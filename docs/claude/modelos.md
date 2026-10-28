@@ -81,6 +81,22 @@ $$ h_j' = \mathrm{NodeMLP}_{3w\to w\to w}\big([h_j \,\|\, F^1_j \,\|\, F^2_j]\bi
 com as arestas cruzadas $a\to j$ (linha 0 = auxiliar, linha 1 = principal) e
 $d_{aj}$ = `cross_edge_attr`. **`BipartiteGNN`**: lift + $L$ camadas + projeção, como o `GNN`.
 
+**`SplitGNNLayer`** (FNO_SplitGNN). Aqui os dois tipos de nó têm estado, e cada um tem a
+sua rede: $a$ = N_aux (elementos), $b$ = N_base (vértices por material). São três mensagens
+`EdgeMessageBlock` com pesos próprios. A Edge_aux é usada nos dois sentidos com os mesmos
+atributos estáticos. As duas atualizações leem só a camada $k$ (atualização simultânea):
+
+$$ F^{dual}_i = \sum_{j\to i} \mathrm{sig}\big(\mathrm{MLP}(e^{dual}_{ji})\big)\,W_1 h^a_j,\quad
+F^{b\to a}_i = \sum_{c\to i} \mathrm{sig}\big(\mathrm{MLP}(e^{aux}_{ci})\big)\,W_2 h^b_c,\quad
+F^{a\to b}_c = \sum_{i\to c} \mathrm{sig}\big(\mathrm{MLP}(e^{aux}_{ci})\big)\,W_3 h^a_i $$
+$$ h^{a\prime}_i = \mathrm{NodeMLP}^a_{3w\to w\to w}\big([h^a_i \,\|\, F^{dual}_i \,\|\, F^{b\to a}_i]\big),\qquad
+h^{b\prime}_c = \mathrm{NodeMLP}^b_{2w\to w\to w}\big([h^b_c \,\|\, F^{a\to b}_c]\big) $$
+
+**`SplitGNN`**:
+- entrada: lift e GELU próprios de cada tipo de nó;
+- miolo: $L$ camadas `SplitGNNLayer`;
+- saída: uma projeção linear por tipo de nó.
+
 ## 4. Archs híbridas
 
 Notação: $u_k = I(\hat y_{hw})(r_k, c_k)$ é a saída do FNO interpolada no ponto $k$, e
@@ -103,6 +119,17 @@ FNO_BipartiteGNN (subclasse, mesma config). A diferença está toda no layout de
 (`node_x[:,0:2]`), o auxiliar são os vértices (`elem_x` = posição) e as arestas cruzadas vão
 de vértice para elemento. A saída é $(B_r, B_\theta)$ **por elemento**.
 
+**FNO_SplitGNN** (`archs/fno_split_gnn.py`): o layout está em `dados.md` §3.5. O FNO é
+interpolado nos centróides (`node_x[:,0:2]`) e nas cópias de vértice (`elem_x[:,0:2]`), e
+cada valor é recodificado para as stats de `node_y` e `elem_y`, respectivamente. A coluna
+$c_{base}$ não entra na GNN: o ângulo entra pelo par $(\sin, \cos)$. A rede tem duas saídas:
+
+$$ \hat y^a = \tilde u^a + \Delta^a,\quad \hat y^b = \tilde u^b + \Delta^b,\qquad
+(\Delta^a, \Delta^b) = \mathrm{SplitGNN}\big([x^a_{\setminus c} \,\|\, \tilde u^a],\ [x^b_{\setminus c} \,\|\, \tilde u^b]\big) $$
+
+A perda é $\mathcal L(\hat y^a, y^a) + \mathcal L(\hat y^b, y^b)$, cada termo com a média nos
+seus próprios pontos. O `mae_graph` é a média dos dois MAEs.
+
 O treino é **conjunto** (FNO + GNN): a perda é aplicada só na saída final $\hat y_k$, e o
 gradiente chega ao FNO pela interpolação. A grade $\hat y_{hw}$ não é supervisionada.
 
@@ -124,6 +151,7 @@ $$ \hat y_k = \tilde u_k + \mathrm{GNN}\big([\,x^{node}_k \,\|\, \tilde u_k\,]\b
 | FNO_BipartiteGNN | 6, 4, 69×139, 64×3 | 32, 3, 2+2, 3, 6, 1 | 5 550 704 |
 | FNO_BipartiteGNN_Elem | 6, 4, 69×139, 64×3 | 32, 3, 6+2, 3, 2, 1 | 5 550 448 |
 | GNN_PostBase | FNO2d da base (congelado) | 64, 6, 6+2, 4, —, — | 9 931 634 (100 360 treináveis) |
+| FNO_SplitGNN (bateria `split`) | 6, 4, 69×139, 64×3 | 32, 3, 6+2 (cada tipo de nó), 7, 7, 7 | 5 568 217 |
 
 ---
 
@@ -151,7 +179,7 @@ avança uma vez por época. 500 épocas, lote 32.
 |---|---|---|
 | FNO2d | 0,005 | 0,7 |
 | FNO_GNN | 0,003 | 0,8 |
-| FNO_BipartiteGNN, Elem | 0,01 | 0,6 |
+| FNO_BipartiteGNN, Elem, FNO_SplitGNN | 0,01 | 0,6 |
 | GNN_PostBase | 0,001 | 0,6 |
 
 ### 5.3 Monitoramento e parada (`src/neural_op/monitor.py::TrainingMonitor`, `MonitorCfg`)
@@ -200,6 +228,12 @@ que devolve um `NnCfg` escrito por inteiro (`src/configs/battery.py`).
 - Ordem: Elem → Bipartite → FNO_GNN → FNO2d → GNN_PostBase.
 - `postbase_*` declaram `needs=('fno2d_*',)` e recebem o `run_dir` da base.
 - Dataset `BLDC_138x276/<arch>`, problem `BLDC_138x276`, split 60/30/10 (`train_split=0.60`, `val_split=0.30`), `split_seed=12`.
+
+`src/configs/batteries/split.py::BATTERY`: 2 runs do FNO_SplitGNN (`split_mse`,
+`split_mae`), com os mesmos hiperparâmetros das `elem_*`.
+- Dataset `BLDC_138x276/FNO_SplitGNN`.
+- Pico de memória estimado em cerca de 36 GiB no lote 32 (medido 9,1 GiB no lote 8), contra
+  18,8 GiB da Elem.
 
 `scripts/run_battery.py`:
 - pré-checa as runs sem dependência;

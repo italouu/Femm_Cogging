@@ -52,8 +52,27 @@ _LAYOUTS = {
 # GNN_PostBase: mesmo layout do FNO_GNN (node_x lido por _interpolate_fno_to_nodes)
 _LAYOUTS['GNN_PostBase'] = _LAYOUTS['FNO_GNN']
 
+# FNO_SplitGNN: node_x = N_aux (elementos) e elem_x = N_base (vértices por material), os
+# dois interpolados nas colunas 0, 1 (contrato: docstring de src/data_gen/parsers/split_layout.py)
+_SPLIT_X = ('r_base', 'c_base', 'sin', 'cos', 'mu_r', 'M', 'J')
+_LAYOUTS['FNO_SplitGNN'] = {
+    'x_hw':            (_GRID_X, ()),
+    'y_hw':            (_GRID_Y, ()),
+    'node_x':          (_SPLIT_X, (0, 1)),
+    'node_y':          (_GRID_Y, ()),
+    'elem_x':          (_SPLIT_X, (0, 1)),
+    'elem_y':          (_GRID_Y, ()),
+    'edge_attr':       (('delta_r', 'delta_sin', 'delta_cos', 'length',
+                         'delta_mu', 'delta_J', 'delta_M'), ()),
+    'cross_edge_attr': (('delta_r', 'delta_sin', 'delta_cos', 'length', 'mu_r', 'J', 'M'), ()),
+}
+
 # chaves normalizadas por Normalizer.fit (as presentes no chunk)
-_NORM_KEYS = ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x', 'edge_attr', 'cross_edge_attr')
+# [REMOVIDO] _NORM_KEYS = ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x', 'edge_attr', 'cross_edge_attr')
+# motivo: acrescenta elem_y (gabarito do grafo auxiliar do FNO_SplitGNN); ausente nos
+# chunks das outras archs, então elas não mudam.
+_NORM_KEYS = ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x', 'elem_y', 'edge_attr',
+              'cross_edge_attr')
 
 
 def _check_layout(arch: str, sample: dict, dataset: str) -> dict:

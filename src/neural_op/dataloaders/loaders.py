@@ -429,6 +429,8 @@ class ChunkBipartiteDataset(IterableDataset):
                     'E_L':              d['E_L'],                # [B]
                     'C_L':              d['C_L'],                # [B]
                 }
+                if 'elem_y' in d:   # FNO_SplitGNN: gabarito do grafo auxiliar (N_base)
+                    payload['elem_y'] = d['elem_y']              # [M_tot, 2]
                 del d
                 while not stop.is_set():
                     try:
@@ -494,6 +496,8 @@ class ChunkBipartiteDataset(IterableDataset):
                         'E_L':              int(E_L[i]),
                         'C_L':              int(C_L[i]),
                     }
+                    if 'elem_y' in item:
+                        sample['elem_y'] = item['elem_y'][ms:me]                  # view [M_i, 2]
 
                     buffer.append(sample)
 
@@ -546,7 +550,7 @@ def bipartite_collate(samples):
         dim=1,
     )   # [2, C_tot]
 
-    return {
+    out = {
         'x_hw':             torch.stack([s['x_hw']             for s in samples]),   # [B, 2, H, W]
         'y_hw':             torch.stack([s['y_hw']             for s in samples]),   # [B, 1, H, W]
         'node_x':           torch.cat(  [s['node_x']           for s in samples]),   # [S_tot, 2]
@@ -561,6 +565,9 @@ def bipartite_collate(samples):
         'E_L':              E_L,                                                       # [B]
         'C_L':              C_L,                                                       # [B]
     }
+    if 'elem_y' in samples[0]:   # FNO_SplitGNN: gabarito do grafo auxiliar (N_base)
+        out['elem_y'] = torch.cat([s['elem_y'] for s in samples])                    # [M_tot, 2]
+    return out
 
 
 # ── build_loaders ─────────────────────────────────────────────────────────────

@@ -356,6 +356,63 @@ $\mathbf c_j$ girado de $-120°$: distância real através do corte, não zero.
 Com `target_field='B'` (torque): `node_y` = curl(A) exato $(B_x, B_y)$ por elemento e
 `y_hw = None`.
 
+### 3.5 Layout Split — FNO_SplitGNN (`split_layout.parse_split_smooth`)
+
+Grafo dual de elementos mais os vértices **divididos por material**. Os dois tipos de nó
+têm estado e saída. O contrato completo está na docstring do módulo, e `check_split_layout`
+confere as contagens. As chaves são as do bipartido, mais `elem_y`: `node_*` = **N_aux**
+(elementos), `elem_*` = **N_base** (cópias de vértice), `edge_*` = **Edge_dual**,
+`cross_*` = **Edge_aux**.
+
+**Construção:**
+- **N_aux:** 1 nó por elemento, no centróide.
+- **Edge_dual:** `elem_structure._build_dual_edges` (elementos que compartilham uma aresta,
+  mais o wrap), nos dois sentidos, com a mesma ordem da Elem.
+- **Fusão do corte:** os pares de vértices em 0° e 120° (`_wrap_edge_pairs`) viram um único
+  vértice, o de 0°.
+- **N_base:** 1 cópia por (vértice, classe), com classe = (material_id, $M$). Um vértice
+  interno gera 1 cópia, uma fronteira de 2 materiais gera 2 e os raros vértices triplos
+  geram 3. Por amostra: cerca de 31,7 mil vértices fundidos, 5,2 mil duplicados e 52
+  triplicados, o que dá $K \approx 37$ mil. Separar ou não o ímã pela polaridade não muda
+  a contagem, porque ímãs opostos não se tocam.
+- **Edge_aux:** cada elemento liga aos seus 3 vértices, sempre na cópia do **seu** material
+  ($C = 3M$). Não há aresta vértice–vértice: os materiais só se comunicam pelas Edge_dual.
+
+**Coordenadas:** $r_{base}$ e o ângulo do setor levado a 0–360°, $\varphi = 2\pi c_{base}$,
+como $(\sin\varphi, \cos\varphi)$, que é contínuo no corte. $c_{base}$ fica no chunk só para
+a interpolação (coluna crua).
+- Os deltas são calculados com essas coordenadas finais ($\Delta r_{base}$, $\Delta\sin$,
+  $\Delta\cos$), então atravessam o corte pelo caminho curto sem regra especial.
+- O comprimento [mm] usa as posições reais:
+  - no wrap da Edge_dual, o centróide do outro lado é girado de $-120°$, como na Elem;
+  - na Edge_aux, usa-se o vértice **original** do elemento, antes da fusão.
+
+| Chave | Shape | Conteúdo |
+|---|---|---|
+| `node_x` | [M,7] | $r_{base}$, $c_{base}$ (crus), $\sin\varphi$, $\cos\varphi$, $\mu_r$, $M$, $J$ do elemento |
+| `node_y` | [M,2] | $(B_r, B_\theta)$ suavizado no centróide (igual ao da Elem, 2.5) |
+| `edge_index`, `edge_attr` | [2,F], [F,7] | Edge_dual, destino − origem: $\Delta r$, $\Delta\sin$, $\Delta\cos$, comprimento, $\Delta\mu$, $\Delta J$, $\Delta M$ |
+| `elem_x` | [K,7] | $r_{base}$, $c_{base}$ (crus; no fundido, o lado de 0°), $\sin\varphi$, $\cos\varphi$, $\mu_r$, $M$, $J$ (média por área dos elementos da cópia) |
+| `elem_y` | [K,2] | $(B_r, B_\theta)$ da cópia (abaixo) |
+| `cross_edge_index`, `cross_edge_attr` | [2,C], [C,7] | linha 0 = cópia, linha 1 = elemento; vértice − centróide: $\Delta r$, $\Delta\sin$, $\Delta\cos$, comprimento; e $\mu_r$, $J$, $M$ do elemento |
+| `x_hw`, `y_hw` | | 3.1 |
+| `L`, `elem_L`, `E_L`, `C_L` | [1] | $M$, $K$, $F$, $C$ |
+
+**Gabarito da cópia** (montado do raw na geração do dataset; o raw não muda):
+
+$$\mathbf y_{(k,c)} = \frac{1}{|E_{k,c}|}\sum_{e\in E_{k,c}} \mathrm{polar}_{\theta_k^e}\big(\mathbf b_e(k)\big),\qquad
+E_{k,c} = \{e \ni k : \mathrm{classe}(e) = c\}$$
+
+Aqui $\mathbf b_e(k)$ é o valor nodal suavizado do FEMM (2.2), e $\theta_k^e$ é o ângulo do
+vértice original. Fora do corte, isto é a regra 2.3 aplicada a cada material, e coincide com
+o `node_y` do layout de vértices na cópia do material escolhido pela prioridade.
+
+A média também resolve os dois casos em que o FEMM dá valores diferentes por elemento no
+mesmo nó e mesmo material, um erro numérico conhecido do solver (10 amostras):
+- **cantos:** cerca de 0,5% das cópias, com $\Delta$ médio de cerca de 0,5 T em ferro/ar;
+- **vértices fundidos do corte:** cada lado foi suavizado separadamente; $\Delta$ médio
+  abaixo de 0,02 T.
+
 ---
 
 ## 4. Datasets e chunks
@@ -372,6 +429,11 @@ bipartido. Os 5 layouts saem de uma passada.
   as archs que faltam.
 - `scripts.build_chunks_main` (4 archs) e `scripts.build_chunks_elem` (só a Elem, com o
   precheck da amostra 0) geram os mesmos chunks separadamente.
+- O FNO_SplitGNN fica **fora** do `build_datasets` e é gerado por
+  `scripts.build_chunks_split`:
+  - parse de cerca de 1,4 s por amostra; cerca de 0,66 GB por chunk de 32, ou cerca de
+    124 GB para os 188 chunks;
+  - precheck da amostra 0 contra a Elem e o layout de vértices (3.5).
 
 ### 4.2 Composição do chunk (`src/data_gen/chunks.py::write_chunk`, `merge`)
 
@@ -379,7 +441,7 @@ bipartido. Os 5 layouts saem de uma passada.
 |---|---|---|
 | `grid` | FNO2d | `x_hw`, `y_hw` empilhados → [B,C,H,W] |
 | `vertex` | FNO_GNN, GNN_PostBase | `edge_index` + offset acumulado de `L`; acrescenta `E_L` |
-| `bipartite` | FNO_BipartiteGNN, Elem | `edge_index` + offset de `L`; `cross_edge_index` linha 0 + offset de `elem_L`, linha 1 + offset de `L` |
+| `bipartite` | FNO_BipartiteGNN, Elem, FNO_SplitGNN | `edge_index` + offset de `L`; `cross_edge_index` linha 0 + offset de `elem_L`, linha 1 + offset de `L` |
 
 As demais chaves são concatenadas no eixo 0, e `dim = (H, W)`. A escrita é atômica:
 o arquivo vai para `.tmp/` e é renomeado no fim.
@@ -411,6 +473,8 @@ só lê treino e validação.
 - a ordem dos chunks é embaralhada a cada época e as amostras de cada chunk são permutadas;
 - um buffer de reservatório de 64 amostras alimenta lotes de 32;
 - uma thread pré-carrega 2 chunks;
+- o modo `bipartite` repassa `elem_y` (fatiado por `elem_L`) quando o chunk tem essa chave
+  (FNO_SplitGNN);
 - o collate refaz os offsets de índice no lote, como em 4.2;
 - `num_workers` é forçado a 0 no Windows.
 
@@ -424,8 +488,9 @@ combinação de Chan/Welford, e $\sigma = \sqrt{\max(\mathrm{var}, 10^{-12})}$:
 
 $$ \tilde x_c = \frac{x_c - \mu_c}{\sigma_c} $$
 
-- Chaves normalizadas: `x_hw`, `y_hw`, `node_x`, `node_y`, `elem_x`, `edge_attr`,
-  `cross_edge_attr` (as presentes no chunk), incluindo as arestas de wrap.
+- Chaves normalizadas: `x_hw`, `y_hw`, `node_x`, `node_y`, `elem_x`, `elem_y`, `edge_attr`,
+  `cross_edge_attr` (as presentes no chunk), incluindo as arestas de wrap. `elem_y` só existe
+  no FNO_SplitGNN.
 - **Colunas cruas** ($\mu = 0$, $\sigma = 1$; tabela `_LAYOUTS`): as posições lidas pela
   interpolação grade → pontos, que exige $r_{base}, c_{base}\in[0,1]$:
 
@@ -434,6 +499,7 @@ $$ \tilde x_c = \frac{x_c - \mu_c}{\sigma_c} $$
   | FNO_GNN, GNN_PostBase | `node_x` 3, 4 |
   | FNO_BipartiteGNN | `node_x` 0, 1 |
   | FNO_BipartiteGNN_Elem | `node_x` 0, 1 e `elem_x` 0, 1 |
+  | FNO_SplitGNN | `node_x` 0, 1 e `elem_x` 0, 1 (`elem_y` normalizado como `node_y`) |
 
   As posições dos centróides em `elem_x` do bipartido (colunas 3, 4) são normalizadas.
 - `Normalizer.fit` falha se o nº de colunas divergir de `_LAYOUTS`.

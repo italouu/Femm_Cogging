@@ -36,3 +36,9 @@ old_logs.tar
 
 # pós-processamento: figuras fora do git (só os dados ficam versionados)
 /resultados/*/plots/
+
+# resultados do p�s-processamento e artigo -- fora do versionamento por ora
+/resultados/
+
+# arquivos compactados soltos em data/
+/data/*.zip

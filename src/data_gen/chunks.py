@@ -16,6 +16,8 @@ Layouts (montagem dos buffers, com os offsets de índice de cada amostra no chun
               acumulado; cross_edge_index linha 0 + elem_L acumulado, linha 1 + L acumulado
               (convenção "linha 0 = grafo auxiliar (elem_*), linha 1 = principal (node_*)",
               válida nos dois papéis -- ver parsers/elem_structure.py).
+              FNO_SplitGNN usa o mesmo layout, com elem_y (gabarito do grafo auxiliar)
+              concatenado no eixo 0 como as demais chaves (parsers/split_layout.py).
 """
 from pathlib import Path
 
@@ -31,6 +33,7 @@ LAYOUT_BY_ARCH = {
     'GNN_PostBase':          'vertex',
     'FNO_BipartiteGNN':      'bipartite',
     'FNO_BipartiteGNN_Elem': 'bipartite',
+    'FNO_SplitGNN':          'bipartite',   # + elem_y (parsers/split_layout.py)
 }
 
 

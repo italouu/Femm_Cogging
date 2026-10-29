@@ -1,9 +1,6 @@
 """
 fno_split_gnn.py
 ----------------
-[PENDENTE EXCLUIR] substituída por fno_split_gnn_base.py (saída e loss só em N_base); fica
-até sair o resultado da run split_mae (CLAUDE.md, Pendências).
-
 FNO2d + GNN sobre o grafo dual de elementos (N_aux) e os vértices divididos por material
 (N_base) -- contrato de dados: docstring de src/data_gen/parsers/split_layout.py
 (node_* = N_aux, elem_* = N_base); docs/claude/modelos.md §4.
@@ -15,7 +12,8 @@ FNO2d + GNN sobre o grafo dual de elementos (N_aux) e os vértices divididos por
 
 A coluna c_base (1) só serve à interpolação: a GNN recebe r_base, sen, cos, mu_r, M, J
 (o ângulo entra pelo par sen/cos, contínuo no corte 0°/120°).
-Loss = loss(y_aux, node_y) + loss(y_base, elem_y), cada termo com média nos seus pontos.
+Loss = (1 − λ)·loss(y_aux, node_y) + λ·loss(y_base, elem_y), cada termo com média nos seus
+pontos (λ = FNO_SplitGNNConfig.loss_lambda).
 """
 import torch
 
@@ -89,11 +87,15 @@ def _forward(batch, model, device):
     return model(*(batch[k].to(device) for k in keys))
 
 
-def fno_split_gnn_step(batch, model, loss_fn, device):
-    """loss(N_aux) + loss(N_base), saída final contra node_y / elem_y."""
+def fno_split_gnn_step(batch, model, loss_fn, device, loss_lambda=0.5):
+    """(1 − λ)·loss(N_aux) + λ·loss(N_base), saída final contra node_y / elem_y."""
     _, y_aux, y_base = _forward(batch, model, device)
-    return (loss_fn(y_aux, batch['node_y'].to(device))
-            + loss_fn(y_base, batch['elem_y'].to(device)))
+    # [REMOVIDO] loss(N_aux) + loss(N_base) -- motivo: peso λ entre os dois termos
+    # (FNO_SplitGNNConfig.loss_lambda); λ = 0,5 dá o mesmo ótimo, com metade do valor.
+    # return (loss_fn(y_aux, batch['node_y'].to(device))
+    #         + loss_fn(y_base, batch['elem_y'].to(device)))
+    return ((1.0 - loss_lambda) * loss_fn(y_aux, batch['node_y'].to(device))
+            + loss_lambda * loss_fn(y_base, batch['elem_y'].to(device)))
 
 
 def fno_split_gnn_metric_fn(batch, model, device):

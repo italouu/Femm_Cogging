@@ -219,6 +219,9 @@ class FNO_SplitGNNConfig:
     data_res: tuple = (138, 276)
     gnn_node_width: int = 32
     gnn_n_layers: int = 3
+    # peso da loss: L = (1 − λ)·L(N_aux) + λ·L(N_base). As runs da bateria split (antes do
+    # λ) usavam L(N_aux) + L(N_base) = 2× a loss com λ = 0,5.
+    loss_lambda: float = 0.5
 
     # auto-detectados em NnCfg.__post_init__ (defaults só até lá)
     edge_dim:       int = field(default=7, init=False)
@@ -228,40 +231,47 @@ class FNO_SplitGNNConfig:
     elem_in_ch:     int = field(default=7, init=False)
     cross_edge_dim: int = field(default=7, init=False)
 
-    @classmethod
-    def from_dict(cls, d: dict):
-        return _from_dict_generic(cls, d)
-
-
-@dataclass
-class FNO_SplitGNN_BaseConfig:
-    """Config de FNO_SplitGNN_Base (src/neural_op/archs/fno_split_gnn_base.py) -- a rede do
-    FNO_SplitGNN com saída e loss só em N_base. Mesmo dataset (BLDC_138x276/FNO_SplitGNN) e
-    mesmos campos de FNO_SplitGNNConfig."""
-    # Defaults = run split_base_mae da bateria split_base (src/configs/batteries/split_base.py).
-    fno_modes1: int = 69
-    fno_modes2: int = 139
-    fno_conv_width: int = 6
-    fno_conv_layers: int = 4
-    fno_lift_width: int = 64
-    fno_lift_layers: int = 3
-    fno_proj_width: int = 64
-    fno_proj_layers: int = 3
-    data_res: tuple = (138, 276)
-    gnn_node_width: int = 32
-    gnn_n_layers: int = 3
-
-    # auto-detectados em NnCfg.__post_init__ (defaults só até lá)
-    edge_dim:       int = field(default=7, init=False)
-    grid_in_ch:     int = field(default=3, init=False)
-    grid_out_ch:    int = field(default=2, init=False)
-    node_in_ch:     int = field(default=7, init=False)
-    elem_in_ch:     int = field(default=7, init=False)
-    cross_edge_dim: int = field(default=7, init=False)
+    def __post_init__(self):
+        if not 0.0 <= self.loss_lambda <= 1.0:
+            raise ValueError(f"FNO_SplitGNNConfig.loss_lambda={self.loss_lambda} (fora de [0, 1])")
 
     @classmethod
     def from_dict(cls, d: dict):
-        return _from_dict_generic(cls, d)
+        # config.json das runs anteriores ao λ não têm loss_lambda: 0,5 (mesmo ótimo da loss antiga)
+        return _from_dict_generic(cls, {'loss_lambda': 0.5, **d})
+
+
+# [REMOVIDO] FNO_SplitGNN_BaseConfig -- motivo: FNO_SplitGNN_Base removida (pior que o
+# FNO_SplitGNN em superfície e torque).
+# @dataclass
+# class FNO_SplitGNN_BaseConfig:
+#     """Config de FNO_SplitGNN_Base (src/neural_op/archs/fno_split_gnn_base.py) -- a rede do
+#     FNO_SplitGNN com saída e loss só em N_base. Mesmo dataset (BLDC_138x276/FNO_SplitGNN) e
+#     mesmos campos de FNO_SplitGNNConfig."""
+#     # Defaults = run split_base_mae da bateria split_base (src/configs/batteries/split_base.py).
+#     fno_modes1: int = 69
+#     fno_modes2: int = 139
+#     fno_conv_width: int = 6
+#     fno_conv_layers: int = 4
+#     fno_lift_width: int = 64
+#     fno_lift_layers: int = 3
+#     fno_proj_width: int = 64
+#     fno_proj_layers: int = 3
+#     data_res: tuple = (138, 276)
+#     gnn_node_width: int = 32
+#     gnn_n_layers: int = 3
+#
+#     # auto-detectados em NnCfg.__post_init__ (defaults só até lá)
+#     edge_dim:       int = field(default=7, init=False)
+#     grid_in_ch:     int = field(default=3, init=False)
+#     grid_out_ch:    int = field(default=2, init=False)
+#     node_in_ch:     int = field(default=7, init=False)
+#     elem_in_ch:     int = field(default=7, init=False)
+#     cross_edge_dim: int = field(default=7, init=False)
+#
+#     @classmethod
+#     def from_dict(cls, d: dict):
+#         return _from_dict_generic(cls, d)
 
 
 @dataclass
@@ -348,8 +358,6 @@ class GNN_PostBaseConfig:
 # │ FNO_BipartiteGNN      │ bipartite    │ FNO_BipartiteGNNConfig      │
 # │ FNO_BipartiteGNN_Elem │ bipartite    │ FNO_BipartiteGNN_ElemConfig │
 # │ FNO_SplitGNN          │ bipartite    │ FNO_SplitGNNConfig          │
-# │   (pendente de exclusão: substituída pela FNO_SplitGNN_Base)        │
-# │ FNO_SplitGNN_Base     │ bipartite    │ FNO_SplitGNN_BaseConfig     │
 # └───────────────────────┴──────────────┴─────────────────────────────┘
 # Losses — LOSS_REGISTRY (src/neural_op/losses.py) / LOSS_CFG_REGISTRY (src/configs/loss.py):
 # 'mse' (MseLossCfg) e 'mae' (MaeLossCfg), sem campos, sobre a saída final do modelo.

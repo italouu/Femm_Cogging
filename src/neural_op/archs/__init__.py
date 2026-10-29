@@ -1,4 +1,5 @@
 from dataclasses import dataclass, asdict
+from functools import partial
 
 from src.neural_op.archs.fno            import FNO2d,          fno_step_fn, fno_metric_fn
 from src.neural_op.archs.fno_gnn        import FNO_GNN,        fno_gnn_step, fno_gnn_metric_fn
@@ -12,12 +13,16 @@ from src.neural_op.archs.fno_bipartite_gnn_elem import FNO_BipartiteGNN_Elem
 from src.neural_op.archs.fno_split_gnn  import (FNO_SplitGNN,
                                                 fno_split_gnn_step,
                                                 fno_split_gnn_metric_fn)
-from src.neural_op.archs.fno_split_gnn_base import (FNO_SplitGNN_Base,
-                                                    fno_split_gnn_base_step,
-                                                    fno_split_gnn_base_metric_fn)
+# [REMOVIDO] FNO_SplitGNN_Base (saída e loss só em N_base) -- motivo: pior que o FNO_SplitGNN
+# em superfície e torque (2,73% contra 2,45% de L1_A no mae); arquivo fno_split_gnn_base.py apagado.
+# from src.neural_op.archs.fno_split_gnn_base import (FNO_SplitGNN_Base,
+#                                                     fno_split_gnn_base_step,
+#                                                     fno_split_gnn_base_metric_fn)
 from src.configs.training               import (FNOConfig, FNO_GNNConfig, GNN_PostBaseConfig,
                                                 FNO_BipartiteGNNConfig, FNO_BipartiteGNN_ElemConfig,
-                                                FNO_SplitGNNConfig, FNO_SplitGNN_BaseConfig)
+                                                FNO_SplitGNNConfig)
+# [REMOVIDO] FNO_SplitGNN_BaseConfig do import acima -- motivo: FNO_SplitGNN_Base removida.
+#                                               FNO_SplitGNNConfig, FNO_SplitGNN_BaseConfig)
 
 
 @dataclass
@@ -111,27 +116,31 @@ ARCH_REGISTRY: dict = {
         make_step_fn=lambda cfg, lcfg: fno_bipartite_gnn_step,
         metric_fn=lambda cfg: fno_bipartite_gnn_metric_fn,
     ),
-    # [PENDENTE EXCLUIR] FNO_SplitGNN (saída e loss em N_aux + N_base): substituída pela
-    # FNO_SplitGNN_Base; fica até sair o resultado da run split_mae (CLAUDE.md, Pendências).
     # FNO_SplitGNN: grafo dual de elementos (N_aux) + vértices divididos por material
     # (N_base), os dois com estado e saída. Chunk com as chaves do bipartite + elem_y
     # (src/data_gen/parsers/split_layout.py); loader 'bipartite' repassa elem_y.
+    # loss_lambda é da loss, não do construtor: fora do model_kwargs, entra no step_fn.
     'FNO_SplitGNN': ArchEntry(
         cls=FNO_SplitGNN,
         cfg_cls=FNO_SplitGNNConfig,
         loader_mode='bipartite',
-        model_kwargs=_fno_kwargs,
-        make_step_fn=lambda cfg, lcfg: fno_split_gnn_step,
+        # [REMOVIDO] model_kwargs=_fno_kwargs e make_step_fn sem λ -- motivo: loss_lambda
+        # no FNO_SplitGNNConfig (não é kwarg do modelo; o step_fn passa a recebê-lo).
+        # model_kwargs=_fno_kwargs,
+        # make_step_fn=lambda cfg, lcfg: fno_split_gnn_step,
+        model_kwargs=lambda cfg: {k: v for k, v in asdict(cfg).items() if k != 'loss_lambda'},
+        make_step_fn=lambda cfg, lcfg: partial(fno_split_gnn_step, loss_lambda=cfg.loss_lambda),
         metric_fn=lambda cfg: fno_split_gnn_metric_fn,
     ),
-    # FNO_SplitGNN_Base: a mesma rede, saída e loss só em N_base (elem_y); N_aux fica só
-    # como nó de passagem de mensagem. Mesmos chunks do FNO_SplitGNN.
-    'FNO_SplitGNN_Base': ArchEntry(
-        cls=FNO_SplitGNN_Base,
-        cfg_cls=FNO_SplitGNN_BaseConfig,
-        loader_mode='bipartite',
-        model_kwargs=_fno_kwargs,
-        make_step_fn=lambda cfg, lcfg: fno_split_gnn_base_step,
-        metric_fn=lambda cfg: fno_split_gnn_base_metric_fn,
-    ),
+    # [REMOVIDO] FNO_SplitGNN_Base -- motivo: pior que o FNO_SplitGNN em superfície e torque.
+    # # FNO_SplitGNN_Base: a mesma rede, saída e loss só em N_base (elem_y); N_aux fica só
+    # # como nó de passagem de mensagem. Mesmos chunks do FNO_SplitGNN.
+    # 'FNO_SplitGNN_Base': ArchEntry(
+    #     cls=FNO_SplitGNN_Base,
+    #     cfg_cls=FNO_SplitGNN_BaseConfig,
+    #     loader_mode='bipartite',
+    #     model_kwargs=_fno_kwargs,
+    #     make_step_fn=lambda cfg, lcfg: fno_split_gnn_base_step,
+    #     metric_fn=lambda cfg: fno_split_gnn_base_metric_fn,
+    # ),
 }

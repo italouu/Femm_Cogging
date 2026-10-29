@@ -1,7 +1,4 @@
 """
-[PENDENTE EXCLUIR] substituída pela bateria split_base (FNO_SplitGNN_Base, loss só em N_base);
-fica até sair o resultado da run split_mae (CLAUDE.md, Pendências).
-
 Bateria split — 2 runs do FNO_SplitGNN (mse/mae, 500 épocas), alvo polar (Br, Bθ) do
 gabarito B suavizado do FEMM em N_aux (centróides) e N_base (vértices por material).
 Mesmos hiperparâmetros das runs elem_* da bateria bldc, exceto metrics_every_epoch=False

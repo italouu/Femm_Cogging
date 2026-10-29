@@ -353,55 +353,57 @@ class SplitGNN(nn.Module):
         return self.proj_aux(h_aux), self.proj_base(h_base)
 
 
-# ---------------------------------------------------------------------------
-# Só N_base como saída (FNO_SplitGNN_Base): mesma rede do SplitGNN, sem o que não chega a
-# N_base. Na última camada o N_aux' não é lido por ninguém (atualização simultânea), então
-# ela só tem msg_aux_base + upd_base, e não há proj_aux. Os nomes dos módulos são os do
-# SplitGNN (layers.<k>.*), então um state_dict dele carrega com strict=False.
-# ---------------------------------------------------------------------------
-
-class SplitGNNBaseLastLayer(nn.Module):
-    """N_base' = upd_base( [ h_base | Σ msg_aux→base(h_aux) ] ) -- a parte de N_base de
-    SplitGNNLayer."""
-
-    def __init__(self, node_width, aux_edge_dim, act=nn.GELU):
-        super().__init__()
-        self.msg_aux_base = SplitEdgeMessageBlock(node_width, node_width, aux_edge_dim, act)
-        self.upd_base = NodeMLP(
-            in_ch=2 * node_width, out_ch=node_width, hidden_ch=node_width, n_layers=2, act=act,
-        )
-
-    def forward(self, h_aux, h_base, aux_to_base, cross_edge_attr):
-        f_ab = self.msg_aux_base(h_aux, aux_to_base, cross_edge_attr, h_base.size(0))
-        return self.upd_base(torch.cat([h_base, f_ab], dim=-1))
-
-
-class SplitGNNBase(nn.Module):
-    """
-    lift por tipo de nó -> (n_layers − 1) SplitGNNLayer -> SplitGNNBaseLastLayer -> proj_base.
-    Saída só em N_base; cross_edge_index: linha 0 = N_base, linha 1 = N_aux.
-    """
-
-    def __init__(self, in_aux_features, in_base_features, out_features,
-                 dual_edge_dim, aux_edge_dim, node_width, n_layers, act=nn.GELU):
-        super().__init__()
-        if n_layers < 1:
-            raise ValueError(f"SplitGNNBase: n_layers={n_layers} (mínimo 1)")
-        self.lift_aux  = nn.Linear(in_aux_features, node_width)
-        self.lift_base = nn.Linear(in_base_features, node_width)
-        self.layers = nn.ModuleList(
-            [SplitGNNLayer(node_width, dual_edge_dim, aux_edge_dim, act) for _ in range(n_layers - 1)]
-            + [SplitGNNBaseLastLayer(node_width, aux_edge_dim, act)])
-        self.proj_base = nn.Linear(node_width, out_features)
-        self.act = act()
-
-    def forward(self, aux_features, base_features, edge_index, edge_attr,
-                cross_edge_index, cross_edge_attr):
-        h_aux  = self.act(self.lift_aux(aux_features))
-        h_base = self.act(self.lift_base(base_features))
-        aux_to_base = cross_edge_index.flip(0)
-        for layer in self.layers[:-1]:
-            h_aux, h_base = layer(h_aux, h_base, edge_index, edge_attr,
-                                  cross_edge_index, aux_to_base, cross_edge_attr)
-        h_base = self.layers[-1](h_aux, h_base, aux_to_base, cross_edge_attr)
-        return self.proj_base(h_base)
+# [REMOVIDO] SplitGNNBaseLastLayer e SplitGNNBase -- motivo: FNO_SplitGNN_Base removida
+# (pior que o FNO_SplitGNN em superfície e torque).
+# # ---------------------------------------------------------------------------
+# # Só N_base como saída (FNO_SplitGNN_Base): mesma rede do SplitGNN, sem o que não chega a
+# # N_base. Na última camada o N_aux' não é lido por ninguém (atualização simultânea), então
+# # ela só tem msg_aux_base + upd_base, e não há proj_aux. Os nomes dos módulos são os do
+# # SplitGNN (layers.<k>.*), então um state_dict dele carrega com strict=False.
+# # ---------------------------------------------------------------------------
+#
+# class SplitGNNBaseLastLayer(nn.Module):
+#     """N_base' = upd_base( [ h_base | Σ msg_aux→base(h_aux) ] ) -- a parte de N_base de
+#     SplitGNNLayer."""
+#
+#     def __init__(self, node_width, aux_edge_dim, act=nn.GELU):
+#         super().__init__()
+#         self.msg_aux_base = SplitEdgeMessageBlock(node_width, node_width, aux_edge_dim, act)
+#         self.upd_base = NodeMLP(
+#             in_ch=2 * node_width, out_ch=node_width, hidden_ch=node_width, n_layers=2, act=act,
+#         )
+#
+#     def forward(self, h_aux, h_base, aux_to_base, cross_edge_attr):
+#         f_ab = self.msg_aux_base(h_aux, aux_to_base, cross_edge_attr, h_base.size(0))
+#         return self.upd_base(torch.cat([h_base, f_ab], dim=-1))
+#
+#
+# class SplitGNNBase(nn.Module):
+#     """
+#     lift por tipo de nó -> (n_layers − 1) SplitGNNLayer -> SplitGNNBaseLastLayer -> proj_base.
+#     Saída só em N_base; cross_edge_index: linha 0 = N_base, linha 1 = N_aux.
+#     """
+#
+#     def __init__(self, in_aux_features, in_base_features, out_features,
+#                  dual_edge_dim, aux_edge_dim, node_width, n_layers, act=nn.GELU):
+#         super().__init__()
+#         if n_layers < 1:
+#             raise ValueError(f"SplitGNNBase: n_layers={n_layers} (mínimo 1)")
+#         self.lift_aux  = nn.Linear(in_aux_features, node_width)
+#         self.lift_base = nn.Linear(in_base_features, node_width)
+#         self.layers = nn.ModuleList(
+#             [SplitGNNLayer(node_width, dual_edge_dim, aux_edge_dim, act) for _ in range(n_layers - 1)]
+#             + [SplitGNNBaseLastLayer(node_width, aux_edge_dim, act)])
+#         self.proj_base = nn.Linear(node_width, out_features)
+#         self.act = act()
+#
+#     def forward(self, aux_features, base_features, edge_index, edge_attr,
+#                 cross_edge_index, cross_edge_attr):
+#         h_aux  = self.act(self.lift_aux(aux_features))
+#         h_base = self.act(self.lift_base(base_features))
+#         aux_to_base = cross_edge_index.flip(0)
+#         for layer in self.layers[:-1]:
+#             h_aux, h_base = layer(h_aux, h_base, edge_index, edge_attr,
+#                                   cross_edge_index, aux_to_base, cross_edge_attr)
+#         h_base = self.layers[-1](h_aux, h_base, aux_to_base, cross_edge_attr)
+#         return self.proj_base(h_base)

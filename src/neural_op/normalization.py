@@ -66,9 +66,10 @@ _LAYOUTS['FNO_SplitGNN'] = {
                          'delta_mu', 'delta_J', 'delta_M'), ()),
     'cross_edge_attr': (('delta_r', 'delta_sin', 'delta_cos', 'length', 'mu_r', 'J', 'M'), ()),
 }
-# FNO_SplitGNN_Base: mesmos chunks do FNO_SplitGNN (node_y fica nas stats: recodifica o FNO
-# interpolado nos centróides, entrada da GNN)
-_LAYOUTS['FNO_SplitGNN_Base'] = _LAYOUTS['FNO_SplitGNN']
+# [REMOVIDO] layout do FNO_SplitGNN_Base -- motivo: arch removida.
+# # FNO_SplitGNN_Base: mesmos chunks do FNO_SplitGNN (node_y fica nas stats: recodifica o FNO
+# # interpolado nos centróides, entrada da GNN)
+# _LAYOUTS['FNO_SplitGNN_Base'] = _LAYOUTS['FNO_SplitGNN']
 
 # chaves normalizadas por Normalizer.fit (as presentes no chunk)
 # [REMOVIDO] _NORM_KEYS = ('x_hw', 'y_hw', 'node_x', 'node_y', 'elem_x', 'edge_attr', 'cross_edge_attr')

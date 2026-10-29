@@ -127,8 +127,12 @@ $c_{base}$ não entra na GNN: o ângulo entra pelo par $(\sin, \cos)$. A rede te
 $$ \hat y^a = \tilde u^a + \Delta^a,\quad \hat y^b = \tilde u^b + \Delta^b,\qquad
 (\Delta^a, \Delta^b) = \mathrm{SplitGNN}\big([x^a_{\setminus c} \,\|\, \tilde u^a],\ [x^b_{\setminus c} \,\|\, \tilde u^b]\big) $$
 
-A perda é $\mathcal L(\hat y^a, y^a) + \mathcal L(\hat y^b, y^b)$, cada termo com a média nos
-seus próprios pontos. O `mae_graph` é a média dos dois MAEs.
+A perda é $(1-\lambda)\,\mathcal L(\hat y^a, y^a) + \lambda\,\mathcal L(\hat y^b, y^b)$, cada
+termo com a média nos seus próprios pontos, com $\lambda$ = `FNO_SplitGNNConfig.loss_lambda`
+(padrão 0,5). As runs da bateria `split` são anteriores ao $\lambda$ e usaram
+$\mathcal L^a + \mathcal L^b$, que é 2× a perda com $\lambda = 0{,}5$: mesmo ótimo, mas
+`train_loss`/`val_loss` com o dobro do valor. O `mae_graph` é a média simples dos dois MAEs,
+qualquer que seja o $\lambda$.
 
 O treino é **conjunto** (FNO + GNN): a perda é aplicada só na saída final $\hat y_k$, e o
 gradiente chega ao FNO pela interpolação. A grade $\hat y_{hw}$ não é supervisionada.

@@ -297,3 +297,69 @@ Saída: `dados/timing.json`, com hardware, `femm_preproc`, `inference` e `table`
 | `figures [--data] [--out]` | curvas de treino (`mae_graph`; FNO2d `mae_hw`); barras de $L1_A$/$L2_A$ com o piso de cada representação; $|\mathbf B|$ nos nós dos 5 modelos mae nas amostras P50/P95 do $L1_A$ de `FNO_BipartiteGNN_mae` (setor e zoom no entreferro) | `plots/1_curvas_treino`, `2_barras_erro`, `3_campo_*`; `dados/figures_smooth.json` |
 | `surface IDX [LOSS]` / `surface --pct P [LOSS]` | §1 em 1 amostra (ou na amostra do percentil P do eval) e mapa da densidade do erro por triângulo $\sum e\,w/\sum w$ (`surface_error_per_triangle`), com o piso da grade e os contornos de material | `dados/surface_error/sample_*.{json,npz}`, `plots/surface_error/*.png` |
 | `train-table` | tabela das 10 runs só a partir dos logs (`config.json`, `run_summary.json`, `epochs.csv`): parâmetros, pico de GPU, medianas de tempo por época, melhor/última época, motivo da parada, hardware (`device`, `gpu_name`, versões de torch/CUDA/cuDNN, `hostname`) | `dados/train_table.json` |
+
+## 7. Execução com memória controlada (`scripts/run_postprocess.py`)
+
+Script de partida para as long runs na máquina local (32 GB de RAM). Ele só orquestra: chama
+as mesmas funções do `postprocess.py` (`regions_setup/state/track/add_floors/add_run/
+finalize`, que o subcomando `regions` também usa), sem cálculo próprio. Por ora, a única etapa
+é `--steps regions`. As demais entram no dicionário `STEPS`, chamando os `run_*` existentes.
+
+```
+python -m scripts.run_postprocess --steps regions --n 10 --workers 2      # placeholder
+python -m scripts.run_postprocess --steps regions --all --workers 3 [--max-ram-gb 26]
+python -m scripts.run_postprocess --steps regions --all --resume          # continua
+```
+
+**Amostras**
+- `--n N` (padrão 10) usa as $N$ primeiras amostras do subset, na ordem do split.
+- `--all` usa o subset inteiro.
+- Os índices usados vão no JSON (`sample_idx`).
+
+**Execução em lotes** (`--chunk`, padrão 8 amostras)
+- **Workers** (`--workers`, padrão 2): calculam layout, Ω, Γ, 𝒱_c e distâncias
+  (`_regions_sample`).
+  - Com `--tasks-per-child`, padrão 1, cada processo é reciclado a cada amostra.
+  - O lote seguinte é submetido enquanto o principal processa o atual, então há no máximo 2
+    lotes na RAM.
+- **Processo principal:** calcula os pisos e depois cada run, **um modelo de cada vez** na
+  GPU sobre o lote. A predição não é guardada: vai direto para `BandAccum.add`.
+  - A ordem das amostras em cada acumulador é a mesma do `regions`.
+- **Fim do lote:**
+  - `gc.collect` e `torch.cuda.empty_cache`;
+  - checkpoint (pickle atômico de `dados/regions_checkpoint.pkl`);
+  - log em `dados/run_postprocess.log`, com o tempo do lote, a espera pelos workers, a
+    estimativa do restante e os picos de RAM (principal + workers, RSS amostrado a cada
+    0,25 s) e de VRAM.
+
+**Checkpoint e retomada**
+- `--resume` confere a assinatura (parâmetros, índices, `--chunk`, runs/épocas) e continua do
+  lote seguinte.
+- O JSON final é sempre montado das somas acumuladas.
+- `--max-ram-gb`: se o pico do lote passar do limite, o lote termina, o checkpoint é gravado e
+  o script para.
+- `--stop-after K` interrompe após $K$ lotes; serve para testar a retomada.
+- O checkpoint é apagado no fim, a menos que se use `--keep-checkpoint`.
+
+**Saída**
+- `--out`. O padrão é `resultados/BLDC_138x276/placeholder/` quando $N$ < subset, com
+  `placeholder: true` no JSON; com `--all`, é `resultados/BLDC_138x276/`.
+- O `regions.json` traz ainda:
+  - `execution`: lotes, picos, área de Ω por amostra × exata e as checagens;
+  - `timing.n_workers`, `tasks_per_child` e `chunk`.
+
+**Validação (10 amostras, 2 workers, 2026-11-09)**
+- **Retomada:** parar após o 1º lote e retomar dá o mesmo resultado que a execução contínua e
+  que o `regions` antigo.
+  - Pisos e FNO2d saem idênticos bit a bit.
+  - As GNNs diferem em até 1e-7 pp. A causa é que a própria inferência delas na GPU não é
+    determinística (somas atômicas em float32: cerca de 1e-6 T entre 3 inferências
+    iguais).
+- **Regiões:** a soma das 3 regiões disjuntas reproduz o total com erro de 7e-12 pp, e
+  máx(dist_f − dist_q) = 1e-16 mm.
+- **Área de Ω** × exata ($(r_{ro}^2 - r_{si}^2)\,\theta/2$): −0,005%.
+
+**Custo (10 amostras, 2 workers)**
+- **Tempo:** 20,5 s/amostra de parede, dominado pelos workers (cerca de 25 s de distâncias +
+  parse por amostra e worker). O processo principal leva cerca de 4 s por amostra.
+- **Memória:** pico de RAM de 5,2 GiB (principal 2,9 + workers 2,9) e de VRAM de 0,32 GiB.

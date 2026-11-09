@@ -105,56 +105,70 @@ def fig_surface_error_map(res, xy, elems, E, archs, iface, floor):
     return fig
 
 
-def _geom_patch(geom, **kw):
-    """PathPatch de um (Multi)Polygon do shapely (com furos)."""
-    import shapely
-    from matplotlib.patches import PathPatch
-    from matplotlib.path import Path as MPath
-    verts, codes = [], []
-    for poly in getattr(geom, 'geoms', [geom]):
-        if poly.is_empty or shapely.get_type_id(poly) != 3:
-            continue
-        for ring in [poly.exterior, *poly.interiors]:
-            c = np.asarray(ring.coords)
-            verts.append(c)
-            codes += [MPath.MOVETO] + [MPath.LINETO] * (len(c) - 2) + [MPath.CLOSEPOLY]
-    if not verts:
-        return None
-    return PathPatch(MPath(np.concatenate(verts), codes), **kw)
+REGION_COLOR = ('#d62728', '#2ca02c', '#1f77b4', '#dddddd')   # quina, fronteira, interior, fora de Ω
 
 
-BAND_COLOR = {'quinas': '#eb6834', 'fronteira_sem_quinas': '#2a78d6'}
+def _ref_subtris(n_sub):
+    """Subtriângulos (baricêntricas dos vértices [S,3,3]) do triângulo de referência, na
+    ordem de metrics._ref_quadrature (pontos = 3 por subtriângulo, arestas 01, 12, 20)."""
+    tris = [np.eye(3)]
+    for _ in range(n_sub):
+        new = []
+        for v in tris:
+            m01, m12, m20 = (v[0] + v[1]) / 2, (v[1] + v[2]) / 2, (v[2] + v[0]) / 2
+            new += [np.stack(z) for z in ((v[0], m01, m20), (m01, v[1], m12),
+                                          (m20, m12, v[2]), (m01, m12, m20))]
+        tris = new
+    return np.array(tris)
 
 
-def fig_region_bands(xy, elems, iface, corners, geoms, title, zoom=None):
-    """Verificação das faixas por distância numa amostra e num d: as regiões reais
-    (geoms = {'quinas': Ω_q, 'fronteira_sem_quinas': Ω_f ∖ Ω_q}, buffer de Γ / 𝒱_c
-    recortado ao domínio, regions.band_polygons) sobre a malha, com Γ e 𝒱_c; o resto do
-    domínio é o interior. zoom = (x, y, meia largura) mm opcional (2º painel)."""
+def fig_regions_map(xy, elems, code, iface, corners, d, title, zoom=None):
+    """Verificação das regiões numa amostra: os subtriângulos da quadratura da malha
+    (os que de fato são integrados, metrics.mesh_surface_quadrature) pintados pela região
+    dos seus 3 pontos com prioridade quina > fronteira sem quinas > interior; fora de Ω em
+    cinza claro. code [M*K] por ponto (0 quina, 1 fronteira sem quinas, 2 interior, -1 fora
+    de Ω), na ordem dos pontos da malha. Γ em preto, 𝒱_c em pontos pretos; zoom =
+    (x, y, meia largura) mm (2º painel, com a malha do FEMM)."""
     import matplotlib.pyplot as plt
-    from matplotlib.collections import LineCollection
+    from matplotlib.collections import LineCollection, PolyCollection
+    from matplotlib.colors import to_rgba
+    M = len(elems)
+    K = len(code) // M
+    n_sub = int(round(np.log(K / 3) / np.log(4)))
+    sb = _ref_subtris(n_sub)
+    S = len(sb)
+    c = np.asarray(code).reshape(M, S, 3).copy()
+    c[c < 0] = 3
+    c = c.min(axis=2).ravel()
+    V = np.einsum('svj,mjd->msvd', sb, xy[elems]).reshape(-1, 3, 2)
+    rgba = np.array([to_rgba(x) for x in REGION_COLOR])
     n = 2 if zoom else 1
-    fig, axs = plt.subplots(1, n, figsize=(7.5 * n, 7.5), squeeze=False)
+    fig, axs = plt.subplots(1, n, figsize=(7.5 * n, 7.0), squeeze=False)
     for k, ax in enumerate(axs[0]):
-        ax.triplot(xy[:, 0], xy[:, 1], elems, color='#c9c8c3', lw=0.25 if k else 0.08)
-        for name, g in geoms.items():
-            pp = _geom_patch(g, facecolor=BAND_COLOR[name], edgecolor='none', alpha=0.55)
-            if pp is not None:
-                ax.add_patch(pp)
-        ax.add_collection(LineCollection(xy[iface], colors=INK2, linewidths=0.6 if k else 0.2))
-        ax.plot(xy[corners, 0], xy[corners, 1], '.', color='k', ms=4 if k else 1)
-        ax.set_aspect('equal')
-        ax.axis('off')
         if k:
             x, y, h = zoom
+            cen = V.mean(1)
+            m = (np.abs(cen[:, 0] - x) < 1.5 * h) & (np.abs(cen[:, 1] - y) < 1.5 * h)
+            ax.add_collection(PolyCollection(V[m], facecolors=rgba[c[m]], edgecolors='none'))
+            P = xy[elems]
+            pm = (np.abs(P[:, :, 0].mean(1) - x) < 1.5 * h) & (np.abs(P[:, :, 1].mean(1) - y) < 1.5 * h)
+            ax.add_collection(PolyCollection(P[pm], facecolors='none', edgecolors='#8c8c8c',
+                                             linewidths=0.3))
             ax.set(xlim=(x - h, x + h), ylim=(y - h, y + h))
-    for name, c in BAND_COLOR.items():
-        axs[0, 0].plot([], [], 's', color=c, alpha=0.55,
-                       label={'quinas': 'Ω_q (quinas)',
-                              'fronteira_sem_quinas': 'Ω_f ∖ Ω_q (fronteira sem quinas)'}[name])
-    axs[0, 0].plot([], [], '-', color=INK2, label='Γ (interface entre materiais)')
-    axs[0, 0].plot([], [], '.', color='k', label='V_c (vértice de canto)')
-    axs[0, 0].legend(frameon=False, loc='lower left')
+        else:
+            ax.add_collection(PolyCollection(V, facecolors=rgba[c], edgecolors='none',
+                                             rasterized=True))
+            ax.autoscale()
+        ax.add_collection(LineCollection(xy[iface], colors='k', linewidths=1.0 if k else 0.2))
+        ax.plot(xy[corners, 0], xy[corners, 1], 'o', color='k', ms=3 if k else 0.8)
+        ax.set_aspect('equal')
+        ax.axis('off')
+    for col, lab in zip(REGION_COLOR, ('quina (Ω_q)', 'fronteira sem quinas (Ω_f ∖ Ω_q)', 'interior',
+                                       'fora de Ω (anéis de ar)')):
+        axs[0, 0].plot([], [], 's', color=col, label=lab)
+    axs[0, 0].plot([], [], '-', color='k', label='Γ (interface entre materiais)')
+    axs[0, 0].plot([], [], 'o', color='k', ms=3, label='V_c (vértices de canto)')
+    axs[0, 0].legend(frameon=False, loc='lower left', title=f'd = {d:.4f} mm')
     fig.suptitle(title, fontsize=10)
     fig.tight_layout()
     return fig
@@ -194,36 +208,3 @@ def fig_region_curves(curves, keys, d_marks, title):
     fig.suptitle(title, fontsize=10)
     fig.tight_layout()
     return fig
-
-
-# [REMOVIDO] fig_regions: triângulos coloridos pela região fixa (classify_triangles);
-# substituído por fig_region_bands (faixas reais por distância, buffer ∩ domínio).
-# def fig_regions(xy, elems, region, iface, corners, names, title, zoom=None):
-#     """Verificação da estratificação espacial: triângulos coloridos pela região
-#     (names[código]), fronteiras entre materiais e vértices de canto; zoom = (x, y, meia
-#     largura) mm opcional (2º painel)."""
-#     import matplotlib.pyplot as plt
-#     import matplotlib.tri as mtri
-#     from matplotlib.collections import LineCollection
-#     from matplotlib.colors import ListedColormap
-#     cols = ['#e4e3df', '#2a78d6', '#eb6834'][:len(names)]
-#     tri = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems)
-#     n = 2 if zoom else 1
-#     fig, axs = plt.subplots(1, n, figsize=(7.5 * n, 7.5), squeeze=False)
-#     for k, ax in enumerate(axs[0]):
-#         ax.tripcolor(tri, facecolors=region.astype(float), cmap=ListedColormap(cols),
-#                      vmin=-0.5, vmax=len(names) - 0.5, edgecolors='none', rasterized=True)
-#         ax.add_collection(LineCollection(xy[iface], colors=INK2, linewidths=0.4 if k else 0.2))
-#         ax.plot(xy[corners, 0], xy[corners, 1], '.', color='k', ms=3 if k else 1)
-#         ax.set_aspect('equal')
-#         ax.axis('off')
-#         if k:
-#             x, y, h = zoom
-#             ax.set(xlim=(x - h, x + h), ylim=(y - h, y + h))
-#     for c, nm in zip(cols, names):
-#         axs[0, 0].plot([], [], 's', color=c, label=nm)
-#     axs[0, 0].plot([], [], '.', color='k', label='vértice de canto')
-#     axs[0, 0].legend(frameon=False, loc='lower left')
-#     fig.suptitle(title, fontsize=10)
-#     fig.tight_layout()
-#     return fig

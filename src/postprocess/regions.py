@@ -4,10 +4,12 @@ Geometria das fronteiras entre materiais na malha do FEMM.
   interface_edges — arestas compartilhadas por elementos de materiais diferentes
                     (contornos nos mapas de erro; estratificação espacial).
   corner_nodes      — vértices de canto (𝒱_c) da fronteira entre materiais.
-  band_distances / band_edges / band_points / BandAccum — erro de superfície por faixas de
-                    distância (docs/claude/avaliacao.md §2): Ω_f(d) = {dist(x, Γ) ≤ d},
-                    Ω_q(d) = {dist(x, 𝒱_c) ≤ d}, Ω_int(d) = Ω ∖ Ω_f(d); cada ponto de
-                    quadratura pela SUA distância (elementos cortados).
+  omega_mask / SeamGeometry / band_edges / band_points / BandAccum — erro de superfície por
+                    faixas de distância (docs/claude/avaliacao.md §2): Ω = só o motor (sem os
+                    anéis de ar fora dele), Ω_f(d) = {x ∈ Ω: dist(x, Γ) ≤ d},
+                    Ω_q(d) = {x ∈ Ω: dist(x, 𝒱_c) ≤ d}, Ω_int(d) = Ω ∖ Ω_f(d); cada ponto de
+                    quadratura pela SUA distância (elementos cortados), com a costura
+                    periódica de 120° (cópias de Γ e 𝒱_c giradas de ±120°).
   classify_triangles — classificação antiga por triângulo (só scripts/artigo_v1.py).
 
 Material por elemento = material do rótulo (samples.parse_smooth(..., with_elem=True)
@@ -102,43 +104,6 @@ def classify_triangles(xy, tri, elem_mat, d_int, d_canto, ang_canto):
         hit = shapely.STRtree(polys).query(pts, predicate='dwithin', distance=d_canto)[1]
         region[np.unique(hit)] = 2
     return region, iface, corners
-
-
-# [REMOVIDO] RegionAccum: região fixa por TRIÂNGULO (classify_triangles); substituído por
-# BandAccum (faixas por distância de cada ponto de quadratura, elementos cortados).
-# class RegionAccum:
-#     """Erro de superfície acumulado por região (pontos de quadratura -> região do triângulo)
-#     sobre amostras; % sempre relativo ao B_ref GLOBAL (todas as regiões)."""
-#
-#     def __init__(self):
-#         n = len(REGIONS)
-#         self.num_l1, self.num_l2, self.area = np.zeros(n), np.zeros(n), np.zeros(n)
-#         self.num_ref = 0.0
-#
-#     def add(self, mag_model, mag_femm, w, point_region):
-#         e = np.abs(np.asarray(mag_model, np.float64) - mag_femm)
-#         w = np.asarray(w, np.float64)
-#         n = len(REGIONS)
-#         self.num_l1 += np.bincount(point_region, e * w, minlength=n)
-#         self.num_l2 += np.bincount(point_region, e ** 2 * w, minlength=n)
-#         self.area += np.bincount(point_region, w, minlength=n)
-#         self.num_ref += float((np.asarray(mag_femm, np.float64) ** 2 * w).sum())
-#
-#     def report(self):
-#         A = self.area.sum()
-#         b_ref = float(np.sqrt(self.num_ref / A))
-#         out = dict(B_ref_global=b_ref,
-#                    total=dict(L1_area_pct=100 * self.num_l1.sum() / A / b_ref,
-#                               L2_area_pct=100 * np.sqrt(self.num_l2.sum() / A) / b_ref))
-#         for i, name in enumerate(REGIONS):
-#             a = self.area[i]
-#             l1 = self.num_l1[i] / a if a else float('nan')
-#             l2 = np.sqrt(self.num_l2[i] / a) if a else float('nan')
-#             out[name] = dict(L1_area=float(l1), L1_area_pct=float(100 * l1 / b_ref),
-#                              L2_area=float(l2), L2_area_pct=float(100 * l2 / b_ref),
-#                              area_frac=float(a / A),
-#                              L1_contrib_frac=float(self.num_l1[i] / self.num_l1.sum()))
-#         return out
 
 
 # --------------------------------------------------------------------------- #
@@ -273,6 +238,92 @@ def band_polygons(xy, iface, corners, d, domain):
     return dict(fronteira=f, quinas=q, fronteira_sem_quinas=shapely.difference(f, q))
 
 
+def _rot(a):
+    return np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
+
+
+def _label_xy(lines):
+    """Posição (x, y) de cada rótulo de bloco ([NumBlockLabels], 0-based)."""
+    j = next(i for i, l in enumerate(lines) if l.strip().startswith('[NumBlockLabels]'))
+    n = int(lines[j].split('=')[1].strip())
+    return np.array([[float(v) for v in l.split()[:2]] for l in lines[j + 1:j + 1 + n]])
+
+
+def omega_mask(ans, row, xy, tri, r_in, r_ext, seam_rad):
+    """Ω = só o motor: exclui os elementos de rótulo `vacuum` cuja POSIÇÃO do rótulo tem
+    r < stator_inner/2 (ar do furo interno) ou r > rotor_outer/2 (ar externo ao back iron),
+    raios da linha do CSV da amostra. Entreferro e ar das ranhuras ficam em Ω.
+    Retorna (in_omega [M] bool, relatório: rótulos excluídos, área excluída por anel × área
+    exata do anel, faixa de r dos centróides excluídos)."""
+    from src.data_gen.motor_constants import MATERIAL_ID
+    from src.data_gen.parsers.ans_parsing import _parse_label_materials
+    lmat, _, _ = _parse_label_materials(ans.lines)
+    lr = np.hypot(*_label_xy(ans.lines).T)
+    r_si = float(row['stator_inner_diameter [mm]']) / 2
+    r_ro = float(row['rotor_outer_diameter [mm]']) / 2
+    vac = lmat == MATERIAL_ID['vacuum']
+    lab_in, lab_out = np.flatnonzero(vac & (lr < r_si)), np.flatnonzero(vac & (lr > r_ro))
+    lab = ans.elems[:, 3]
+    e_in, e_out = np.isin(lab, lab_in), np.isin(lab, lab_out)
+    P = xy[tri]
+    area = 0.5 * np.abs((P[:, 1, 0] - P[:, 0, 0]) * (P[:, 2, 1] - P[:, 0, 1])
+                        - (P[:, 2, 0] - P[:, 0, 0]) * (P[:, 1, 1] - P[:, 0, 1]))
+    rc = np.hypot(*P.mean(1).T)
+    rep = dict(r_stator_inner=r_si, r_rotor_outer=r_ro,
+               labels_inner=lab_in.tolist(), labels_outer=lab_out.tolist(),
+               area_inner_mm2=float(area[e_in].sum()), area_outer_mm2=float(area[e_out].sum()),
+               area_inner_exact_mm2=float((r_si ** 2 - r_in ** 2) * seam_rad / 2),
+               area_outer_exact_mm2=float((r_ext ** 2 - r_ro ** 2) * seam_rad / 2),
+               centroid_r_inner=[float(rc[e_in].min()), float(rc[e_in].max())] if e_in.any() else None,
+               centroid_r_outer=[float(rc[e_out].min()), float(rc[e_out].max())] if e_out.any() else None,
+               n_elems_excluded=int((e_in | e_out).sum()), area_total_mm2=float(area.sum()))
+    return ~(e_in | e_out), rep
+
+
+class SeamGeometry:
+    """Γ e 𝒱_c com cópias giradas de ±seam_rad (rotação em torno da origem) dos segmentos e
+    cantos a até d_cap (+ comprimento do segmento) das retas da costura θ = 0 e θ = seam_rad:
+    um ponto perto de θ = 0 enxerga a interface perto de θ = 120° pelo outro lado.
+    dist: distâncias exatas (_dist_to_segments + cKDTree); dist_f = min(dist_f, dist_q)
+    (𝒱_c ⊂ vértices de Γ); max_viol = maior dist_f - dist_q antes do min, entre os pontos
+    com valor exato (mm); n_fallback = pontos que foram ao shapely."""
+
+    def __init__(self, xy, iface, corners, d_cap, seam_rad):
+        from scipy.spatial import cKDTree
+        A, B = xy[iface[:, 0]], xy[iface[:, 1]]
+        L = np.linalg.norm(B - A, axis=1)
+        C = xy[corners]
+        self.n_iface, self.n_corners = len(A), len(C)
+
+        def near0(P, pad):       # distância à reta θ = 0 (lado do setor)
+            return np.abs(P[:, 1]) <= pad
+
+        def near_seam(P, pad):   # distância à reta θ = seam_rad
+            return np.abs(P[:, 0] * np.sin(seam_rad) - P[:, 1] * np.cos(seam_rad)) <= pad
+
+        sa = near0(A, d_cap + L) | near0(B, d_cap + L)
+        sb = near_seam(A, d_cap + L) | near_seam(B, d_cap + L)
+        Rp, Rm = _rot(seam_rad), _rot(-seam_rad)
+        self.A = np.concatenate([A, A[sa] @ Rp.T, A[sb] @ Rm.T])
+        self.B = np.concatenate([B, B[sa] @ Rp.T, B[sb] @ Rm.T])
+        ca, cb = near0(C, d_cap), near_seam(C, d_cap)
+        self.C = np.concatenate([C, C[ca] @ Rp.T, C[cb] @ Rm.T])
+        self.n_copies_seg, self.n_copies_corner = int(sa.sum() + sb.sum()), int(ca.sum() + cb.sum())
+        self.tree_c = cKDTree(self.C) if len(self.C) else None
+        self.d_cap = d_cap
+        self.n_fallback = 0
+        self.max_viol = 0.0
+
+    def dist(self, pts):
+        """(dist_f, dist_q) [Q] dos pontos pts [Q,2]."""
+        df, nfb = _dist_to_segments(pts, self.A, self.B, d_cap=self.d_cap)
+        self.n_fallback += nfb
+        dq = self.tree_c.query(pts)[0] if self.tree_c is not None else np.full(len(pts), np.inf)
+        ok = df <= self.d_cap
+        self.max_viol = max(self.max_viol, float(np.max(df[ok] - dq[ok], initial=0.0)))
+        return np.minimum(df, dq), dq
+
+
 def band_edges(d_list, d_max, n_bins, scale='lin'):
     """Bordas dos bins de distância (mm): 0, n_bins bins uniformes ('lin') ou log ('log',
     de d_max/1e3 a d_max) até d_max, com os d de d_list inseridos como bordas exatas.
@@ -289,10 +340,12 @@ def band_edges(d_list, d_max, n_bins, scale='lin'):
     return np.unique(np.concatenate([e, d_list]))
 
 
-def band_points(dist_f, dist_q, edges, d_list):
-    """Índices de bin (bin_f, bin_q [Q], convenção de band_edges) e código da região
-    disjunta (BANDS) de cada ponto para cada d da lista (reg [n_d, Q] int8):
-    quinas = dist_q ≤ d; fronteira_sem_quinas = dist_f ≤ d e dist_q > d; interior = resto."""
+def band_points(dist_f, dist_q, edges, d_list, keep=None):
+    """Índices de bin (bin_f, bin_q, convenção de band_edges) e código da região disjunta
+    (BANDS) de cada ponto para cada d da lista (reg [n_d, ·] int8):
+    quinas = dist_q ≤ d; fronteira_sem_quinas = dist_f ≤ d e dist_q > d; interior = resto.
+    keep [Q] bool (pontos em Ω): as distâncias são só dos pontos mantidos (dist_f/dist_q
+    [Q_keep]); BandAccum.add descarta os demais (fora de toda região, do total e do B_ref)."""
     it = np.int16 if len(edges) + 1 <= np.iinfo(np.int16).max else np.int32
     bf = np.searchsorted(edges, dist_f, side='left').astype(it)
     bq = np.searchsorted(edges, dist_q, side='left').astype(it)
@@ -300,7 +353,7 @@ def band_points(dist_f, dist_q, edges, d_list):
     for i, d in enumerate(d_list):
         reg[i, dist_f <= d] = 1
         reg[i, dist_q <= d] = 0
-    return dict(bin_f=bf, bin_q=bq, reg=reg)
+    return dict(bin_f=bf, bin_q=bq, reg=reg, keep=keep)
 
 
 class BandAccum:
@@ -323,9 +376,13 @@ class BandAccum:
         self.num_ref = 0.0
 
     def add(self, mag_model, mag_femm, w, bp):
-        """bp = band_points(...) do conjunto de pontos (mesma ordem de mag_*/w)."""
-        e = np.abs(np.asarray(mag_model, np.float64) - mag_femm)
-        w = np.asarray(w, np.float64)
+        """bp = band_points(...) do conjunto de pontos (mesma ordem de mag_*/w; bp['keep'] =
+        pontos em Ω, None = todos)."""
+        mag_model, mag_femm, w = (np.asarray(v, np.float64) for v in (mag_model, mag_femm, w))
+        if bp.get('keep') is not None:
+            k = bp['keep']
+            mag_model, mag_femm, w = mag_model[k], mag_femm[k], w[k]
+        e = np.abs(mag_model - mag_femm)
         vals = (w, e * w, e ** 2 * w)
         nb = len(self.edges) + 1
         for k, b in (('f', bp['bin_f']), ('q', bp['bin_q'])):

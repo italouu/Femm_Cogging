@@ -67,6 +67,33 @@ def load_set(root: Path, losses=('mse', 'mae')):
     return out
 
 
+def find_split_runs(root: Path):
+    """{loss: run_dir} do FNO_SplitGNN (bateria split) -- 1 run com best.pth por loss."""
+    out = {}
+    for loss in ('mse', 'mae'):
+        hits = [d for d in sorted((root / 'FNO_SplitGNN').glob('run_*'))
+                if (d / 'checkpoints' / 'best.pth').exists()
+                and json.loads((d / 'config.json').read_text())['loss'] == loss]
+        assert len(hits) == 1, f'{root}/FNO_SplitGNN loss={loss}: {hits}'
+        out[loss] = hits[0]
+    return out
+
+
+@torch.inference_mode()
+def predict_split(model, normalizer, d):
+    """FNO_SplitGNN num layout parse_split_smooth (numpy) -> (B N_aux [M,2] por elemento,
+    B N_base [K_base,2] por cópia vértice×material), desnormalizados (como
+    tests/check_split_surface.py)."""
+    t = lambda k: torch.from_numpy(np.ascontiguousarray(d[k]))
+    enc = lambda k: normalizer.encode(t(k), k).to(DEVICE)
+    _, y_aux, y_base = model(normalizer.encode(t('x_hw')[None], 'x_hw').to(DEVICE),
+                             enc('node_x'), enc('elem_x'), t('edge_index').to(DEVICE),
+                             enc('edge_attr'), t('cross_edge_index').to(DEVICE),
+                             enc('cross_edge_attr'), t('L').to(DEVICE), t('elem_L').to(DEVICE))
+    return (normalizer.decode(y_aux, 'node_y').double().cpu().numpy(),
+            normalizer.decode(y_base, 'elem_y').double().cpu().numpy())
+
+
 def _enc(normalizer, t, key):
     """Normaliza. O nº de canais (dim 1) precisa bater com as stats da run
     (len(stats[key]['mean'])) -- senão ValueError (ex.: run treinada sem o canal J)."""

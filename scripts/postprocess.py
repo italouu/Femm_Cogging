@@ -43,13 +43,17 @@ Subcomandos:
       [--ang-canto GRAUS] — erro de superfície por faixas de distância, elementos cortados:
       cada ponto de quadratura (os mesmos do eval) pela SUA distância euclidiana exata a
       Γ (arestas entre materiais) e a 𝒱_c (vértices de canto: mudança de direção >
-      ang_canto, ramificação ou ≥ 3 materiais). Ω_f(d) = dist(x,Γ) ≤ d, Ω_q(d) = dist(x,𝒱_c)
-      ≤ d, interior = Ω ∖ Ω_f(d). Por run e por piso, para cada d de --d: quinas, fronteira
-      sem quinas, interior (disjuntas) e fronteira inteira -- L1_A/L2_A (% do B_ref global),
-      fração da área e do ∫e dA. Curvas acumuladas em d (histograma, bins até --d-max com os
-      --d como bordas). Padrão: --d 0.05 0.1 0.2 0.5, --d-max 2, --n-bins 400, 30°.
+      ang_canto, ramificação ou ≥ 3 materiais), com a costura periódica de 120° (cópias
+      giradas de ±120°). Ω = só o motor: sem os rótulos vacuum do furo interno (r <
+      stator_inner/2) e do ar externo (r > rotor_outer/2); pontos fora de Ω não entram em
+      região, total nem B_ref. Ω_f(d) = dist(x,Γ) ≤ d, Ω_q(d) = dist(x,𝒱_c) ≤ d, interior =
+      Ω ∖ Ω_f(d). Runs do artigo (FNO2d, FNO_GNN, Elem, FNO_SplitGNN N_base × mse/mae) e
+      pisos grade, P1_nos, P0_elem, P1_mat; para cada d de --d: quinas, fronteira sem
+      quinas, interior (disjuntas) e fronteira inteira -- L1_A/L2_A (% do B_ref em Ω),
+      fração da área e do ∫e dA. Curvas acumuladas em d (histograma até --d-max).
+      Padrão: d = R_in·θ_setor/N_A ≈ 0,2163 mm, --d-max 2, --n-bins 400, 30°.
       Saída: dados/regions.json, dados/regions_curves.npz, plots/regions_curvas.{png,pdf},
-      plots/regions_bands_sample_*_d*.png.
+      plots/regions_map_sample_*_d*.png.
 
   torque {theta-e,batch,scatter} [--loss L] [--archs ...] [--femm] — torque pelo tensor
       de Maxwell na faixa do entreferro (B por elemento) × FEMM T22, para as 5 archs da loss
@@ -97,22 +101,19 @@ from scripts.build_chunks_main import MAX_SAMPLES
 from src.configs.datagen import DatagenConfig
 from src.data_gen.parsers.ans_parsing import read_ans
 from src.postprocess.fields import elem_to_nodes, gap_radius_mm, mag
-from src.postprocess.inference import (ARCHS, INTERP_MODE, RUN_ORDER, find_runs, floor_nodes,
-                                       load_set, predict, to_torch_sample)
+from src.data_gen.parsers.split_layout import parse_split_smooth
+from src.postprocess.inference import (ARCHS, INTERP_MODE, RUN_ORDER, find_runs, find_split_runs,
+                                       floor_nodes, load_model, load_set, predict, predict_split,
+                                       to_torch_sample)
 from src.postprocess.metrics import (R_EXT_MM, R_IN_MM, Accum, merge, pstats,
                                      surface_error_per_triangle, surface_values_p1)
-# [REMOVIDO] fig_regions (região fixa por triângulo) -> fig_region_bands / fig_region_curves
-# from src.postprocess.plots.errors import fig_bars, fig_regions, fig_surface_error_map
-from src.postprocess.plots.errors import (fig_bars, fig_region_bands, fig_region_curves,
+from src.postprocess.plots.errors import (fig_bars, fig_region_curves, fig_regions_map,
                                           fig_surface_error_map)
 from src.postprocess.plots.fields import fig_field
 from src.postprocess.plots.primitives import apply_style, save_fig
 from src.postprocess.plots.training import fig_training
-# [REMOVIDO] RegionAccum / classify_triangles saíram do caminho do regions (faixas por distância)
-# from src.postprocess.regions import REGIONS, RegionAccum, classify_triangles, interface_edges
-from src.postprocess.regions import (BAND_UNIONS, BANDS, BandAccum, band_distances, band_edges,
-                                     band_points, band_polygons, interface_edges, mesh_domain,
-                                     region_geometry)
+from src.postprocess.regions import (BAND_UNIONS, BANDS, BandAccum, SeamGeometry, band_edges,
+                                     band_points, interface_edges, omega_mask, region_geometry)
 from src.postprocess.saturation import (FemmBH, check_against_femm, steel_operating_points,
                                         weighted_percentile)
 from src.postprocess.plots.saturation import MU_LABEL, fig_bh, fig_steel_map
@@ -509,26 +510,62 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
     print(f'figura: {fig_dir / stem}.png')
 
 
-REGIONS_D_MM = (0.05, 0.1, 0.2, 0.5)      # regions --d padrão (mm)
-REGIONS_D_MAX_MM, REGIONS_N_BINS = 2.0, 400  # bins finos: 0,005 mm (lin)
+SEAM_RAD = float(np.deg2rad(ANG_2 - ANG_1))                    # setor periódico (120°)
+REGIONS_D_MM = (R_IN_MM * SEAM_RAD / N_A,)  # regions --d padrão: passo angular da grade no menor raio
+REGIONS_D_MAX_MM, REGIONS_N_BINS = 2.0, 400  # curvas em d: bins de 0,005 mm (lin)
+REGIONS_ARCHS = ('FNO2d', 'FNO_GNN', 'FNO_BipartiteGNN_Elem', 'FNO_SplitGNN')   # archs do artigo
+REGIONS_FLOORS = ('grade', 'P1_nos', 'P0_elem', 'P1_mat')     # pisos dessas representações
 
 
-def _regions_sample(path, row, ang_canto, edges, d_list):
-    """Worker do regions: layouts (parse_smooth com overlay) + Γ e 𝒱_c da malha e, para cada
-    conjunto de pontos de quadratura ('mesh', 'overlay'), dist_f / dist_q e band_points --
-    uma vez por amostra, reutilizados por todas as runs e pisos."""
+def _split_points(lay, y_base):
+    """Superfície do N_base do FNO_SplitGNN (P1 por material: em cada triângulo, interpolação
+    linear das componentes das 3 cópias do material do elemento, ligadas pela Edge_aux, depois
+    módulo -- regra de tests/check_split_surface.py) nos pontos da malha:
+    (|B| [M*K], |B|_FEMM [M*K], peso [M*K], 'mesh'). y_base [K_base,2]: saída N_base ou o
+    gabarito elem_y do layout (piso P1_mat)."""
+    mq = lay['mesh_quad']
+    M, K = mq['mag'].shape
+    V = np.asarray(y_base, np.float64)[lay['split']['cross_edge_index'][0].reshape(M, 3)]
+    mm = np.hypot(V[..., 0] @ mq['bary'].T, V[..., 1] @ mq['bary'].T)
+    w = np.repeat((mq['area'] / K)[:, None], K, axis=1)
+    return mm.ravel(), mq['mag'].ravel(), w.ravel(), 'mesh'
+
+
+def _regions_kind(arch):
+    return 'P1_mat' if arch == 'FNO_SplitGNN' else _surface_kind(arch)
+
+
+def _regions_sample(path, row, ang_canto, edges, d_list, mask_omega=True):
+    """Worker do regions: layouts (parse_smooth com overlay + parse_split_smooth), Ω
+    (regions.omega_mask), Γ e 𝒱_c da malha completa e, para cada conjunto de pontos de
+    quadratura ('mesh', 'overlay'), as distâncias dos pontos em Ω com a costura periódica
+    (regions.SeamGeometry) e band_points -- uma vez por amostra, para todas as runs e pisos.
+    mask_omega=False: Ω = malha inteira (validação contra o eval)."""
     ans = read_ans(path)
     lay = parse_smooth(path, row, with_elem=True, with_overlay=True, ans=ans)
+    r_in = float(row['inner_diameter [mm]']) / 2
+    r_ext = float(row['outer_diameter [mm]']) / 2
+    lay['split'] = parse_split_smooth(path, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2, n_r=N_R,
+                                      n_a=N_A, ans=ans)
+    tri = lay['tri']
+    M, K = lay['mesh_quad']['mag'].shape
+    assert (lay['split']['cross_edge_index'][1].reshape(M, 3) == np.arange(M)[:, None]).all()
     t = time.perf_counter()
     xy = np.stack([ans.mesh.x, ans.mesh.y], axis=1).astype(np.float64)
-    iface, corners = region_geometry(xy, lay['tri'], lay['elem_mat'], ang_canto)
-    bands, viol, nfb = {}, {}, {}
+    in_omega, omega = omega_mask(ans, row, xy, tri, r_in, r_ext, SEAM_RAD)
+    if not mask_omega:
+        in_omega[:] = True
+    iface, corners = region_geometry(xy, tri, lay['elem_mat'], ang_canto)
+    geo = SeamGeometry(xy, iface, corners, d_cap=edges[-1], seam_rad=SEAM_RAD)
+    tri_of = dict(mesh=np.repeat(np.arange(M), K), overlay=lay['overlay']['tri'])
+    bands = {}
     for name, pts in _quad_xy(lay, xy).items():
-        d_f, d_q, viol[name], nfb[name] = band_distances(xy, iface, corners, pts,
-                                                            d_cap=edges[-1])
-        bands[name] = band_points(d_f, d_q, edges, d_list)
-    lay.update(xy=xy, iface=iface, corners=corners, bands=bands, band_viol=viol,
-               band_fallback=nfb, t_bands=time.perf_counter() - t)
+        keep = in_omega[tri_of[name]]
+        d_f, d_q = geo.dist(pts[keep])
+        bands[name] = band_points(d_f, d_q, edges, d_list, keep=keep)
+    lay.update(xy=xy, iface=iface, corners=corners, in_omega=in_omega, omega=omega, bands=bands,
+               band_viol=geo.max_viol, band_fallback=geo.n_fallback,
+               n_copies=(geo.n_copies_seg, geo.n_copies_corner), t_bands=time.perf_counter() - t)
     lay['overlay'].pop('xy')          # só serviu às distâncias (memória no processo principal)
     return lay
 
@@ -542,39 +579,59 @@ def _curves_npz(curves):
     return out
 
 
+def _regions_runs():
+    """Runs do artigo: FNO2d, FNO_GNN e Elem da bateria bldc + FNO_SplitGNN da bateria
+    split, mse e mae (best.pth de cada)."""
+    runs = {k: r for k, r in load_set(ROOT_S).items() if r['arch'] in REGIONS_ARCHS}
+    for loss, d in find_split_runs(ROOT_S).items():
+        model, normalizer, _, epoch = load_model(d)
+        runs[f'FNO_SplitGNN_{loss}'] = dict(arch='FNO_SplitGNN', loss=loss, run=d.name,
+                                            run_dir=str(d), model=model, normalizer=normalizer,
+                                            epoch=int(epoch))
+    order = [f'{a}_{l}' for a in REGIONS_ARCHS for l in ('mse', 'mae')]
+    return {k: runs[k] for k in order}
+
+
 def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_list=None, d_max=None,
-                n_bins=REGIONS_N_BINS, bin_scale='lin', ang_canto=30.0, subset='test'):
+                n_bins=REGIONS_N_BINS, bin_scale='lin', ang_canto=30.0, subset='test',
+                mask_omega=True):
     """Erro de superfície por faixas de distância (docs/claude/avaliacao.md §2), elementos
     cortados: cada ponto de quadratura (malha ou overlay grade ∩ malha, os mesmos do eval) é
-    atribuído pela SUA distância a Γ (arestas de interface) e a 𝒱_c (vértices de canto).
-    Por run e por piso: BandAccum (histogramas em d + regiões disjuntas por d da lista).
-    Subset como no eval. Saída: regions.json (tabela por d), regions_curves.npz (curvas
-    acumuladas em d), plots/regions_curvas.png e plots/regions_bands_sample_*_d*.png."""
+    atribuído pela SUA distância a Γ (arestas de interface) e a 𝒱_c (vértices de canto),
+    com a costura periódica; só os pontos em Ω (motor sem os anéis de ar) entram.
+    Runs do artigo (_regions_runs) e os pisos REGIONS_FLOORS: BandAccum (histogramas em d +
+    regiões disjuntas por d da lista). Subset como no eval. mask_omega=False só para a
+    validação (Ω = malha inteira). Saída: regions.json (tabela por d), regions_curves.npz,
+    plots/regions_curvas.{png,pdf} e plots/regions_map_sample_*_d*.png."""
     out_dir.mkdir(parents=True, exist_ok=True)
     d_list = sorted({float(d) for d in (d_list or REGIONS_D_MM)})
     d_max = REGIONS_D_MAX_MM if d_max is None else float(d_max)
     edges = band_edges(d_list, d_max, n_bins, bin_scale)
     dr = (R_EXT_MM - R_IN_MM) / N_R
-    params = dict(d_mm=d_list, d_max_mm=d_max, n_bins=n_bins, bin_scale=bin_scale,
-                  n_edges=int(len(edges)), ang_canto_deg=ang_canto, subset=subset,
-                  grid_radial_step_mm=dr,
-                  dist='euclidiana exata no plano (regions.band_distances: cKDTree + '
-                       'ponto-segmento vetorizado, conferido; fallback shapely)',
+    params = dict(d_mm=d_list, d_default_mm=REGIONS_D_MM[0],
+                  d_default_rule='R_IN_MM * (ANG_2 - ANG_1 em rad) / N_A (passo angular da grade '
+                                 'no menor raio)',
+                  d_max_mm=d_max, n_bins=n_bins, bin_scale=bin_scale, n_edges=int(len(edges)),
+                  ang_canto_deg=ang_canto, subset=subset, grid_radial_step_mm=dr,
+                  omega=('motor: malha menos os rótulos vacuum com r_rótulo < stator_inner/2 ou '
+                         '> rotor_outer/2' if mask_omega else 'malha inteira (validação)'),
+                  dist='euclidiana exata no plano (regions.SeamGeometry: _dist_to_segments + '
+                       'cKDTree), com cópias de Γ e 𝒱_c giradas de ±120° (costura periódica)',
                   regioes='quinas: dist_q <= d; fronteira_sem_quinas: dist_f <= d < dist_q; '
                           'interior: dist_f > d; fronteira = quinas + fronteira_sem_quinas',
-                  corte='por ponto de quadratura (elemento cortado pela faixa)',
-                  disjuntas='acumuladas diretamente por d da lista (os dois limiares no mesmo '
-                            'ponto); curvas por histograma 1-D em dist_f e dist_q',
+                  corte='por ponto de quadratura (elemento cortado pela faixa), sem subdivisão',
                   material='por rótulo (lay[elem_mat])')
     print('parâmetros:', params)
     rows = design_rows()
     samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], subset, max_samples, N_SAMPLES)
-    runs = load_set(ROOT_S)
+    runs = _regions_runs()
+    for k, r in runs.items():
+        print(f"  {k:28s} {r['run_dir']} best ép.{r['epoch']}  superfície {_regions_kind(r['arch'])}")
     acc = {k: BandAccum(edges, d_list) for k in runs}
-    acc_floor = {kd: BandAccum(edges, d_list) for kd in SURF_KINDS}
+    acc_floor = {kd: BandAccum(edges, d_list) for kd in REGIONS_FLOORS}
     pset = {}
     fig_done = False
-    subs, t_bands, t_add, t_sample, viol = [], [], [], [], []
+    subs, t_bands, t_add, t_sample, viol, omegas = [], [], [], [], [], []
     n_fb = 0
     n_pts = {'mesh': 0, 'overlay': 0}
     groups = {}
@@ -584,7 +641,7 @@ def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_list=None, d_m
     for gi, (name, items) in enumerate(groups.items()):
         tg = time.time()
         with ProcessPoolExecutor(max_workers=min(N_WORKERS, len(items))) as ex:
-            futs = [ex.submit(_regions_sample, p, rows[idx], ang_canto, edges, d_list)
+            futs = [ex.submit(_regions_sample, p, rows[idx], ang_canto, edges, d_list, mask_omega)
                     for _, idx, p in items]
             for i, (sub, idx, p) in enumerate(items):
                 lay = futs[i].result()
@@ -592,37 +649,46 @@ def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_list=None, d_m
                 ts = to_torch_sample(lay)
                 subs.append(sub)
                 t_bands.append(lay['t_bands'])
-                viol.append(max(lay['band_viol'].values()))
-                n_fb += sum(lay['band_fallback'].values())
+                viol.append(lay['band_viol'])
+                n_fb += lay['band_fallback']
+                omegas.append(lay['omega'])
                 for st, bp in lay['bands'].items():
-                    n_pts[st] += len(bp['bin_f'])
+                    n_pts[st] += int(bp['keep'].sum())
                 if not fig_done:
                     apply_style()
                     xy, tri = lay['xy'], lay['tri']
-                    dom = mesh_domain(xy, tri)
-                    r_m, _ = gap_radius_mm(rows[idx])
-                    th0 = np.deg2rad(60.0)
-                    for d in d_list:
-                        g = band_polygons(xy, lay['iface'], lay['corners'], d, dom)
-                        title = (f'Amostra {idx}: faixas por distância, d = {d:g} mm '
-                                 f'(ângulo de canto > {ang_canto:g}°); resto = interior')
-                        save_fig(fig_region_bands(xy, tri, lay['iface'], lay['corners'],
-                                                  {k: g[k] for k in ('fronteira_sem_quinas', 'quinas')},
-                                                  title, zoom=(r_m * np.cos(th0), r_m * np.sin(th0),
-                                                               max(1.5, 4 * d))),
-                                 fig_dir / f"regions_bands_sample_{idx:06d}_d{f'{d:g}'.replace('.', 'p')}",
+                    bp = lay['bands']['mesh']
+                    C = xy[lay['corners']]
+                    th = np.arctan2(C[:, 1], C[:, 0])
+                    sod = float(rows[idx]['stator_outer_diameter [mm]']) / 2
+                    kc = int(np.argmin(np.abs(np.hypot(*C.T) - sod) + 0.05 * np.abs(th - np.pi / 3)))
+                    for di, d in enumerate(d_list):
+                        code = np.full(len(bp['keep']), -1, np.int8)
+                        code[bp['keep']] = bp['reg'][di]
+                        title = (f'Amostra {idx}: regiões por distância nos pontos de quadratura da '
+                                 f'malha, d = {d:.4f} mm (ângulo de canto > {ang_canto:g}°)')
+                        save_fig(fig_regions_map(xy, tri, code, lay['iface'], lay['corners'], d, title,
+                                                 zoom=(C[kc, 0], C[kc, 1], max(0.8, 4 * d))),
+                                 fig_dir / f"regions_map_sample_{idx:06d}_d{f'{d:.4f}'.replace('.', 'p')}",
                                  pdf=False, dpi=200)
                     fig_done = True
                 ta = 0.0
-                for kd in SURF_KINDS:
-                    mm, mf, w, st = _floor_points(kd, lay, with_set=True)
+                for kd in REGIONS_FLOORS:
+                    if kd == 'P1_mat':
+                        mm, mf, w, st = _split_points(lay, lay['split']['elem_y'])
+                    else:
+                        mm, mf, w, st = _floor_points(kd, lay, with_set=True)
                     t = time.perf_counter()
                     acc_floor[kd].add(mm, mf, w, lay['bands'][st])
                     ta += time.perf_counter() - t
                     pset['piso_' + kd] = st
                 for k, r in runs.items():
-                    out_hw, yn = predict(r['arch'], r['model'], r['normalizer'], ts)
-                    mm, mf, w, _, st = _surface_points(r['arch'], lay, out_hw, yn, with_set=True)
+                    if r['arch'] == 'FNO_SplitGNN':
+                        _, y_base = predict_split(r['model'], r['normalizer'], lay['split'])
+                        mm, mf, w, st = _split_points(lay, y_base)
+                    else:
+                        out_hw, yn = predict(r['arch'], r['model'], r['normalizer'], ts)
+                        mm, mf, w, _, st = _surface_points(r['arch'], lay, out_hw, yn, with_set=True)
                     t = time.perf_counter()
                     acc[k].add(mm, mf, w, lay['bands'][st])
                     ta += time.perf_counter() - t
@@ -631,30 +697,47 @@ def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_list=None, d_m
         t_sample.append((time.time() - tg) / len(items))
         print(f'  [{gi + 1}/{len(groups)}] {name}  (amostras {len(subs)}, '
               f'{(time.time() - t0) / 60:.1f} min)', flush=True)
+    t_total = time.time() - t0
 
     subs_arr = np.array(subs)
+    ai = np.array([o['area_inner_mm2'] for o in omegas])
+    ao = np.array([o['area_outer_mm2'] for o in omegas])
     res = dict(n_samples=len(subs), n_by_subset={s: int((subs_arr == s).sum()) for s in SUBSETS},
                params=params, regions=list(BANDS) + list(BAND_UNIONS),
                note='by_d[d][região]: L1_A/L2_A normalizados pela área da região, em % do B_ref '
-                    'GLOBAL; area_frac = área da região / área total; L1_contrib_frac = fração '
-                    'de ∫e dA total vinda da região. quinas, fronteira_sem_quinas e interior são '
-                    'disjuntas (somam a área e o ∫e dA totais); fronteira = Ω_f inteira. Curvas '
+                    'GLOBAL em Ω; area_frac = área da região / área de Ω; L1_contrib_frac = fração '
+                    'de ∫e dA total em Ω vinda da região. quinas, fronteira_sem_quinas e interior '
+                    'são disjuntas (somam a área e o ∫e dA de Ω); fronteira = Ω_f inteira. Curvas '
                     'em d: regions_curves.npz.',
-               timing=dict(bands_s_per_sample=float(np.mean(t_bands)),
+               omega=dict(
+                   labels_inner=sorted({tuple(o['labels_inner']) for o in omegas}),
+                   labels_outer=sorted({tuple(o['labels_outer']) for o in omegas}),
+                   area_inner_mm2=[float(ai.min()), float(ai.max())],
+                   area_outer_mm2=[float(ao.min()), float(ao.max())],
+                   area_inner_exact_mm2=[float(min(o['area_inner_exact_mm2'] for o in omegas)),
+                                         float(max(o['area_inner_exact_mm2'] for o in omegas))],
+                   area_outer_exact_mm2=[float(min(o['area_outer_exact_mm2'] for o in omegas)),
+                                         float(max(o['area_outer_exact_mm2'] for o in omegas))],
+                   centroid_r_inner=[min(o['centroid_r_inner'][0] for o in omegas if o['centroid_r_inner']),
+                                     max(o['centroid_r_inner'][1] for o in omegas if o['centroid_r_inner'])],
+                   centroid_r_outer=[min(o['centroid_r_outer'][0] for o in omegas if o['centroid_r_outer']),
+                                     max(o['centroid_r_outer'][1] for o in omegas if o['centroid_r_outer'])],
+                   applied=bool(mask_omega)),
+               timing=dict(total_s=float(t_total), bands_s_per_sample=float(np.mean(t_bands)),
                            accum_s_per_sample=float(np.mean(t_add)),
                            wall_s_per_sample=float(np.mean(t_sample)), n_workers=N_WORKERS,
-                           note='bands = Γ, 𝒱_c, distâncias e bins no worker (paralelo); accum = '
+                           note='bands = Ω, Γ, 𝒱_c, distâncias e bins no worker (paralelo); accum = '
                                 'BandAccum.add de todas as runs e pisos (processo principal); '
                                 'wall = tempo do grupo / nº de amostras'),
                checks=dict(max_dist_f_minus_dist_q_mm=float(max(viol)),
                            n_points_shapely_fallback=int(n_fb),
-                           mean_points_per_sample={k: v / len(subs) for k, v in n_pts.items()}),
-               runs={k: dict(arch=r['arch'], loss=r['loss'], run=r['run'],
-                             surface_kind=_surface_kind(r['arch']), point_set=pset[k],
-                             **acc[k].report())
+                           mean_points_in_omega_per_sample={k: v / len(subs) for k, v in n_pts.items()}),
+               runs={k: dict(arch=r['arch'], loss=r['loss'], run=r['run'], run_dir=r['run_dir'],
+                             best_epoch=r['epoch'], surface_kind=_regions_kind(r['arch']),
+                             point_set=pset[k], **acc[k].report())
                      for k, r in runs.items()},
                floor_surface={kd: dict(point_set=pset['piso_' + kd], **acc_floor[kd].report())
-                              for kd in SURF_KINDS})
+                              for kd in REGIONS_FLOORS})
     (out_dir / 'regions.json').write_text(json.dumps(res, indent=2))
     curves = {k: a.curves() for k, a in acc.items()}
     curves.update({'piso_' + kd: a.curves() for kd, a in acc_floor.items()})
@@ -664,118 +747,33 @@ def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_list=None, d_m
     keys = {}
     for k, r in runs.items():
         keys.setdefault(r['loss'], []).append((r['arch'], r['arch'], k))
-    for loss in keys:
-        keys[loss].sort(key=lambda x: ARCHS.index(x[1]) if x[1] in ARCHS else 99)
     save_fig(fig_region_curves(curves, keys, d_list,
-                               f'{len(subs)} amostras ({subset}) — fração acumulada da área e do '
+                               f'{len(subs)} amostras ({subset}) — fração acumulada da área de Ω e do '
                                f'erro total η = ∫_Ω(d) e dA / ∫_Ω e dA'),
              fig_dir / 'regions_curvas', pdf=True, dpi=200)
 
-    print(f'\n{len(subs)} amostras — erro de superfície por faixa, % do B_ref global '
+    print(f'\n{len(subs)} amostras — erro de superfície por faixa, % do B_ref global em Ω '
           f'(L1_A / L2_A) [fração da área | fração do L1_A total]')
     cols = list(BANDS) + list(BAND_UNIONS)
     items_ = [(k, v) for k, v in res['runs'].items()] + \
              [('piso ' + kd, v) for kd, v in res['floor_surface'].items()]
     for d in d_list:
         print(f'  d = {d:g} mm')
-        print(f"  {'':26s}" + ''.join(f'{n:>34s}' for n in cols))
+        print(f"  {'':26s}" + ''.join(f'{n:>34s}' for n in cols) + '      total  B_ref')
         for k, v in items_:
             b = v['by_d'][f'{d:g}']
             print(f'  {k:26s}' + ''.join(
                 f"{b[n]['L1_area_pct']:6.2f} /{b[n]['L2_area_pct']:6.2f} "
-                f"[{b[n]['area_frac']:.3f}|{b[n]['L1_contrib_frac']:.3f}]".rjust(34) for n in cols))
+                f"[{b[n]['area_frac']:.3f}|{b[n]['L1_contrib_frac']:.3f}]".rjust(34) for n in cols)
+                  + f"  {v['total']['L1_area_pct']:5.2f}/{v['total']['L2_area_pct']:5.2f}"
+                    f"  {v['B_ref_global']:.4f}")
     tm = res['timing']
-    print(f"tempo/amostra: faixas {tm['bands_s_per_sample']:.2f} s (worker), acumulação "
-          f"{tm['accum_s_per_sample']:.2f} s, parede {tm['wall_s_per_sample']:.2f} s; "
-          f"máx(dist_f - dist_q) = {res['checks']['max_dist_f_minus_dist_q_mm']:.2e} mm")
+    print(f"tempo total {tm['total_s'] / 60:.1f} min; por amostra: faixas {tm['bands_s_per_sample']:.2f} s "
+          f"(worker), acumulação {tm['accum_s_per_sample']:.2f} s, parede {tm['wall_s_per_sample']:.2f} s; "
+          f"máx(dist_f - dist_q) = {res['checks']['max_dist_f_minus_dist_q_mm']:.2e} mm; "
+          f"fallback {n_fb} pontos")
     print(f"salvo em {out_dir / 'regions.json'}, {out_dir / 'regions_curves.npz'}; figuras em {fig_dir}")
-
-
-# [REMOVIDO] run_regions antigo: região fixa por TRIÂNGULO (classify_triangles + RegionAccum,
-# --d-int/--d-canto); substituído pelas faixas por distância com elementos cortados.
-# def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_int=None, d_canto=None,
-#                 ang_canto=30.0, subset='test'):
-#     """Estratificação espacial do erro de superfície: cada triângulo do FEMM em
-#     interior / interface / canto (regions.classify_triangles) e o erro de superfície de
-#     cada run e de cada piso acumulado por região (pontos de quadratura -> triângulo).
-#     Subset como no eval. Padrão: d_int = 1 passo radial da grade, d_canto = 2 passos."""
-#     out_dir.mkdir(parents=True, exist_ok=True)
-#     dr = (R_EXT_MM - R_IN_MM) / N_R
-#     d_int = dr if d_int is None else d_int
-#     d_canto = 2 * dr if d_canto is None else d_canto
-#     params = dict(d_int_mm=d_int, d_canto_mm=d_canto, ang_canto_deg=ang_canto,
-#                   grid_radial_step_mm=dr, prioridade='canto > interface > interior',
-#                   material='por rótulo (lay[elem_mat])')
-#     print('parâmetros:', params)
-#     rows = design_rows()
-#     samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], subset, max_samples, N_SAMPLES)
-#     runs = load_set(ROOT_S)
-#     acc = {k: RegionAccum() for k in runs}
-#     acc_floor = {kd: RegionAccum() for kd in SURF_KINDS}
-#     n_tri_region = np.zeros(len(REGIONS), np.int64)
-#     fig_done = False
-#     subs = []
-#     groups = {}
-#     for name, sub, idx, p in samples:
-#         groups.setdefault(name, []).append((sub, idx, p))
-#     t0 = time.time()
-#     for gi, (name, items) in enumerate(groups.items()):
-#         with ProcessPoolExecutor(max_workers=min(N_WORKERS, len(items))) as ex:
-#             futs = [ex.submit(parse_smooth, p, rows[idx], with_elem=True, with_overlay=True)
-#                     for _, idx, p in items]
-#             for (sub, idx, p), f in zip(items, futs):
-#                 lay = f.result()
-#                 ts = to_torch_sample(lay)
-#                 subs.append(sub)
-#                 nodes, _ = _mesh(idx)
-#                 xy = nodes[:, :2]
-#                 region, iface, corners = classify_triangles(xy, lay['tri'], lay['elem_mat'],
-#                                                             d_int, d_canto, ang_canto)
-#                 n_tri_region += np.bincount(region, minlength=len(REGIONS))
-#                 if not fig_done:
-#                     apply_style()
-#                     r_m, _ = gap_radius_mm(rows[idx])
-#                     th0 = np.deg2rad(60.0)
-#                     title = (f'Amostra {idx}: regiões (d_int = {d_int:.3f} mm, d_canto = '
-#                              f'{d_canto:.3f} mm, ângulo de canto > {ang_canto:g}°)')
-#                     save_fig(fig_regions(xy, lay['tri'], region, iface, corners, REGIONS, title,
-#                                          zoom=(r_m * np.cos(th0), r_m * np.sin(th0), 3.0)),
-#                              fig_dir / f'regions_sample_{idx:06d}', pdf=False, dpi=200)
-#                     fig_done = True
-#                 for kd in SURF_KINDS:
-#                     mm, mf, w = _floor_points(kd, lay)
-#                     acc_floor[kd].add(mm, mf, w, region[_floor_tri_idx(kd, lay)])
-#                 for k, r in runs.items():
-#                     out_hw, yn = predict(r['arch'], r['model'], r['normalizer'], ts)
-#                     mm, mf, w, t_idx = _surface_points(r['arch'], lay, out_hw, yn)
-#                     acc[k].add(mm, mf, w, region[t_idx])
-#         print(f'  [{gi + 1}/{len(groups)}] {name}  (amostras {len(subs)}, '
-#               f'{(time.time() - t0) / 60:.1f} min)', flush=True)
-#
-#     subs_arr = np.array(subs)
-#     res = dict(n_samples=len(subs), n_by_subset={s: int((subs_arr == s).sum()) for s in SUBSETS},
-#                params=params, regions=list(REGIONS),
-#                n_triangles_by_region={n: int(c) for n, c in zip(REGIONS, n_tri_region)},
-#                note='L1_A/L2_A de cada região normalizados pela área da região, em % do B_ref '
-#                     'GLOBAL; area_frac = área da região / área total; L1_contrib_frac = '
-#                     'fração de ∫e dA total vinda da região',
-#                runs={k: dict(arch=r['arch'], loss=r['loss'], run=r['run'],
-#                              surface_kind=_surface_kind(r['arch']), **acc[k].report())
-#                      for k, r in runs.items()},
-#                floor_surface={kd: acc_floor[kd].report() for kd in SURF_KINDS})
-#     (out_dir / 'regions.json').write_text(json.dumps(res, indent=2))
-#     print(f'\n{len(subs)} amostras — erro de superfície por região, % do B_ref global '
-#           f'(L1_A / L2_A) [fração da área | fração do L1_A total]')
-#     head = ''.join(f'{n:>34s}' for n in REGIONS)
-#     print(f"  {'':26s}{head}")
-#     items_ = [(k, v) for k, v in res['runs'].items()] + \
-#              [('piso ' + kd, v) for kd, v in res['floor_surface'].items()]
-#     for k, v in items_:
-#         cells = ''.join(f"{v[n]['L1_area_pct']:6.2f} /{v[n]['L2_area_pct']:6.2f} "
-#                         f"[{v[n]['area_frac']:.2f}|{v[n]['L1_contrib_frac']:.2f}]".rjust(34)
-#                         for n in REGIONS)
-#         print(f'  {k:26s}{cells}')
-#     print(f"salvo em {out_dir / 'regions.json'}; figura em {fig_dir}")
+    return res
 
 
 TORQUE_TMP = Path('data/temp')     # soluções FEMM das varreduras (torque_theta_e{,_batch}/)
@@ -1231,11 +1229,9 @@ if __name__ == '__main__':
     p_sur.add_argument('--out', type=Path, default=OUT_ROOT / 'plots' / 'surface_error')
     p_rg = sp.add_parser('regions', help='erro de superfície por faixas de distância (quinas/fronteira/interior)')
     p_rg.add_argument('n', nargs='?', type=int, default=None, help='nº de amostras (default: todas)')
-    # [REMOVIDO] --d-int / --d-canto (região fixa por triângulo) -> --d / --d-max / --n-bins
-    # p_rg.add_argument('--d-int', type=float, default=None, help='mm (default: 1 passo radial da grade)')
-    # p_rg.add_argument('--d-canto', type=float, default=None, help='mm (default: 2 passos radiais)')
     p_rg.add_argument('--d', type=float, nargs='+', default=list(REGIONS_D_MM),
-                      help=f'larguras de faixa da tabela, mm (default: {list(REGIONS_D_MM)})')
+                      help=f'larguras de faixa da tabela, mm (default: {REGIONS_D_MM[0]:.4f} = '
+                           f'passo angular da grade no menor raio)')
     p_rg.add_argument('--d-max', type=float, default=REGIONS_D_MAX_MM,
                       help=f'maior d das curvas, mm (default: {REGIONS_D_MAX_MM})')
     p_rg.add_argument('--n-bins', type=int, default=REGIONS_N_BINS,
@@ -1298,7 +1294,6 @@ if __name__ == '__main__':
         run_surface(None if a.idx is None else int(a.idx), a.loss or 'mae', a.data, a.out,
                     pct=a.pct, eval_dir=a.eval_data)
     elif a.cmd == 'regions':
-        # [REMOVIDO] run_regions(a.out, a.fig, a.n, a.d_int, a.d_canto, a.ang_canto, a.subset)
         run_regions(a.out, a.fig, a.n, a.d, a.d_max, a.n_bins, a.bin_scale, a.ang_canto, a.subset)
     elif a.cmd == 'torque':
         run_torque(a.mode, a.out, a.loss, a.archs, a.femm, a.idx, a.n_theta,

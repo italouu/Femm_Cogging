@@ -675,6 +675,11 @@ def run_render():
     ev = _j(SRC / 'eval_smooth.json')
     tt = _j(SRC / 'train_table.json')
     rg = _j(SRC / 'regions.json')
+    if rg is not None and 'by_d' in next(iter(rg['runs'].values()), {}):
+        raise SystemExit('artigo_v1 render: dados/regions.json está no formato novo (faixas por '
+                         'distância, by_d[d][quinas|fronteira_sem_quinas|interior|fronteira]); este '
+                         'script lê só o formato antigo (interior/interface/canto por triângulo) e não '
+                         'foi adaptado.')
     sat = _j(SRC / 'saturation.json')
     tm = _j(SRC / 'timing.json')
     nb = _j(SRC / 'check_nodal_b_femm.json')

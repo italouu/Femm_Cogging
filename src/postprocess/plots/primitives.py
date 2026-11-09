@@ -7,7 +7,8 @@ from pathlib import Path
 
 # Estilo das figuras (mesmo das baterias anteriores)
 MODEL_COLOR = {'FNO2d': '#2a78d6', 'FNO_GNN': '#eb6834', 'GNN_PostBase': '#1baf7a',
-               'FNO_BipartiteGNN': '#eda100', 'FNO_BipartiteGNN_Elem': '#8b4fc8'}
+               'FNO_BipartiteGNN': '#eda100', 'FNO_BipartiteGNN_Elem': '#8b4fc8',
+               'FNO_SplitGNN': '#c2185b'}
 GT_COLOR, INK, INK2, GRID = '#0b0b0b', '#0b0b0b', '#52514e', '#e4e3df'
 B_VMAX = 2.5              # T -- mesma escala em todas as figuras de |B|
 

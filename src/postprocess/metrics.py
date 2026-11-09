@@ -102,7 +102,7 @@ def grid_mesh_overlay(xy, tri, b1, b2, r_in, r_ext, n_r, n_a,
     3,670% (2), 3,669% (3); Monte Carlo 20M pontos 3,670 ± 0,004%; L2 17,584% em todos.
     Retorna dict de arrays por ponto de quadratura:
       cell [Q] índice da célula (row-major), tri [Q] triângulo do FEMM, w [Q] peso (mm²),
-      mag [Q] |B|_FEMM (T);
+      mag [Q] |B|_FEMM (T), xy [Q,2] coordenadas do ponto (mm; regiões por distância);
     e 'area_cells' (Σ área dos quadriláteros) para conferir a cobertura.
     O erro de uma saída em grade G [H,W] é então e_q = | |G|[cell_q] - mag_q |."""
     import shapely
@@ -170,6 +170,7 @@ def grid_mesh_overlay(xy, tri, b1, b2, r_in, r_ext, n_r, n_a,
                               - (sh[:, 3, 0] - sh[:, 1, 0]) * (sh[:, 2, 1] - sh[:, 0, 1])).sum()
     return dict(cell=c_idx[q_piece].astype(np.int32), tri=t.astype(np.int32),
                 w=q_w.astype(np.float32), mag=np.hypot(bx, by).astype(np.float32),
+                xy=q.astype(np.float64),
                 area_cells=float(area_cells))
 
 

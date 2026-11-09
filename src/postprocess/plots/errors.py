@@ -105,32 +105,125 @@ def fig_surface_error_map(res, xy, elems, E, archs, iface, floor):
     return fig
 
 
-def fig_regions(xy, elems, region, iface, corners, names, title, zoom=None):
-    """Verificação da estratificação espacial: triângulos coloridos pela região
-    (names[código]), fronteiras entre materiais e vértices de canto; zoom = (x, y, meia
-    largura) mm opcional (2º painel)."""
+def _geom_patch(geom, **kw):
+    """PathPatch de um (Multi)Polygon do shapely (com furos)."""
+    import shapely
+    from matplotlib.patches import PathPatch
+    from matplotlib.path import Path as MPath
+    verts, codes = [], []
+    for poly in getattr(geom, 'geoms', [geom]):
+        if poly.is_empty or shapely.get_type_id(poly) != 3:
+            continue
+        for ring in [poly.exterior, *poly.interiors]:
+            c = np.asarray(ring.coords)
+            verts.append(c)
+            codes += [MPath.MOVETO] + [MPath.LINETO] * (len(c) - 2) + [MPath.CLOSEPOLY]
+    if not verts:
+        return None
+    return PathPatch(MPath(np.concatenate(verts), codes), **kw)
+
+
+BAND_COLOR = {'quinas': '#eb6834', 'fronteira_sem_quinas': '#2a78d6'}
+
+
+def fig_region_bands(xy, elems, iface, corners, geoms, title, zoom=None):
+    """Verificação das faixas por distância numa amostra e num d: as regiões reais
+    (geoms = {'quinas': Ω_q, 'fronteira_sem_quinas': Ω_f ∖ Ω_q}, buffer de Γ / 𝒱_c
+    recortado ao domínio, regions.band_polygons) sobre a malha, com Γ e 𝒱_c; o resto do
+    domínio é o interior. zoom = (x, y, meia largura) mm opcional (2º painel)."""
     import matplotlib.pyplot as plt
-    import matplotlib.tri as mtri
     from matplotlib.collections import LineCollection
-    from matplotlib.colors import ListedColormap
-    cols = ['#e4e3df', '#2a78d6', '#eb6834'][:len(names)]
-    tri = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems)
     n = 2 if zoom else 1
     fig, axs = plt.subplots(1, n, figsize=(7.5 * n, 7.5), squeeze=False)
     for k, ax in enumerate(axs[0]):
-        ax.tripcolor(tri, facecolors=region.astype(float), cmap=ListedColormap(cols),
-                     vmin=-0.5, vmax=len(names) - 0.5, edgecolors='none', rasterized=True)
-        ax.add_collection(LineCollection(xy[iface], colors=INK2, linewidths=0.4 if k else 0.2))
-        ax.plot(xy[corners, 0], xy[corners, 1], '.', color='k', ms=3 if k else 1)
+        ax.triplot(xy[:, 0], xy[:, 1], elems, color='#c9c8c3', lw=0.25 if k else 0.08)
+        for name, g in geoms.items():
+            pp = _geom_patch(g, facecolor=BAND_COLOR[name], edgecolor='none', alpha=0.55)
+            if pp is not None:
+                ax.add_patch(pp)
+        ax.add_collection(LineCollection(xy[iface], colors=INK2, linewidths=0.6 if k else 0.2))
+        ax.plot(xy[corners, 0], xy[corners, 1], '.', color='k', ms=4 if k else 1)
         ax.set_aspect('equal')
         ax.axis('off')
         if k:
             x, y, h = zoom
             ax.set(xlim=(x - h, x + h), ylim=(y - h, y + h))
-    for c, nm in zip(cols, names):
-        axs[0, 0].plot([], [], 's', color=c, label=nm)
-    axs[0, 0].plot([], [], '.', color='k', label='vértice de canto')
+    for name, c in BAND_COLOR.items():
+        axs[0, 0].plot([], [], 's', color=c, alpha=0.55,
+                       label={'quinas': 'Ω_q (quinas)',
+                              'fronteira_sem_quinas': 'Ω_f ∖ Ω_q (fronteira sem quinas)'}[name])
+    axs[0, 0].plot([], [], '-', color=INK2, label='Γ (interface entre materiais)')
+    axs[0, 0].plot([], [], '.', color='k', label='V_c (vértice de canto)')
     axs[0, 0].legend(frameon=False, loc='lower left')
     fig.suptitle(title, fontsize=10)
     fig.tight_layout()
     return fig
+
+
+def fig_region_curves(curves, keys, d_marks, title):
+    """Curvas acumuladas por distância: colunas = fronteira Ω_f(d) e quinas Ω_q(d); linhas =
+    loss (keys = {loss: [(rótulo, arch, chave em curves)]}). Em cada painel, a fração da
+    área (cinza tracejado; pontos da malha) e a fração do erro total η (uma curva por
+    modelo); d da tabela marcados. Eixo d em escala log."""
+    import matplotlib.pyplot as plt
+    losses = list(keys)
+    fig, axs = plt.subplots(len(losses), 2, figsize=(11, 3.6 * len(losses)),
+                            squeeze=False, sharex=True, sharey=True)
+    for i, loss in enumerate(losses):
+        for j, (band, name) in enumerate((('f', 'fronteira Ω_f(d)'), ('q', 'quinas Ω_q(d)'))):
+            ax = axs[i, j]
+            area_done = False
+            for lab, arch, ck in keys[loss]:
+                c = curves[ck]
+                d = c['d'][1:]
+                if not area_done and arch != 'FNO2d':
+                    ax.plot(d, 100 * c[f'{band}_area_frac'][1:], '--', color=INK2, lw=1.2,
+                            label='área')
+                    area_done = True
+                ax.plot(d, 100 * c[f'{band}_eta'][1:], '-', color=MODEL_COLOR.get(arch, INK2),
+                        lw=1.5, label=f'η {lab}')
+            for dm in d_marks:
+                ax.axvline(dm, color='#9a9994', lw=0.7, ls=':')
+            ax.set_xscale('log')
+            ax.set_title(f'{name} — loss {loss}')
+            if i == len(losses) - 1:
+                ax.set_xlabel('d [mm]')
+            if j == 0:
+                ax.set_ylabel('% da área / % do ∫e dA total')
+    axs[0, 0].legend(frameon=False, loc='upper left')
+    fig.suptitle(title, fontsize=10)
+    fig.tight_layout()
+    return fig
+
+
+# [REMOVIDO] fig_regions: triângulos coloridos pela região fixa (classify_triangles);
+# substituído por fig_region_bands (faixas reais por distância, buffer ∩ domínio).
+# def fig_regions(xy, elems, region, iface, corners, names, title, zoom=None):
+#     """Verificação da estratificação espacial: triângulos coloridos pela região
+#     (names[código]), fronteiras entre materiais e vértices de canto; zoom = (x, y, meia
+#     largura) mm opcional (2º painel)."""
+#     import matplotlib.pyplot as plt
+#     import matplotlib.tri as mtri
+#     from matplotlib.collections import LineCollection
+#     from matplotlib.colors import ListedColormap
+#     cols = ['#e4e3df', '#2a78d6', '#eb6834'][:len(names)]
+#     tri = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems)
+#     n = 2 if zoom else 1
+#     fig, axs = plt.subplots(1, n, figsize=(7.5 * n, 7.5), squeeze=False)
+#     for k, ax in enumerate(axs[0]):
+#         ax.tripcolor(tri, facecolors=region.astype(float), cmap=ListedColormap(cols),
+#                      vmin=-0.5, vmax=len(names) - 0.5, edgecolors='none', rasterized=True)
+#         ax.add_collection(LineCollection(xy[iface], colors=INK2, linewidths=0.4 if k else 0.2))
+#         ax.plot(xy[corners, 0], xy[corners, 1], '.', color='k', ms=3 if k else 1)
+#         ax.set_aspect('equal')
+#         ax.axis('off')
+#         if k:
+#             x, y, h = zoom
+#             ax.set(xlim=(x - h, x + h), ylim=(y - h, y + h))
+#     for c, nm in zip(cols, names):
+#         axs[0, 0].plot([], [], 's', color=c, label=nm)
+#     axs[0, 0].plot([], [], '.', color='k', label='vértice de canto')
+#     axs[0, 0].legend(frameon=False, loc='lower left')
+#     fig.suptitle(title, fontsize=10)
+#     fig.tight_layout()
+#     return fig

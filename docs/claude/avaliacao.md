@@ -90,22 +90,101 @@ O piso P1 não é limite inferior rigoroso.
 
 ## 2. Regiões (`regions`, `src/postprocess/regions.py`)
 
-Cada triângulo do FEMM é classificado pela prioridade **canto > interface > interior**
-(`classify_triangles`). As distâncias são exatas (`shapely.dwithin`).
-- **Interface**: a até $d_{int}$ de uma aresta entre elementos de materiais diferentes
-  (`interface_edges`).
-- **Canto**: a até $d_{canto}$ de um vértice de canto. Vértice de canto (`corner_nodes`) é um
-  vértice de fronteira com 2 arestas de interface e mudança de direção $> 30°$, ou com
-  $\ge 3$ arestas de interface, ou que toca $\ge 3$ materiais.
-- Padrões: $d_{int} = \Delta r = 18/138$ mm, $d_{canto} = 2\Delta r$, ângulo 30°.
+As regiões são **faixas por distância**, com a largura $d$ aberta, e os elementos são
+**cortados**: cada ponto de quadratura de §1 é atribuído pela **sua** distância, e não pelo
+triângulo.
 
-Os pontos de quadratura de §1 são acumulados por região do triângulo (`RegionAccum`). Para
-cada região são reportados:
-- $L1_A$ e $L2_A$ normalizados pela área **da região**, em % do $B_{ref}$ **global**;
-- a fração da área;
-- a fração de $\int e\,dA$.
+**Definição**
+- $\Gamma$ = união das arestas de interface (`interface_edges`: arestas compartilhadas por
+  elementos de materiais diferentes; a borda externa do domínio fica de fora).
+- $\mathcal V_c$ = vértices de canto (`corner_nodes`): vértice de fronteira com 2 arestas de
+  interface e mudança de direção $> 30°$ (`--ang-canto`), ou com $\ge 3$ arestas de interface,
+  ou que toca $\ge 3$ materiais.
+- $\Omega_f(d) = \{x : \mathrm{dist}(x,\Gamma) \le d\}$ (fronteira),
+  $\Omega_q(d) = \{x : \mathrm{dist}(x,\mathcal V_c) \le d\}$ (quinas),
+  $\Omega_{int}(d) = \Omega \setminus \Omega_f(d)$ (interior). O mesmo $d$ vale para as duas.
+- dist = distância euclidiana exata no plano (ponto↔segmento, ponto↔ponto).
+- Como $\mathcal V_c$ são vértices de $\Gamma$, $\mathrm{dist}_f \le \mathrm{dist}_q$ ponto a
+  ponto e $\Omega_q(d) \subseteq \Omega_f(d)$ para todo $d$.
 
-Saída: `dados/regions.json` e `plots/regions_sample_*.png`.
+**Distâncias** (`band_distances`, uma vez por amostra e por conjunto de pontos: quadratura da
+malha, com xy = baricêntricas · vértices, e overlay da grade, com `grid_mesh_overlay['xy']`;
+reutilizadas por todas as runs e pisos):
+- $\mathcal V_c$: `cKDTree` (exato).
+- $\Gamma$ (`_dist_to_segments`): cada aresta é dividida em sub-segmentos de no máximo
+  0,02 mm. A união é o mesmo conjunto, então isso não é densificar. Para cada ponto, calcula
+  a distância exata aos sub-segmentos dos $k$ pontos médios mais próximos ($k$ = 16, depois
+  64). O resultado é aceito quando o limite inferior dos demais, $|p - m_k| - h/2$, é
+  $\ge$ o mínimo. Sobra um fallback `shapely.STRtree.query_nearest`, que não foi acionado na
+  amostra conferida.
+- Pontos com $\mathrm{dist}_f > d_{max}$ **garantido** ficam com um limite superior, já que só
+  caem no bin de excesso.
+- Conferido contra o shapely em 200 mil pontos: diferença máxima de 4e-15 mm.
+- $\mathrm{dist}_f$ é levado a $\min(\mathrm{dist}_f, \mathrm{dist}_q)$ para que a inclusão
+  valha também no arredondamento (violação medida: 0).
+
+**Acumulação** (`BandAccum`), com $e = ||B|_{modelo} - |B|_{FEMM}|$ e peso $w$ do ponto:
+- **Histogramas** em $\mathrm{dist}_f$ e em $\mathrm{dist}_q$ de $\Sigma w$, $\Sigma e w$ e
+  $\Sigma e^2 w$ (`band_edges`):
+  - bins uniformes (`--bin-scale lin`, padrão) ou log entre 0 e `--d-max` (padrão 2 mm), com
+    `--n-bins` (padrão 400, ou seja, 0,005 mm);
+  - os `--d` são inseridos como bordas exatas;
+  - bin $k$ = $\{e_{k-1} < \mathrm{dist} \le e_k\}$, e o último bin é $\{\mathrm{dist} > d_{max}\}$.
+  - A soma acumulada dá $\Omega_f(d)$ e $\Omega_q(d)$ em qualquer borda, sem reprocessar.
+- **Regiões disjuntas por $d$ da lista**: quinas $\Omega_q$, fronteira sem quinas
+  $\Omega_f \setminus \Omega_q$ ($\mathrm{dist}_f \le d < \mathrm{dist}_q$) e interior.
+  - São acumuladas **diretamente** pelo código do ponto (`band_points`), com os dois limiares
+    no mesmo ponto.
+  - Pela inclusão acima, também valem como diferença dos dois histogramas 1-D; o teste
+    confere que as duas formas coincidem.
+- **Global**: $\Sigma w$, $\Sigma e w$, $\Sigma e^2 w$ e $\Sigma |B|_{FEMM}^2 w$ ($B_{ref}$).
+
+**Saída**
+- `dados/regions.json`, com `params` (todos os valores usados), `timing`, `checks` (violação da
+  inclusão, pontos no fallback) e, por run (`runs`) e por piso (`floor_surface`):
+  - `point_set` (`mesh` ou `overlay`);
+  - `B_ref_global` e `total` ($L1_A$/$L2_A$ em %, iguais aos do `eval` nas mesmas amostras);
+  - `by_d[d]` com as regiões `quinas`, `fronteira_sem_quinas`, `interior` (disjuntas) e
+    `fronteira` ($\Omega_f$ inteira). Cada uma traz $L1_A$ e $L2_A$ normalizados pela área
+    **da região**, em % do $B_{ref}$ **global** (e em T), `area_frac` e `L1_contrib_frac`
+    (fração de $\int e\,dA$ total).
+- `dados/regions_curves.npz`: por chave (run ou `piso_<tipo>`) e campo,
+  `<chave>__d` (bordas) e, para `f` ($\Omega_f$) e `q` ($\Omega_q$):
+  - `_area_frac`, `_eta` (fração do erro total) e `_L1_pct`/`_L2_pct` da região;
+  - as somas cruas `_cum_w`/`_cum_e`/`_cum_e2`.
+- `plots/regions_curvas.{png,pdf}`: colunas fronteira e quinas, linhas mse e mae. Em cada
+  painel, a fração da área (cinza tracejado) e η por modelo; os $d$ da tabela ficam marcados e
+  o eixo $d$ é log.
+- `plots/regions_bands_sample_<idx>_d<d>.png` (ponto decimal como `p`, ex. `d0p05`), na 1ª amostra e para cada $d$: as faixas reais
+  (buffer de $\Gamma$ e de $\mathcal V_c$ recortados ao domínio, `band_polygons`) sobre a
+  malha, com zoom no entreferro.
+
+**Resolução da quadratura** (`tests/check_regions_bands.py`, amostra 5408): erro relativo da
+área de $\Omega_f(d)$ e $\Omega_q(d)$ pela soma dos pesos × área exata (shapely: buffer ∩
+domínio).
+
+| $d$ [mm] | $\Omega_f$ malha | $\Omega_f$ overlay | $\Omega_q$ malha | $\Omega_q$ overlay |
+|---|---|---|---|---|
+| 0,05 | −8,2% | +4,4% | −0,10% | +0,11% |
+| 0,1 | +0,70% | +4,5% | +0,27% | −0,27% |
+| 0,2 | −0,39% | +0,81% | +0,09% | +0,18% |
+| 0,5 | −0,10% | +0,48% | −0,05% | −0,01% |
+
+Com $d \le 0{,}1$ mm, $\Omega_f$ passa de 1%: a faixa é mais estreita que os subtriângulos da
+quadratura nos elementos grandes ao longo de $\Gamma$ (malha n_sub=2, overlay n_sub=1). O n_sub
+não foi aumentado.
+
+**Tempo** (1 processo, só a parte das regiões): 0,93 s/amostra antes (`classify_triangles` +
+`RegionAccum`) contra cerca de 30 s depois (7,4 M distâncias exatas por amostra: 3,2 M da
+malha e 4,2 M do overlay). As distâncias rodam nos workers do parse.
+`regions` completo, 32 amostras do teste, 4 workers (RTX 4080, 32 GB): 3,5 s/amostra de parede antes contra 11,0 s
+depois (faixas 29,6 s por amostra no worker; acumulação de 10 runs + 3 pisos 4,3 s no processo
+principal). Validação nas mesmas 32 amostras: total e soma das 3 regiões disjuntas = `eval`
+(diferença ≤ 1e-7 pp em $L1_A$/$L2_A$, $B_{ref}$ idêntico); curvas monótonas e
+$\Omega_q \subseteq \Omega_f$ sem violação.
+
+`classify_triangles` (região fixa por triângulo) continua no módulo só para
+`scripts/artigo_v1.py` (mapa F3a e pontos de zoom); `RegionAccum` está comentado.
 
 ## 3. Torque (`torque {theta-e,batch,scatter}`, `src/postprocess/torque.py`)
 

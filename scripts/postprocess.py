@@ -56,8 +56,9 @@ Subcomandos:
       plots/regions_map_sample_*_d*.png.
 
   torque {theta-e,batch,scatter} [--loss L] [--archs ...] [--femm] — torque pelo tensor
-      de Maxwell na faixa do entreferro (B por elemento) × FEMM T22, para as 5 archs da loss
-      escolhida. Soluções FEMM em data/temp/torque_theta_e{,_batch}/ (--femm resolve).
+      de Maxwell na faixa do entreferro (B por elemento) × FEMM T22, para as runs da loss
+      escolhida (bateria bldc + FNO_SplitGNN; --archs filtra; Split = N_base, média das 3
+      cópias do material do elemento). Soluções FEMM em data/temp/torque_theta_e{,_batch}/ (--femm resolve).
       Saída: dados/torque/.
 
   saturation [N] [--knee-frac F ...] [--check-femm] — só o gabarito: curva B-H do aço
@@ -100,7 +101,7 @@ import torch
 from scripts.build_chunks_main import MAX_SAMPLES
 from src.configs.datagen import DatagenConfig
 from src.data_gen.parsers.ans_parsing import read_ans
-from src.postprocess.fields import elem_to_nodes, gap_radius_mm, mag
+from src.postprocess.fields import elem_to_nodes, gap_radius_mm, mag, split_corner_values
 from src.data_gen.parsers.split_layout import parse_split_smooth
 from src.postprocess.inference import (ARCHS, INTERP_MODE, RUN_ORDER, find_runs, find_split_runs,
                                        floor_nodes, load_model, load_set, predict, predict_split,
@@ -525,7 +526,11 @@ def _split_points(lay, y_base):
     gabarito elem_y do layout (piso P1_mat)."""
     mq = lay['mesh_quad']
     M, K = mq['mag'].shape
-    V = np.asarray(y_base, np.float64)[lay['split']['cross_edge_index'][0].reshape(M, 3)]
+    # [REMOVIDO] indexação inline das cópias; a mesma conta agora em fields.split_corner_values
+    # (compartilhada com o torque). Apagar após conferir.
+    # V = np.asarray(y_base, np.float64)[lay['split']['cross_edge_index'][0].reshape(M, 3)]
+    V = split_corner_values(lay['split'], y_base)
+    assert V.shape[0] == M
     mm = np.hypot(V[..., 0] @ mq['bary'].T, V[..., 1] @ mq['bary'].T)
     w = np.repeat((mq['area'] / K)[:, None], K, axis=1)
     return mm.ravel(), mq['mag'].ravel(), w.ravel(), 'mesh'
@@ -1013,8 +1018,22 @@ THETA_E_N, THETA_E_SEED = 5, 0     # amostras padrão do theta-e (teste, 1 por f
 
 
 def _torque_runs(loss, archs):
+    """Runs da loss: bateria bldc (load_set) + FNO_SplitGNN da bateria split (best.pth);
+    archs = None -> todas."""
     runs = load_set(ROOT_S, losses=(loss,))
-    return {k: r for k, r in runs.items() if archs is None or r['arch'] in archs}
+    runs = {k: r for k, r in runs.items() if archs is None or r['arch'] in archs}
+    if archs is None or 'FNO_SplitGNN' in archs:
+        d = find_split_runs(ROOT_S)[loss]
+        model, normalizer, _, epoch = load_model(d)
+        runs[f'FNO_SplitGNN_{loss}'] = dict(arch='FNO_SplitGNN', loss=loss, run=d.name,
+                                            run_dir=str(d), model=model, normalizer=normalizer,
+                                            epoch=int(epoch))
+    return runs
+
+
+def _with_split(runs):
+    """parse_torque_sample monta o layout da Split só se ela estiver entre as runs."""
+    return any(r['arch'] == 'FNO_SplitGNN' for r in runs.values())
 
 
 def _torque_sweep_dir(idx, work_dir=TORQUE_TMP):
@@ -1078,7 +1097,8 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
             T = {'femm_T22': [3 * r['T22_sector'] for r in ref], 'gt': [], 'gt_smooth': [],
                  **{k: [] for k in pk}}
             with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
-                futs = [ex.submit(parse_torque_sample, sw / 'raw' / f'theta_{k:03d}.ans.gz', row)
+                futs = [ex.submit(parse_torque_sample, sw / 'raw' / f'theta_{k:03d}.ans.gz', row,
+                                     _with_split(runs))
                         for k in range(len(ref))]
                 for k, f in enumerate(futs):
                     t = sample_torques(f.result(), row, runs)
@@ -1122,7 +1142,8 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
             for n, i in enumerate(ids, 1):
                 d = root / f'sample_{i:06d}'
                 ks = [k for k in range(n_theta) if (d / f'theta_{k:02d}.json').exists()][:limit]
-                futs = [ex.submit(parse_torque_sample, d / f'theta_{k:02d}.ans.gz', rows[i])
+                futs = [ex.submit(parse_torque_sample, d / f'theta_{k:02d}.ans.gz', rows[i],
+                                     _with_split(runs))
                         for k in ks]
                 cur = dict(theta_e_deg=[], femm=[], gt=[], smooth=[], **{kk: [] for kk in pk})
                 for k, f in zip(ks, futs):
@@ -1158,7 +1179,8 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
         with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
             for b in range(0, len(ids), 32):
                 batch = ids[b:b + 32]
-                futs = [ex.submit(parse_torque_sample, raw_dir / f'sample_{i:06d}.ans.gz', rows[i])
+                futs = [ex.submit(parse_torque_sample, raw_dir / f'sample_{i:06d}.ans.gz', rows[i],
+                                     _with_split(runs))
                         for i in batch]
                 for i, f in zip(batch, futs):
                     t = sample_torques(f.result(), rows[i], runs)
@@ -1480,7 +1502,7 @@ if __name__ == '__main__':
                            'TESTE do split.json da run de referência, 1 por faixa de 2 A de corrente, '
                            'seed 0 — select_batch_samples)')
     p_tq.add_argument('--loss', default='mae', choices=('mse', 'mae'))
-    p_tq.add_argument('--archs', nargs='+', default=None, help='default: as 5 archs')
+    p_tq.add_argument('--archs', nargs='+', default=None, help='default: todas (bateria bldc + FNO_SplitGNN)')
     p_tq.add_argument('--femm', action='store_true', help='resolve as varreduras no FEMM antes')
     p_tq.add_argument('--n-theta', type=int, default=None, help='default: 24 (theta-e) / 16 (batch)')
     p_tq.add_argument('--n-samples', type=int, default=80, help='batch: nº de amostras')

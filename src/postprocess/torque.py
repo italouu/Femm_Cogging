@@ -15,11 +15,14 @@ Método:
   gt     : B exato curl(A) por elemento (parse_elem_structure) -- o method_check é
            gt × FEMM T22 (mede o erro do próprio método da faixa, sem modelo).
   smooth : B suavizado no centróide (gabarito da Elem).
-  pred   : saída do modelo levada aos elementos -- Elem: por elemento; demais: valores
-           nodais -> média dos 3 vértices (fields.nodes_to_elem, P1 no centróide).
-Generalização: qualquer run/loss das 5 archs. Referencial: band_torque recebe (Bx, By);
-o gabarito smooth e as saídas das runs são POLARES (Br, Bθ) -> girados para xy pelo ângulo
-do ponto (centróide; nó, antes da média).
+  pred   : saída do modelo levada aos elementos -- Elem: por elemento; FNO_SplitGNN: N_base
+           (cópias vértice×material; não a N_aux), média das 3 cópias do material do
+           elemento (fields.split_corner_values, as mesmas do P1_mat do regions); demais:
+           valores nodais -> média dos 3 vértices (fields.nodes_to_elem, P1 no centróide).
+Archs: as do artigo (FNO2d, FNO_GNN, FNO_BipartiteGNN_Elem, FNO_SplitGNN) e as demais da
+bateria bldc, mse/mae. Referencial: band_torque recebe (Bx, By); o gabarito smooth e as
+saídas das runs são POLARES (Br, Bθ) -> girados para xy pelo ângulo do ponto (centróide;
+nó ou cópia, no canto do elemento, antes da média).
 """
 import csv
 import gzip
@@ -147,10 +150,11 @@ def polar_to_xy(B, x, y):
     return np.stack([B[:, 0] * c - B[:, 1] * s, B[:, 0] * s + B[:, 1] * c], axis=1)
 
 
-def parse_torque_sample(path, row):
+def parse_torque_sample(path, row, with_split=False):
     """1 .ans.gz -> layouts para os modelos (samples.parse_smooth com Elem) + o que o torque
     usa: gt exato por elemento (xy), smooth no centróide (xy), material, centróide, área.
-    O `.ans` é lido uma vez (read_ans) e passado aos dois parsers."""
+    with_split: + lay['split'] (parse_split_smooth, layout do FNO_SplitGNN).
+    O `.ans` é lido uma vez (read_ans) e passado aos parsers."""
     from src.data_gen.parsers.elem_structure import parse_elem_structure
     from src.data_gen.parsers.ans_parsing import read_ans
     from src.postprocess.samples import ANG_1, ANG_2, N_A, N_R, parse_smooth
@@ -166,13 +170,30 @@ def parse_torque_sample(path, row):
                          mat=lay['elem_mat'].astype(np.int64), cen=cen,
                          area=d_ex['node_x'][:, 4].astype(np.float64),
                          node_xy=nodes[:, :2].astype(np.float64))
+    if with_split:
+        from src.data_gen.parsers.split_layout import parse_split_smooth
+        lay['split'] = parse_split_smooth(path, r_in, r_ext, ang_1=ANG_1, ang_2=ANG_2, n_r=N_R,
+                                          n_a=N_A, ans=ans)
     return lay
+
+
+def split_elem_xy(lay, y_base):
+    """N_base do FNO_SplitGNN (polar, [K_base,2]: saída ou gabarito elem_y) -> (Bx, By) por
+    elemento [M,2]: as 3 cópias do material do elemento (fields.split_corner_values) giradas
+    para xy no canto do elemento (posição da cópia), depois a média."""
+    from src.postprocess.fields import split_corner_values
+    V = split_corner_values(lay['split'], y_base)
+    P = lay['torque']['node_xy'][lay['tri']].reshape(-1, 2)
+    return polar_to_xy(V.reshape(-1, 2), P[:, 0], P[:, 1]).reshape(-1, 3, 2).mean(axis=1)
 
 
 def pred_elem_xy(arch, run, lay, ts):
     """Saída do modelo -> (Bx, By) por elemento [M,2]."""
     from src.postprocess.fields import nodes_to_elem
-    from src.postprocess.inference import predict
+    from src.postprocess.inference import predict, predict_split
+    if arch == 'FNO_SplitGNN':
+        _, y_base = predict_split(run['model'], run['normalizer'], lay['split'])
+        return split_elem_xy(lay, y_base)
     _, yn = predict(arch, run['model'], run['normalizer'], ts)
     yp = yn.float().cpu().numpy().astype(np.float64)
     tq = lay['torque']

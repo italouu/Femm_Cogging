@@ -41,3 +41,13 @@ def elem_to_nodes(lay, B_elem):
 def nodes_to_elem(lay, B_node):
     """[S,2] por nó -> [M,2] por elemento (média dos 3 vértices = P1 no centróide)."""
     return B_node[lay['tri']].mean(axis=1)
+
+
+def split_corner_values(split, y_base):
+    """N_base do FNO_SplitGNN [K_base,2] -> [M,3,2]: em cada elemento, os valores das 3
+    cópias vértice×material do material DO elemento (Edge_aux de parse_split_smooth: linha 0 =
+    cópia, na ordem dos vértices de elems[:, :3] = lay['tri']). Base do P1_mat (superfície,
+    regions) e do B por elemento do torque."""
+    cei = split['cross_edge_index']
+    M = cei.shape[1] // 3
+    return np.asarray(y_base, np.float64)[cei[0].reshape(M, 3)]

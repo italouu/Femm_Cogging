@@ -212,8 +212,31 @@ $$ T = -\,\frac{3\,L}{\mu_0\,(r_2 - r_1)}\sum_{e} r_e\, B_{r,e}\, B_{\theta,e}\,
 - `smooth` = $\mathbf B$ suavizado no centróide;
 - `pred_<arch>`:
   - Elem: a saída por elemento, convertida para $(B_x,B_y)$ no centróide;
+  - FNO_SplitGNN: a saída da **N_base** (cópias vértice×material; não a N_aux por
+    elemento). Em cada elemento, entram as 3 cópias do material do elemento
+    (`fields.split_corner_values`, as mesmas do P1_mat do `regions`). Cada uma é convertida
+    para $(B_x,B_y)$ no canto do elemento, e depois se tira a média (`torque.split_elem_xy`).
+    O `parse_torque_sample(..., with_split=True)` monta o layout da Split só quando ela está
+    entre as runs;
   - demais: a saída nodal convertida para $(B_x,B_y)$ no nó e depois a média dos 3 vértices
     (`fields.nodes_to_elem`).
+
+**Runs** (`_torque_runs`): as da bateria `bldc` da loss mais a FNO_SplitGNN da bateria
+`split` (`find_split_runs`). `--archs` filtra; as do artigo são FNO2d, FNO_GNN,
+FNO_BipartiteGNN_Elem e FNO_SplitGNN.
+
+**Conferência do caminho da Split** (`python -m tests.check_split_torque_path [N]`): aplica o
+caminho ao gabarito da Split (`elem_y`), em 80 soluções do batch (5 amostras × 16 θe).
+- **Elementos com os 3 vértices "normais":** todos os vizinhos de cada vértice são do mesmo
+  material, e nenhum vértice fica na costura. Neles, $|\Delta\mathbf B|$ contra o `smooth`
+  é ≤ 2,2e-7 T, o arredondamento do float32 do `elem_y`. Isso confirma o caminho (índices,
+  rotação e média).
+- **Vértices de interface e da costura 0°/120°:** o FEMM dá um valor nodal por elemento,
+  enquanto o N_base usa a média dos elementos do mesmo material. A diferença chega a 0,49 T
+  num elemento.
+- **Efeito no torque:** $|T_{split}(\text{gabarito}) - T_{smooth}|$ ≤ 0,44 mN·m (0,7% no
+  máximo). Para comparação, a diferença entre o `smooth` e o `gt` tem mediana de 19,7 mN·m.
+  É uma diferença do gabarito, a mesma do piso P1_mat, e não do caminho.
 
 | Modo | Amostras | Saída |
 |---|---|---|

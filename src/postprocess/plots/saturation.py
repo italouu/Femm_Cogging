@@ -122,6 +122,48 @@ def fig_sat_error(rep, bh, knee, title, archs, colors, labels=None):
     return fig
 
 
+def fig_sat_error_mu(bh, knee, series, colors, labels=None, b_max=2.6):
+    """L1 (% do B_ref em Ω) × |B| da referência em intervalos de largura fixa (eixo esquerdo,
+    uma linha com marcadores por arch, no centro do intervalo) e μ_eff(|B|) = B/(μ0·H(B)) da
+    curva B-H (eixo direito, tracejado cinza). Verticais pontilhadas no pico de μ_eff e no
+    joelho. Legenda única, sem título. series = {arch: (B_centro [T], L1 [%])}."""
+    import matplotlib.pyplot as plt
+    labels = labels or {}
+    c_mu = '#8c8c88'
+    fig, ax = plt.subplots(figsize=(8, 4.6))
+    for a, (bx, l1) in series.items():
+        ax.plot(bx, l1, '-', color=colors[a], lw=1.5, marker='o', ms=3, label=f'L1 {labels.get(a, a)}')
+    ax.set_xlabel('|B| da referência suavizada [T]')
+    ax.set_ylabel('L1 [% do B_ref em Ω]')
+    ax.set_ylim(0, None)
+    xmax = min(b_max, max(max(s[0]) for s in series.values()) + 0.1)
+    ax.set_xlim(0, xmax)
+    ax2 = ax.twinx()
+    b = np.linspace(1e-3, xmax, 1000)
+    ax2.plot(b, bh.mu_eff(b), '--', color=c_mu, lw=1.4, label='μ_eff = B/(μ0·H(B)) (curva B-H)')
+    ax2.set_ylabel('μ_eff', color=c_mu)
+    ax2.tick_params(axis='y', colors=c_mu)
+    ax2.spines['right'].set_visible(True)
+    ax2.set_ylim(0, None)
+    ax2.grid(False)
+    for B_, nome, curto in ((knee['B_mu_max_T'], 'pico de μ_eff', 'pico μ_eff'),
+                            (knee.get('B_knee_T'), f"joelho (μ_eff = {100 * knee['frac']:.0f}% do máx.)",
+                             'joelho')):
+        if B_ is None:
+            continue
+        ax.axvline(B_, color='#52514e', ls=':', lw=1.2, label=f'{nome}: {B_:.2f} T')
+        ax.text(B_ - 0.015, 0.03, f'{curto}\n{B_:.2f} T', color='#52514e', fontsize=7.5, va='bottom',
+                ha='right', transform=ax.get_xaxis_transform())
+    ax.set_zorder(ax2.get_zorder() + 1)
+    ax.patch.set_visible(False)
+    h1, l1_ = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    fig.legend(h1 + h2, l1_ + l2, loc='upper center', bbox_to_anchor=(0.5, 0.0), ncol=3, frameon=False,
+               fontsize=7.5)
+    fig.tight_layout()
+    return fig
+
+
 def fig_sat_error_bh(bh, knee, series, colors, labels=None):
     """Erro × ponto de operação sobre a curva B-H. Eixo x: H [A/m] (log). Eixo esquerdo:
     B(H) do aço (interpolação do FEMM, pontos da curva marcados). Eixo direito: L1 (% do B_ref

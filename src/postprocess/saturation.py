@@ -266,6 +266,31 @@ def sat_report(acc, b_ref, n_int=50):
     return out
 
 
+def sat_fixed_bins(sums, edges, b_ref, width=0.04):
+    """Reagrupa o histograma do SatAccum (bins regulares de edges, último = overflow) em
+    intervalos de largura fixa `width` em |B| (múltiplo da largura dos bins; o overflow fica
+    fora dos intervalos, mas conta na área total). Por intervalo: centro, faixa, fração da
+    área de aço e L1/L2 (% do b_ref) = ∫e dA / A do intervalo. Só soma o já acumulado."""
+    W, EW, E2W = (np.asarray(s, float) for s in sums)
+    E = np.asarray(edges, float)
+    dw = np.diff(E)
+    k = int(round(width / dw[0]))
+    assert np.allclose(dw, dw[0]) and abs(k * dw[0] - width) < 1e-9, 'width não é múltiplo dos bins'
+    nreg = len(E) - 1
+    g = np.arange(nreg) // k
+    ng = int(g[-1]) + 1
+    A = W.sum()
+    out = []
+    for j in range(ng):
+        s = g == j
+        w, ew, e2w = W[:nreg][s].sum(), EW[:nreg][s].sum(), E2W[:nreg][s].sum()
+        lo, hi = float(E[j * k]), float(E[min((j + 1) * k, nreg)])
+        out.append(dict(B_center_T=0.5 * (lo + hi), B_lo_T=lo, B_hi_T=hi, area_frac=float(w / A),
+                        L1_pct=float(100 * ew / w / b_ref) if w > 0 else None,
+                        L2_pct=float(100 * np.sqrt(e2w / w) / b_ref) if w > 0 else None))
+    return out
+
+
 def sat_bh_bands(sums, edges, b_ref, cuts):
     """Faixas de |B| delimitadas por `cuts` (crescentes, ex.: [B do pico de μ_eff, B do
     joelho]) a partir do histograma do SatAccum (sums = [Σw, Σe·w, Σe²·w] por bin; o último

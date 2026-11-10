@@ -188,13 +188,22 @@ $\Omega_q \subseteq \Omega_f$ sem violação.
 
 ## 3. Torque (`torque {theta-e,batch,scatter}`, `src/postprocess/torque.py`)
 
-**Referência FEMM**: `torque.femm_solve` redesenha o design com o $\theta_e$ pedido, resolve
-com profundidade $L$ = stack length e calcula
-$T_{22}$ = `mo_blockintegral(22)` (torque pelo tensor de Maxwell ponderado) sobre os rótulos
-com $r > r_m = (SOD/2 + RID/2)/2$: coroa do rotor, ímãs e margem externa. O rótulo do ar do
-entreferro fica exatamente em $r = (RID + SOD)/4 = r_m$; a comparação estrita o exclui
-porque rótulo e $r_m$ saem da mesma conta (raio relido do `.ans` igual a $r_m$ em 100
-amostras conferidas). O torque da máquina é $3\,T_{22}$.
+**Referência = `smooth`** (desde 2026-11-10): o $\mathbf B$ suavizado do `.ans` no centróide
+de cada elemento, que é o alvo de treino da Elem, passado pela **mesma** fórmula da faixa
+usada nas predições.
+- O FEMM só gera a malha e o `.ans` das varreduras (`torque.femm_solve`, com cache em
+  `data/temp/torque_theta_e{,_batch}/`).
+- O T22 do `mo_blockintegral` não é mais referência. Ele ficou fora do caminho padrão: só é
+  calculado com `--femm-ref`, que grava a curva `femm` (batch) ou `femm_T22` (theta-e) sem
+  entrar em nenhum resumo.
+- O `method_check` (gt × T22) foi removido.
+
+**T22, só com `--femm-ref`**: `femm_solve` redesenha o design com o $\theta_e$ pedido,
+resolve com profundidade $L$ = stack length e calcula $T_{22}$ = `mo_blockintegral(22)`
+sobre os rótulos com $r > r_m = (SOD/2 + RID/2)/2$: coroa do rotor, ímãs e margem externa.
+- O rótulo do ar do entreferro fica exatamente em $r_m$, e a comparação estrita o exclui.
+- O torque da máquina é $3\,T_{22}$.
+- O cache sem T22 (`T22_sector = null`) é ressolvido quando se pede `--femm-ref`.
 
 **Torque pelo campo** (`band_torque`): média do tensor de Maxwell na faixa de ar do
 entreferro, com $\mathbf B$ por elemento sobre os elementos de **ar** com centróide em
@@ -207,57 +216,83 @@ $$ T = -\,\frac{3\,L}{\mu_0\,(r_2 - r_1)}\sum_{e} r_e\, B_{r,e}\, B_{\theta,e}\,
 - O sinal $-$ dá o torque no rotor externo, que é o oposto do torque no conteúdo do círculo.
 - O fator 3 converte o setor de 120° para a máquina inteira.
 
-**Campos usados**:
-- `gt` = curl(A) exato P0;
-- `smooth` = $\mathbf B$ suavizado no centróide;
-- `pred_<arch>`:
+**Campos** (todos pela mesma `band_torque`):
+- `smooth` = **referência**;
+- `gt` = curl(A) exato P0. A comparação `gt` × `smooth` mede o **efeito da suavização** e é
+  reportada à parte, uma vez;
+- `pred_<arch>`, a saída do modelo levada aos elementos (`pred_elem_xy`):
   - Elem: a saída por elemento, convertida para $(B_x,B_y)$ no centróide;
-  - FNO_SplitGNN: a saída da **N_base** (cópias vértice×material; não a N_aux por
-    elemento). Em cada elemento, entram as 3 cópias do material do elemento
-    (`fields.split_corner_values`, as mesmas do P1_mat do `regions`). Cada uma é convertida
-    para $(B_x,B_y)$ no canto do elemento, e depois se tira a média (`torque.split_elem_xy`).
-    O `parse_torque_sample(..., with_split=True)` monta o layout da Split só quando ela está
-    entre as runs;
+  - FNO_SplitGNN: a saída da **N_base** (cópias vértice×material; não a N_aux). Em cada
+    elemento entram as 3 cópias do material do elemento (`fields.split_corner_values`, as
+    mesmas do P1_mat do `regions`). Cada uma é convertida para $(B_x,B_y)$ no canto do
+    elemento, e depois se tira a média (`split_elem_xy`). O
+    `parse_torque_sample(..., with_split=True)` monta o layout só quando a Split está entre
+    as runs;
   - demais: a saída nodal convertida para $(B_x,B_y)$ no nó e depois a média dos 3 vértices
-    (`fields.nodes_to_elem`).
+    (`fields.nodes_to_elem`);
+- `floor_<arch>`: o **piso** da arch (`target_elem_xy`), isto é, o alvo de treino dela levado
+  à sua reconstrução por elemento pelo mesmo caminho da predição:
+  - FNO2d: `y_hw` interpolado nos vértices (`inference.floor_nodes`), depois a média;
+  - nós: `node_y` com prioridade de material, depois a média;
+  - Elem: `node_y` direto, que é igual ao smooth (piso nulo);
+  - Split: `elem_y` por `split_elem_xy`.
 
 **Runs** (`_torque_runs`): as da bateria `bldc` da loss mais a FNO_SplitGNN da bateria
 `split` (`find_split_runs`). `--archs` filtra; as do artigo são FNO2d, FNO_GNN,
 FNO_BipartiteGNN_Elem e FNO_SplitGNN.
 
-**Conferência do caminho da Split** (`python -m tests.check_split_torque_path [N]`): aplica o
-caminho ao gabarito da Split (`elem_y`), em 80 soluções do batch (5 amostras × 16 θe).
-- **Elementos com os 3 vértices "normais":** todos os vizinhos de cada vértice são do mesmo
-  material, e nenhum vértice fica na costura. Neles, $|\Delta\mathbf B|$ contra o `smooth`
-  é ≤ 2,2e-7 T, o arredondamento do float32 do `elem_y`. Isso confirma o caminho (índices,
-  rotação e média).
-- **Vértices de interface e da costura 0°/120°:** o FEMM dá um valor nodal por elemento,
-  enquanto o N_base usa a média dos elementos do mesmo material. A diferença chega a 0,49 T
-  num elemento.
-- **Efeito no torque:** $|T_{split}(\text{gabarito}) - T_{smooth}|$ ≤ 0,44 mN·m (0,7% no
-  máximo). Para comparação, a diferença entre o `smooth` e o `gt` tem mediana de 19,7 mN·m.
-  É uma diferença do gabarito, a mesma do piso P1_mat, e não do caminho.
-
 | Modo | Amostras | Saída |
 |---|---|---|
-| `theta-e` | `--idx`; padrão: 5 amostras do conjunto de **teste** do `split.json` da run de referência, 1 por faixa de 2 A de corrente, `seed=0` (`select_batch_samples`; no split atual: 2263, 2265, 3889, 3940, 5395); `--n-theta` 24 ângulos $\theta_e = 360k/n$ | `theta_e_s<IDX>_<loss>.json`: curvas e RMS de cada uma contra o FEMM e contra o `gt` |
-| `batch` | 80 amostras do subset estratificadas por corrente (16 por faixa de 2 A, `seed=0`) × 16 ângulos | `theta_e_batch_<loss>{,_summary}.json` |
-| `scatter` | 8 primeiras amostras de cada chunk do subset, com $\theta_e$ do CSV, sem FEMM | `scatter_<loss>.json` |
+| `theta-e` | `--idx`; padrão: 5 amostras do **teste** (1 por faixa de 2 A, `seed=0`, `select_batch_samples`; no split atual: 2263, 2265, 3889, 3940, 5395); `--n-theta` 24 ângulos $\theta_e = 360k/n$ | `theta_e_s<IDX>_<loss>.json`: curvas `T_Nm` (`smooth`, `gt`, `pred_*`, `floor_*`) e `rms_err_vs_ref_mNm` |
+| `batch` | 80 amostras do subset estratificadas por corrente (16 por faixa de 2 A, `seed=0`) × 16 ângulos; `--first K` usa só as $K$ primeiras (placeholder) | `theta_e_batch_<loss>.json` (curvas) + `_summary.json` (`summarize_batch`) |
+| `scatter` | 8 primeiras amostras de cada chunk do subset, com $\theta_e$ do CSV, sem FEMM | `scatter_<loss>.json`: `stats[pred_*/floor_*/gt]` contra o smooth |
 
-As soluções FEMM ficam em cache em `data/temp/torque_theta_e{,_batch}/`. `--femm` resolve
-de novo, e caches com outra profundidade são descartados (`femm_ref_ok`).
+`--femm` resolve as varreduras de novo, e caches com outra profundidade são ressolvidos
+(`femm_ref_ok`).
 
-**Métricas das curvas** (`curve_row`, em mN·m):
+**Métricas das curvas** (`curve_row(th, R, P)`, em mN·m, com R = smooth)
 - Ajuste por mínimos quadrados $T(\theta_e) \approx T_0 + A\cos(\theta_e - \varphi)$
   (`fundamental`).
-- `rmse` = $\sqrt{\overline{(P-F)^2}}$; `rms_femm`; `rmse_gt_femm` (erro do próprio método
-  da faixa).
-- `A_ratio` = $A_P/A_F$; `dphi` = $\varphi_P - \varphi_F$ em $(-180°, 180°]$; `dT0`;
-  `peak_ratio` = amplitude pico a pico de $P$ / de $F$.
-- `batch_summary`: medianas e `rel` = $100\,\mathrm{rmse}/\mathrm{rms}_{femm}$ por faixa de
-  corrente.
-- `scatter_stats`: RMSE, MAE, viés, p95, máximo, $R^2 = 1 - \sum e^2/\sum(T_{gt} - \overline{T_{gt}})^2$
-  e RMSE do `smooth` contra o `gt`.
+- `rmse` = $\sqrt{\overline{(P-R)^2}}$; `rms_ref`.
+- `A_ratio` = $A_P/A_R$; `dphi` = $\varphi_P - \varphi_R$ em $(-180°, 180°]$; `dT0`;
+  `peak_ratio`.
+- `batch_summary`: medianas, `rel` = $100\,\mathrm{rmse}/\mathrm{rms}_{ref}$ (mediana, p90 e por
+  faixa de corrente), média ± desvio de `A_ratio`, `dphi` e `dT0`.
+- `summarize_batch(samples)` gera:
+  - `summary[arch]`: preds;
+  - `floor[arch]`: pisos;
+  - `smoothing_effect`: gt × smooth;
+  - `per_sample`.
+  Ele roda direto sobre as curvas gravadas, sem refazer o campo.
+- `scatter_stats(ref, pr, alt)`: RMSE, MAE, viés, p95, máximo, $R^2$ contra o smooth e RMSE
+  gt × smooth.
+
+**Conferência do caminho da Split** (`python -m tests.check_split_torque_path [N]`): aplica o
+caminho ao gabarito da Split (`elem_y`) em 80 soluções do batch.
+- **Elementos com os 3 vértices "normais"** (vizinhos do mesmo material, fora da costura):
+  $|\Delta\mathbf B|$ contra o smooth ≤ 2,2e-7 T, o float32 do `elem_y`.
+- **Vértices de interface e da costura:** o FEMM dá um valor nodal por elemento, e o N_base
+  usa a média. A diferença chega a 0,49 T num elemento, e o torque difere ≤ 0,44 mN·m.
+- Por isso o piso da Split é cerca de 0,004% (não exatamente zero).
+
+**Resultados PLACEHOLDER** (2026-11-10; `resultados/BLDC_138x276/placeholder/dados/torque/`)
+- **Pisos e Split:** 10 primeiras amostras da seleção × 16 θe.
+- **Archs bldc nas 80 amostras:** recalculadas sem rodar nada, a partir do
+  `dados/torque/theta_e_batch_<loss>.json` (`recalc80_ref_smooth_<loss>.json`).
+- **Erro relativo mediano contra o smooth:**
+
+  | | FNO2d | FNO_GNN | Elem | Split |
+  |---|---|---|---|---|
+  | mse | 21,9% | 37,7% | 33,7% | 29,3%* |
+  | mae | 20,7% | 22,3% | 25,6% | 15,0%* |
+
+  \* Split só nas 10 amostras. Nessas mesmas 10, as outras archs têm, em mse/mae:
+  FNO2d 35,7/31,6%, FNO_GNN 60,5/38,2%, Elem 36,4/44,7%.
+- **Pisos (10 amostras):** FNO2d 15,9%, FNO_GNN 20,4%, Elem 0, Split 0,004%. A
+  reconstrução nodal e a de grade, sozinhas, já perdem 16–20% do torque na faixa.
+- **Efeito da suavização** (gt × smooth, 80 amostras): `rel` 3,3% e `A_ratio` 0,972. Por
+  faixa de corrente: 5,0% (0–2 A), 3,4% (2–4 A), 3,2% (4–6 A), 3,3% (6–8 A) e 3,0%
+  (8–10 A).
 
 ## 4. Saturação (`saturation`, `src/postprocess/saturation.py`)
 

@@ -1,20 +1,29 @@
 """
-Torque a partir do campo B: FEMM × gabarito × modelos.
+Torque a partir do campo B: modelos × referência suavizada (smooth), pelo mesmo método.
 
-  theta-e : femm_solve, band_torque, curve_row (curvas T(θe) por amostra)
-  batch   : select_batch_samples, fundamental, curve_row, batch_summary (method_check)
+  theta-e : femm_solve, band_torque (curvas T(θe) por amostra)
+  batch   : select_batch_samples, fundamental, curve_row, batch_summary, summarize_batch
   scatter : scatter_ids, scatter_stats
 
+Referência = smooth: o B suavizado do .ans no centróide de cada elemento (o alvo de treino
+da Elem), pela MESMA fórmula da faixa das predições. O FEMM só gera a malha e o .ans
+(femm_solve, cache em data/temp/torque_theta_e{,_batch}/); o T22 do mo_blockintegral não é
+mais referência -- só com femm_ref=True (CLI --femm-ref), gravado como curva 'femm', sem
+entrar nos resumos.
+
 Método:
-  FEMM   : T22 = mo_blockintegral(22) nos blocos do rotor (rótulos com r > r_m), × 3 setores.
+  FEMM   : (opcional, --femm-ref) T22 = mo_blockintegral(22) nos blocos do rotor (rótulos com
+           r > r_m), × 3 setores.
   campo  : tensor de Maxwell médio na faixa de ar do entreferro, com B por elemento:
            T = −3·L/(μ0·(r2−r1)) · Σ_e r·Br·Bθ·A_e (elementos de ar com centróide em (r1, r2);
            sinal: torque no rotor externo), L = stack length do design (coluna stack_length do
            valid_designs.csv, fallback motor_constants.STACK_LENGTH_MM) -- a mesma profundidade
            do mi_probdef em femm_solve.
-  gt     : B exato curl(A) por elemento (parse_elem_structure) -- o method_check é
-           gt × FEMM T22 (mede o erro do próprio método da faixa, sem modelo).
-  smooth : B suavizado no centróide (gabarito da Elem).
+  smooth : B suavizado no centróide (gabarito da Elem) = REFERÊNCIA.
+  gt     : B exato curl(A) por elemento (parse_elem_structure) -- gt × smooth = efeito da
+           suavização (reportado à parte, uma vez).
+  floor  : piso de cada arch = o alvo de treino dela levado à sua reconstrução por elemento,
+           pelo mesmo caminho da predição (target_elem_xy) × smooth.
   pred   : saída do modelo levada aos elementos -- Elem: por elemento; FNO_SplitGNN: N_base
            (cópias vértice×material; não a N_aux), média das 3 cópias do material do
            elemento (fields.split_corner_values, as mesmas do P1_mat do regions); demais:
@@ -87,9 +96,10 @@ def block_labels(ans_path):
 # --------------------------------------------------------------------------- #
 # FEMM (Windows: pyfemm)
 # --------------------------------------------------------------------------- #
-def femm_solve(row, theta_e, work_dir: Path, gz_out: Path):
+def femm_solve(row, theta_e, work_dir: Path, gz_out: Path, femm_ref=False):
     """Redesenha o design (fase do rotor e amplitude da corrente do CSV, ângulo θe dado),
-    resolve, grava o .ans comprimido em gz_out e devolve T22 do setor (rotor externo)."""
+    resolve e grava o .ans comprimido em gz_out. femm_ref=True: devolve também o T22 do setor
+    (rotor externo, mo_blockintegral); False (padrão): devolve None."""
     import femm
     from src.data_gen.motor_model import BLDC_FEMM_Model_Sym120_Annular
     work_dir = Path(work_dir).resolve()
@@ -104,16 +114,22 @@ def femm_solve(row, theta_e, work_dir: Path, gz_out: Path):
         femm.openfemm('bHide'); femm.main_resize(1000, 1000); femm.newdocument(0)
         femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, stack_length_m(row) * 1e3, 200)
         model.draw_motor(); femm.mi_zoomnatural(); femm.mi_saveas(str(work_dir / 'model.fem'))
-        femm.mi_createmesh(); femm.mi_analyze(); femm.mi_loadsolution()
-        lab = block_labels(work_dir / 'model.ans')
-        # Rotor = rótulos com r > r_m. O rótulo do ar do entreferro fica exatamente em
-        # r = (RID + SOD)/4 = r_m (motor_model.py, r_avg); a seleção depende de o raio dele,
-        # relido do .ans, não passar de r_m em ponto flutuante — funciona porque rótulo e
-        # r_m saem da mesma conta (conferido igual em 100 amostras), e o > estrito o exclui.
-        for x, y in lab[np.hypot(lab[:, 0], lab[:, 1]) > r_m]:
-            femm.mo_selectblock(x, y)
-        t22 = float(np.atleast_1d(femm.mo_blockintegral(22))[0])
-        femm.mo_clearblock(); femm.closefemm()
+        femm.mi_createmesh(); femm.mi_analyze()
+        t22 = None
+        if femm_ref:      # T22 só sob pedido (a referência do torque é o smooth do .ans)
+            femm.mi_loadsolution()
+            lab = block_labels(work_dir / 'model.ans')
+            # Rotor = rótulos com r > r_m. O rótulo do ar do entreferro fica exatamente em
+            # r = (RID + SOD)/4 = r_m (motor_model.py, r_avg); a seleção depende de o raio dele,
+            # relido do .ans, não passar de r_m em ponto flutuante — funciona porque rótulo e
+            # r_m saem da mesma conta (conferido igual em 100 amostras), e o > estrito o exclui.
+            for x, y in lab[np.hypot(lab[:, 0], lab[:, 1]) > r_m]:
+                femm.mo_selectblock(x, y)
+            t22 = float(np.atleast_1d(femm.mo_blockintegral(22))[0])
+            femm.mo_clearblock()
+        femm.closefemm()
+        # [REMOVIDO] antes o T22 era sempre calculado (mi_loadsolution + mo_blockintegral,
+        # bloco acima sem o `if femm_ref`); agora só com femm_ref=True / --femm-ref.
         Path(gz_out).parent.mkdir(parents=True, exist_ok=True)
         with open(work_dir / 'model.ans', 'rb') as f, gzip.open(str(gz_out) + '.part', 'wb') as g:
             shutil.copyfileobj(f, g)
@@ -202,8 +218,30 @@ def pred_elem_xy(arch, run, lay, ts):
     return nodes_to_elem(lay, polar_to_xy(yp, tq['node_xy'][:, 0], tq['node_xy'][:, 1]))
 
 
-def sample_torques(lay, row, runs):
-    """{'gt', 'smooth', 'pred_<arch>'...}: torque (N·m, motor completo) de 1 solução."""
+def target_elem_xy(arch, lay, ts):
+    """Piso da arch: o ALVO de treino dela levado à sua reconstrução por elemento, pelo mesmo
+    caminho de pred_elem_xy -> (Bx, By) [M,2]:
+      FNO2d                 : y_hw (grade) interpolado nos vértices (inference.floor_nodes,
+                              a mesma interpolação da predição) -> xy no nó -> média;
+      FNO_BipartiteGNN_Elem : node_y do layout Elem (= smooth no centróide; piso nulo);
+      FNO_SplitGNN          : elem_y (N_base) -> split_elem_xy;
+      demais (nós)          : node_y do layout de vértices (material por prioridade) -> xy
+                              no nó -> média."""
+    from src.postprocess.fields import nodes_to_elem
+    from src.postprocess.inference import floor_nodes
+    tq = lay['torque']
+    if arch == 'FNO_SplitGNN':
+        return split_elem_xy(lay, lay['split']['elem_y'])
+    if arch == 'FNO_BipartiteGNN_Elem':
+        return polar_to_xy(lay['elem']['node_y'], tq['cen'][:, 0], tq['cen'][:, 1])
+    yn = (floor_nodes(ts).double().numpy() if arch == 'FNO2d'
+          else np.asarray(lay['vertex']['node_y'], np.float64))
+    return nodes_to_elem(lay, polar_to_xy(yn, tq['node_xy'][:, 0], tq['node_xy'][:, 1]))
+
+
+def sample_torques(lay, row, runs, floors=True):
+    """{'smooth' (referência), 'gt', 'pred_<arch>'..., 'floor_<arch>'...}: torque (N·m,
+    motor completo) de 1 solução. floors: pisos das archs das runs (target_elem_xy)."""
     from src.postprocess.inference import to_torch_sample
     tq = lay['torque']
     r1, r2 = gap(row)
@@ -212,6 +250,8 @@ def sample_torques(lay, row, runs):
     ts = to_torch_sample(lay)
     for r in runs.values():
         out[f"pred_{r['arch']}"] = g(pred_elem_xy(r['arch'], r, lay, ts))
+        if floors:
+            out[f"floor_{r['arch']}"] = g(target_elem_xy(r['arch'], lay, ts))
     return out
 
 
@@ -249,40 +289,76 @@ def fundamental(th_deg, T):
     return c[0], np.hypot(c[1], c[2]), np.rad2deg(np.arctan2(c[2], c[1]))
 
 
-def curve_row(th, F, P, G):
-    """Curva do modelo P × FEMM F (gt G para o method_check), em mNm."""
-    T0f, Af, phf = fundamental(th, F)
+def curve_row(th, R, P):
+    """Curva P (modelo, piso ou gt) × referência R (smooth), em mNm."""
+    T0r, Ar, phr = fundamental(th, R)
     T0p, Ap, php = fundamental(th, P)
-    return dict(rms_femm=float(np.sqrt(np.mean(F ** 2))), rmse=float(np.sqrt(np.mean((P - F) ** 2))),
-                rmse_gt_femm=float(np.sqrt(np.mean((G - F) ** 2))), A_femm=float(Af),
-                A_ratio=float(Ap / Af), dphi=float((php - phf + 180) % 360 - 180),
-                dT0=float(T0p - T0f), T0_femm=float(T0f), peak_ratio=float(np.ptp(P) / np.ptp(F)))
+    return dict(rms_ref=float(np.sqrt(np.mean(R ** 2))), rmse=float(np.sqrt(np.mean((P - R) ** 2))),
+                A_ref=float(Ar), A_ratio=float(Ap / Ar), dphi=float((php - phr + 180) % 360 - 180),
+                dT0=float(T0p - T0r), T0_ref=float(T0r), peak_ratio=float(np.ptp(P) / np.ptp(R)))
+
+
+# [REMOVIDO] curve_row × FEMM T22 (referência antiga) com o method_check (gt × FEMM):
+# def curve_row(th, F, P, G):
+#     T0f, Af, phf = fundamental(th, F)
+#     T0p, Ap, php = fundamental(th, P)
+#     return dict(rms_femm=..., rmse=..., rmse_gt_femm=float(np.sqrt(np.mean((G - F) ** 2))),
+#                 A_femm=..., A_ratio=..., dphi=..., dT0=..., T0_femm=..., peak_ratio=...)
 
 
 def batch_summary(rows_):
     S = {k: np.array([r[k] for r in rows_]) for k in rows_[0] if not isinstance(rows_[0][k], dict)}
-    S['rel'] = 100 * S['rmse'] / S['rms_femm']
+    S['rel'] = 100 * S['rmse'] / S['rms_ref']
     return dict(n=len(rows_), rmse_median_mNm=float(np.median(S['rmse'])),
                 rel_median_pct=float(np.median(S['rel'])), rel_p90_pct=float(np.percentile(S['rel'], 90)),
                 A_ratio_mean=float(S['A_ratio'].mean()), A_ratio_std=float(S['A_ratio'].std()),
                 dphi_mean_deg=float(S['dphi'].mean()), dphi_std_deg=float(S['dphi'].std()),
                 dT0_mean_mNm=float(S['dT0'].mean()), dT0_std_mNm=float(S['dT0'].std()),
-                method_check_rmse_gt_vs_femm_median_mNm=float(np.median(S['rmse_gt_femm'])),
+                # [REMOVIDO] method_check_rmse_gt_vs_femm_median_mNm (referência FEMM T22)
                 rel_median_por_faixa={f'{a}-{a + 2}A': float(np.median(S['rel'][(S['I'] >= a) & (S['I'] < a + 2)]))
                                       for a in range(0, 10, 2) if ((S['I'] >= a) & (S['I'] < a + 2)).any()})
 
 
-def scatter_stats(gt, pr, sm):
-    """gt, pr, sm em mNm."""
-    e = pr - gt
-    st = dict(n=len(gt), rms_gt_mNm=float(np.sqrt(np.mean(gt ** 2))),
+def scatter_stats(ref, pr, alt):
+    """pr × referência ref (smooth), em mNm; alt = gt (efeito da suavização: rmse alt × ref)."""
+    e = pr - ref
+    st = dict(n=len(ref), rms_ref_mNm=float(np.sqrt(np.mean(ref ** 2))),
               rmse_mNm=float(np.sqrt(np.mean(e ** 2))), mae_mNm=float(np.mean(np.abs(e))),
               bias_mNm=float(e.mean()), p95_abs_err_mNm=float(np.percentile(np.abs(e), 95)),
               max_abs_err_mNm=float(np.abs(e).max()),
-              r2=float(1 - np.sum(e ** 2) / np.sum((gt - gt.mean()) ** 2)),
-              rmse_smooth_vs_gt_mNm=float(np.sqrt(np.mean((sm - gt) ** 2))))
-    st['rmse_pct_of_rms_gt'] = 100 * st['rmse_mNm'] / st['rms_gt_mNm']
+              r2=float(1 - np.sum(e ** 2) / np.sum((ref - ref.mean()) ** 2)),
+              rmse_gt_vs_ref_mNm=float(np.sqrt(np.mean((alt - ref) ** 2))))
+    st['rmse_pct_of_rms_ref'] = 100 * st['rmse_mNm'] / st['rms_ref_mNm']
     return st
+
+
+def summarize_batch(samples, keys=None):
+    """Resumo do batch com referência = smooth, a partir das curvas gravadas
+    ({idx: dict(curves, I, geom)} de theta_e_batch_<loss>.json; nada é recalculado no campo):
+      summary[arch]          : pred_<arch> × smooth (batch_summary);
+      floor[arch]            : floor_<arch> × smooth (piso da reconstrução por elemento);
+      smoothing_effect       : gt (curl(A) P0) × smooth -- efeito da suavização, uma vez;
+      per_sample[chave]      : curve_row por amostra (+ I e geometria).
+    keys: chaves das curvas (None = todas as pred_/floor_ e gt). Amostras com < 3 ângulos
+    ficam fora. 'femm' (--femm-ref) nunca entra."""
+    per = {}
+    for i, smp in samples.items():
+        c = smp['curves']
+        if len(c['theta_e_deg']) < 3:
+            continue
+        th = np.array(c['theta_e_deg'])
+        R = np.asarray(c['smooth']) * 1e3
+        ks = keys or [k for k in c if k == 'gt' or k.startswith(('pred_', 'floor_'))]
+        for k in ks:
+            if k in c:
+                per.setdefault(k, []).append(dict(idx=int(i), I=smp['I'],
+                                                  **curve_row(th, R, np.asarray(c[k]) * 1e3),
+                                                  **{g.split(' [')[0]: v for g, v in smp.get('geom', {}).items()}))
+    return dict(reference='smooth: B suavizado do .ans no centróide, mesma fórmula da faixa',
+                summary={k[5:]: batch_summary(v) for k, v in per.items() if k.startswith('pred_')},
+                floor={k[6:]: batch_summary(v) for k, v in per.items() if k.startswith('floor_')},
+                smoothing_effect=batch_summary(per['gt']) if 'gt' in per else None,
+                per_sample=per)
 
 
 def read_rows(raw_dir: Path):

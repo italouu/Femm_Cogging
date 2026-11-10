@@ -406,11 +406,12 @@ def _torque_analysis(loss):
             if len(c['theta_e_deg']) < 3:
                 continue
             th = np.array(c['theta_e_deg'])
-            S, G, F = (np.array(c[k]) * 1e3 for k in ('smooth', 'gt', 'femm'))
+            S, G = (np.array(c[k]) * 1e3 for k in ('smooth', 'gt'))
+            F = np.array(c['femm']) * 1e3 if 'femm' in c else None   # T22 só com --femm-ref
             band = next(f'{lo}-{hi}A' for lo, hi in BANDS if lo <= I < hi)
             ref[band].append(dict(I=I, rmse_smooth_vs_gt=float(np.sqrt(np.mean((S - G) ** 2))),
-                                  rmse_smooth_vs_femm=float(np.sqrt(np.mean((S - F) ** 2))),
-                                  rmse_gt_vs_femm=float(np.sqrt(np.mean((G - F) ** 2))),
+                                  rmse_smooth_vs_femm=None if F is None else float(np.sqrt(np.mean((S - F) ** 2))),
+                                  rmse_gt_vs_femm=None if F is None else float(np.sqrt(np.mean((G - F) ** 2))),
                                   rms_gt=float(np.sqrt(np.mean(G ** 2))),
                                   A_smooth_over_A_gt=float(fundamental(th, S)[1] / fundamental(th, G)[1])))
             for a in ARCHS:
@@ -418,7 +419,7 @@ def _torque_analysis(loss):
                 if k not in c:
                     continue
                 Pp = np.array(c[k]) * 1e3
-                res[a][band].append(dict(I=I, **curve_row(th, S, Pp, G)))
+                res[a][band].append(dict(I=I, **curve_row(th, S, Pp)))
                 bias_curves[a].setdefault(band, []).append((th, Pp - S))
         summ = {}
         for a in ARCHS:
@@ -426,14 +427,14 @@ def _torque_analysis(loss):
             for b, lst in res[a].items():
                 if not lst:
                     continue
-                arr = {k: np.array([x[k] for x in lst]) for k in ('rmse', 'rms_femm', 'A_ratio', 'dphi', 'dT0')}
+                arr = {k: np.array([x[k] for x in lst]) for k in ('rmse', 'rms_ref', 'A_ratio', 'dphi', 'dT0')}
                 bc = bias_curves[a].get(b, [])
                 th = bc[0][0]
                 mean_bias = np.mean([e for _, e in bc], axis=0)       # viés médio por θe (mNm)
                 T0b, Ab, phb = fundamental(th, mean_bias)
                 summ[a][b] = dict(n=len(lst), rmse_median_mNm=float(np.median(arr['rmse'])),
-                                  rel_median_pct=float(np.median(100 * arr['rmse'] / arr['rms_femm'])),
-                                  rms_ref_median_mNm=float(np.median(arr['rms_femm'])),
+                                  rel_median_pct=float(np.median(100 * arr['rmse'] / arr['rms_ref'])),
+                                  rms_ref_median_mNm=float(np.median(arr['rms_ref'])),
                                   dT0_mean_mNm=float(arr['dT0'].mean()), dT0_std_mNm=float(arr['dT0'].std()),
                                   A_ratio_mean=float(arr['A_ratio'].mean()), A_ratio_std=float(arr['A_ratio'].std()),
                                   dphi_mean_deg=float(arr['dphi'].mean()),
@@ -448,8 +449,8 @@ def _torque_analysis(loss):
                                                       or {}).get('summary'),
                             ref_error={b: dict(n=len(v), rmse_smooth_vs_gt_median_mNm=float(np.median([x['rmse_smooth_vs_gt'] for x in v])),
                                                rel_smooth_vs_gt_median_pct=float(np.median([100 * x['rmse_smooth_vs_gt'] / x['rms_gt'] for x in v])),
-                                               rmse_smooth_vs_femm_median_mNm=float(np.median([x['rmse_smooth_vs_femm'] for x in v])),
-                                               rmse_gt_vs_femm_median_mNm=float(np.median([x['rmse_gt_vs_femm'] for x in v])),
+                                               rmse_smooth_vs_femm_median_mNm=None if v[0]['rmse_smooth_vs_femm'] is None else float(np.median([x['rmse_smooth_vs_femm'] for x in v])),
+                                               rmse_gt_vs_femm_median_mNm=None if v[0]['rmse_gt_vs_femm'] is None else float(np.median([x['rmse_gt_vs_femm'] for x in v])),
                                                A_smooth_over_A_gt_mean=float(np.mean([x['A_smooth_over_A_gt'] for x in v])))
                                        for b, v in ref.items() if v})
     return out
@@ -583,9 +584,10 @@ def _fig_f5b(theta_files, loss):
     for ax, (idx, d) in zip(axs[0], theta_files):
         th = np.array(d['theta_e_deg'])
         T = {k: np.array(v) for k, v in d['T_Nm'].items()}
-        ax.plot(th, T['gt_smooth'], color='k', lw=1.3, label='referência suavizada')
+        ax.plot(th, T['smooth'] if 'smooth' in T else T['gt_smooth'], color='k', lw=1.3, label='referência suavizada')
         ax.plot(th, T['gt'], color='#52514e', lw=0.8, ls='--', label='referência exata (P0)')
-        ax.plot(th, T['femm_T22'], color='#52514e', lw=0.8, ls=':', label='FEMM (T22)')
+        if 'femm_T22' in T:      # só em JSONs antigos ou com --femm-ref
+            ax.plot(th, T['femm_T22'], color='#52514e', lw=0.8, ls=':', label='FEMM (T22)')
         for a in ARCHS:
             if f'pred_{a}' in T:
                 ax.plot(th, T[f'pred_{a}'], color=MODEL_COLOR[a], lw=0.8, label=_short(a).replace('\n', ''))

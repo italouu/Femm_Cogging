@@ -120,3 +120,66 @@ def fig_sat_error(rep, bh, knee, title, archs, colors, labels=None):
     fig.suptitle(title, fontsize=10)
     fig.tight_layout()
     return fig
+
+
+def fig_sat_error_bh(bh, knee, series, colors, labels=None):
+    """Erro × ponto de operação sobre a curva B-H. Eixo x: H [A/m] (log). Eixo esquerdo:
+    B(H) do aço (interpolação do FEMM, pontos da curva marcados). Eixo direito: L1 (% do B_ref
+    em Ω) por arch, cada intervalo de mesma área em H = H(|B| mediano). Terceiro eixo
+    (deslocado à direita): μ_eff = B/(μ0·H) ao longo da curva, pontilhado. Verticais no H do
+    pico de μ_eff e do joelho. Legenda única, sem título.
+    series = {arch: (H [A/m], L1 [%])}; knee = FemmBH.knee()."""
+    import matplotlib.pyplot as plt
+    labels = labels or {}
+    c_bh, c_mu = '#3d3d3a', '#7f7f7a'
+    b = np.geomspace(bh.B_in[1] * 1e-2, bh.B_in[-1], 1500)
+    h = bh.h(b)
+    fig, ax = plt.subplots(figsize=(8.6, 4.8))
+    ax.plot(h, b, color=c_bh, lw=1.6, label='curva B-H (iron_1008, interpolação do FEMM)', zorder=3)
+    ax.plot(bh.H_in[1:], bh.B_in[1:], 'o', color=c_bh, ms=3.5, label='pontos da curva B-H', zorder=3)
+    ax.set_xscale('log')
+    ax.set_xlabel('H [A/m]')
+    ax.set_ylabel('B [T]', color=c_bh)
+    ax.set_ylim(0, bh.B_in[-1] * 1.05)
+
+    ax2 = ax.twinx()
+    for a, (hx, l1) in series.items():
+        ax2.plot(hx, l1, '-', color=colors[a], lw=1.5, marker='o', ms=2.5, label=f'L1 {labels.get(a, a)}')
+    ax2.set_ylabel('L1 [% do B_ref em Ω]')
+    ax2.set_ylim(0, None)
+    ax2.spines['right'].set_visible(True)
+    ax2.grid(False)
+
+    ax3 = ax.twinx()
+    ax3.spines['right'].set_position(('axes', 1.12))
+    ax3.spines['right'].set_visible(True)
+    ax3.plot(h, bh.mu_eff(b), ':', color=c_mu, lw=1.6, label='μ_eff = B/(μ0·H) ao longo da curva')
+    ax3.set_ylabel('μ_eff', color=c_mu)
+    ax3.tick_params(axis='y', colors=c_mu)
+    ax3.set_ylim(0, None)
+    ax3.grid(False)
+
+    vl = []
+    for B_, H_, ls, nome in ((knee['B_mu_max_T'], float(bh.h(np.array([knee['B_mu_max_T']]))[0]), '--',
+                              'pico de μ_eff'),
+                             (knee.get('B_knee_T'), knee.get('H_knee_A_m'), '-.',
+                              f"joelho (μ_eff = {100 * knee['frac']:.0f}% do máx.)")):
+        if B_ is None:
+            continue
+        vl.append(ax.axvline(H_, color='#52514e', ls=ls, lw=1.0,
+                             label=f'{nome}: B = {B_:.2f} T, H = {H_:.0f} A/m'))
+        ax.text(H_ * 1.06, 0.03, f'{B_:.2f} T', color='#52514e', fontsize=7.5,
+                transform=ax.get_xaxis_transform())
+
+    ax.set_xlim(min(h[0], min(min(s[0]) for s in series.values()) / 1.3), bh.H_in[-1] * 1.3)
+    ax2.set_zorder(ax.get_zorder() + 1)
+    ax2.patch.set_visible(False)
+    hs, ls_ = [], []
+    for a_ in (ax, ax2, ax3):
+        hh, ll = a_.get_legend_handles_labels()
+        hs += hh
+        ls_ += ll
+    fig.legend(hs, ls_, loc='upper center', bbox_to_anchor=(0.5, 0.0), ncol=2, frameon=False,
+               fontsize=7.5)
+    fig.tight_layout()
+    return fig

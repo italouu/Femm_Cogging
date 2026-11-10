@@ -71,6 +71,12 @@ Subcomandos:
       pontos de operação) e B (|B| no aço, amostras P50 e de maior |B| médio, contornos no
       joelho). Saída: dados/saturation.json + plots/saturacao_*.
 
+  sat-bh [--data DIR] [--fig DIR] [--loss mae] — sem inferência, a partir do
+      saturation_error.json do regions: L1 no aço ∩ Ω_int (50 intervalos de mesma área) por
+      arch em H = H(|B| mediano), sobre a curva B-H, μ_eff, pico e joelho; faixas abaixo do
+      pico / pico–joelho / acima do joelho. Saída: dados/saturation_error_bh.json +
+      plots/saturacao_erro_sobre_bh[_nN].
+
   timing [femm|infer|all] [--n-femm 50] — (máquina Windows com FEMM e GPU) custo
       computacional com a malha dada aos dois lados: FEMM = só o mi_analyze (redesenho com os
       parâmetros do CSV, malha fora do cronômetro; malha e A conferidos × raw); pré-
@@ -89,6 +95,7 @@ Execução (raiz do projeto):
   python -m scripts.postprocess train-table
   python -m scripts.postprocess regions [N]
   python -m scripts.postprocess saturation [N]
+  python -m scripts.postprocess sat-bh [--data DIR] [--fig DIR]
   python -m scripts.postprocess timing [femm|infer|all]
   python -m scripts.postprocess torque theta-e|batch|scatter [--loss mae]
 """
@@ -120,9 +127,10 @@ from src.postprocess.plots.training import fig_training
 from src.postprocess.regions import (BAND_UNIONS, BANDS, BandAccum, SeamGeometry, band_edges,
                                      band_points, interface_edges, omega_mask, region_geometry)
 from src.postprocess.saturation import (SAT_EDGES, SAT_SETS, FemmBH, SatAccum, check_against_femm,
-                                        parse_bh_curves, sat_report, steel_operating_points,
-                                        weighted_percentile)
-from src.postprocess.plots.saturation import MU_LABEL, fig_bh, fig_sat_error, fig_steel_map
+                                        parse_bh_curves, sat_bh_bands, sat_report,
+                                        steel_operating_points, weighted_percentile)
+from src.postprocess.plots.saturation import (MU_LABEL, fig_bh, fig_sat_error, fig_sat_error_bh,
+                                              fig_steel_map)
 from src.postprocess.timing import (ARCH_STAGES, DEVICE, LAYOUT, check_mesh_vs_raw,
                                     check_preprocess, collate, encode_timed, femm_solve_timed,
                                     hardware_info, iqr_stats, preprocess_timed, time_batch)
@@ -1217,6 +1225,80 @@ def run_saturation(out_dir: Path, fig_dir: Path, max_samples=None, knee_fracs=(0
     print(f"salvo em {out_dir / 'saturation.json'}; figuras em {fig_dir}")
 
 
+SAT_BH_LABELS = {'FNO_BipartiteGNN_Elem': 'FNO_Bipartite'}
+
+
+def run_sat_bh(data_dir: Path, fig_dir: Path, loss='mae', cset='aco_int', n_int=50):
+    """Erro × ponto de operação sobre a curva B-H, SEM inferência: lê o saturation_error.json
+    do regions (histograma Σw/Σe·w em |B| da referência, B_ref de Ω de cada run e a curva B-H
+    do .ans). Por arch (REGIONS_ARCHS, loss dada): os n_int intervalos de mesma área de aço do
+    sat_report (conjunto cset; padrão aço ∩ Ω_int), L1 e |B| mediano, em H = H(|B| mediano)
+    pelo FemmBH. Faixas abaixo do pico de μ_eff / pico–joelho / acima do joelho (sat_bh_bands).
+    Saída: <fig_dir>/saturacao_erro_sobre_bh[_n<N> se placeholder].{png,pdf} e
+    <data_dir>/saturation_error_bh.json."""
+    d = json.loads((data_dir / 'saturation_error.json').read_text(encoding='utf-8'))
+    bh = FemmBH(d['bh']['B_T'], d['bh']['H_A_m'])
+    knee = bh.knee(0.5)
+    kj = d['bh']['knee']
+    assert abs(knee['B_knee_T'] - kj['B_knee_T']) < 1e-9 and abs(knee['B_mu_max_T'] - kj['B_mu_max_T']) < 1e-9, \
+        'joelho/pico recalculados diferem do saturation_error.json'
+    H_pk = float(bh.h(np.array([knee['B_mu_max_T']]))[0])
+    edges = np.asarray(d['hist']['edges_T'])
+    cuts = [knee['B_mu_max_T'], knee['B_knee_T']]
+    series, rep, area = {}, {}, None
+    for a in REGIONS_ARCHS:
+        k = f'{a}_{loss}'
+        r = d['runs'][k]
+        iv = r[cset]['intervals']
+        assert len(iv) == n_int, f'{k}: {len(iv)} intervalos (esperado {n_int})'
+        bmed = np.array([i['B_median_T'] for i in iv])
+        l1 = np.array([i['L1_pct'] for i in iv])
+        series[a] = (bh.h(bmed), l1)
+        bands = sat_bh_bands(d['hist']['sums'][k][cset], edges, r['B_ref_omega'], cuts)
+        # conferências: Σ frações = 1 e L1 ponderado pelas áreas = L1 total do sat_report
+        tot = r[cset]['total']['L1_pct']
+        l1w = sum(b['area_frac'] * b['L1_pct'] for b in bands)
+        assert abs(sum(b['area_frac'] for b in bands) - 1) < 1e-9 and abs(l1w - tot) < 1e-9 * max(tot, 1), k
+        # a área de aço por faixa depende do conjunto de pontos de quadratura da run
+        # (FNO2d: overlay grade × malha; demais: pontos da malha) -> reportada por arch;
+        # runs do mesmo conjunto têm de coincidir
+        fr = [b['area_frac'] for b in bands]
+        ps = 'overlay' if _regions_kind(a) == 'grade' else 'mesh'
+        area = area or {}
+        assert ps not in area or np.allclose(fr, area[ps], atol=1e-12), f'{k}: área difere no conjunto {ps}'
+        area.setdefault(ps, fr)
+        rep[a] = dict(run=k, run_dir=r['run_dir'], best_epoch=r['best_epoch'], B_ref_omega=r['B_ref_omega'],
+                      point_set=ps, area_frac=fr, L1_total_pct=tot, bands=bands,
+                      intervals=[dict(B_median_T=float(b_), H_A_m=float(h_), L1_pct=float(l_))
+                                 for b_, h_, l_ in zip(bmed, series[a][0], l1)])
+    names = ('abaixo_do_pico', 'pico_joelho', 'acima_do_joelho')
+    out = dict(placeholder=d.get('placeholder'), n_samples=d['n_samples'], subset=d['subset'],
+               loss=loss, conjunto=cset, d_interior_mm=d['d_interior_mm'],
+               pico_mu_eff=dict(B_T=knee['B_mu_max_T'], H_A_m=H_pk, mu_eff=knee['mu_max']),
+               joelho=dict(B_T=knee['B_knee_T'], H_A_m=knee['H_knee_A_m'], frac=knee['frac'],
+                           mu_eff=knee['frac'] * knee['mu_max']),
+               area_frac={ps: dict(zip(names, fr)) for ps, fr in area.items()},
+               L1_pct={SAT_BH_LABELS.get(a, a): dict(zip(names, [b['L1_pct'] for b in v['bands']]),
+                                                     total=v['L1_total_pct']) for a, v in rep.items()},
+               definicao='faixas em |B| da referência: [0, B_pico), [B_pico, B_joelho), [B_joelho, ∞); '
+                         'bin de 0,005 T cortado pela fronteira dividido na proporção da largura; L1 em % '
+                         'do B_ref global em Ω da mesma run',
+               runs=rep)
+    (data_dir / 'saturation_error_bh.json').write_text(json.dumps(out, indent=1, ensure_ascii=False),
+                                                      encoding='utf-8')
+    apply_style()
+    name = 'saturacao_erro_sobre_bh' + (f"_n{d['n_samples']}" if d.get('placeholder') else '')
+    save_fig(fig_sat_error_bh(bh, knee, series, MODEL_COLOR, SAT_BH_LABELS), fig_dir / name, pdf=True, dpi=200)
+    print(f"{d['n_samples']} amostras ({d['subset']}), {cset}, {loss.upper()}")
+    print(f"pico de μ_eff: B = {knee['B_mu_max_T']:.4f} T, H = {H_pk:.1f} A/m (μ_eff = {knee['mu_max']:.0f})")
+    print(f"joelho (μ_eff = máx/2): B = {knee['B_knee_T']:.4f} T, H = {knee['H_knee_A_m']:.1f} A/m")
+    for ps, fr in area.items():
+        print(f'área de aço (pontos {ps}): ' + ', '.join(f'{n} {100 * f:.3f}%' for n, f in zip(names, fr)))
+    for a, v in out['L1_pct'].items():
+        print(f'  L1 {a:14s} ' + ', '.join(f'{n} {v[n]:.3f}%' for n in names) + f" | total {v['total']:.3f}%")
+    print(f"salvo em {data_dir / 'saturation_error_bh.json'}; figura {fig_dir / name}.png/.pdf")
+
+
 TIMING_WORK = Path('data/temp/postprocess/timing')
 MEM_FRACTION = 0.95      # VRAM dedicada liberada ao alocador (Windows/WDDM: OOM real)
 
@@ -1467,6 +1549,11 @@ if __name__ == '__main__':
     p_sat.add_argument('--subset', **SUBSET_ARG)
     p_sat.add_argument('--out', type=Path, default=OUT_ROOT / 'dados')
     p_sat.add_argument('--fig', type=Path, default=OUT_ROOT / 'plots')
+    p_sb = sp.add_parser('sat-bh', help='erro × ponto de operação sobre a curva B-H (lê saturation_error.json)')
+    p_sb.add_argument('--data', type=Path, default=OUT_ROOT / 'dados',
+                      help='diretório com saturation_error.json (do regions)')
+    p_sb.add_argument('--fig', type=Path, default=OUT_ROOT / 'plots')
+    p_sb.add_argument('--loss', default='mae', choices=('mse', 'mae'))
     p_tm = sp.add_parser('timing', help='custo: FEMM (mi_analyze) × pré-processamento + inferência')
     p_tm.add_argument('what', nargs='?', default='all', choices=('femm', 'infer', 'all'))
     p_tm.add_argument('--n-femm', type=int, default=50, help='amostras do FEMM (igualmente espaçadas)')
@@ -1498,6 +1585,8 @@ if __name__ == '__main__':
                    a.femm_ref, a.first, a.cache_only, a.workers)
     elif a.cmd == 'saturation':
         run_saturation(a.out, a.fig, a.n, tuple(a.knee_frac), a.check_femm, a.subset)
+    elif a.cmd == 'sat-bh':
+        run_sat_bh(a.data, a.fig, a.loss)
     elif a.cmd == 'timing':
         run_timing(a.what, a.out, a.n_femm, a.warmup, a.reps, a.max_batch, a.n_infer_samples,
                    a.subset)

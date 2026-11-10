@@ -264,3 +264,32 @@ def sat_report(acc, b_ref, n_int=50):
                       total=dict(area_mm2=float(A), L1_pct=float(100 * EW.sum() / A / b_ref),
                                  L2_pct=float(100 * np.sqrt(E2W.sum() / A) / b_ref)))
     return out
+
+
+def sat_bh_bands(sums, edges, b_ref, cuts):
+    """Faixas de |B| delimitadas por `cuts` (crescentes, ex.: [B do pico de μ_eff, B do
+    joelho]) a partir do histograma do SatAccum (sums = [Σw, Σe·w, Σe²·w] por bin; o último
+    bin = overflow ≥ edges[-1]): fração da área de aço e L1/L2 (% do b_ref) em cada faixa
+    [0, c1), [c1, c2), ..., [c_k, ∞). Um bin cortado pela fronteira é dividido na proporção
+    da largura (|B| uniforme dentro do bin de 0,005 T). Nenhum cálculo novo de erro: só
+    reagrupa as somas já acumuladas."""
+    W, EW, E2W = (np.asarray(s, float) for s in sums)
+    E = np.asarray(edges, float)
+    A = W.sum()
+
+    def below(c):
+        f = np.clip((c - E[:-1]) / np.diff(E), 0.0, 1.0)        # bins regulares
+        f = np.append(f, 1.0 if c > E[-1] else 0.0)             # overflow (|B| ≥ E[-1])
+        return np.array([(f * W).sum(), (f * EW).sum(), (f * E2W).sum()])
+
+    tot = np.array([A, EW.sum(), E2W.sum()])
+    acc = [np.zeros(3)] + [below(c) for c in cuts] + [tot]
+    out = []
+    for k in range(len(acc) - 1):
+        w, ew, e2w = acc[k + 1] - acc[k]
+        lo = 0.0 if k == 0 else float(cuts[k - 1])
+        hi = float(cuts[k]) if k < len(cuts) else None
+        out.append(dict(B_lo_T=lo, B_hi_T=hi, area_frac=float(w / A),
+                        L1_pct=float(100 * ew / w / b_ref) if w > 0 else None,
+                        L2_pct=float(100 * np.sqrt(e2w / w) / b_ref) if w > 0 else None))
+    return out

@@ -191,3 +191,76 @@ def check_against_femm(ans_gz, bh, cen, b_smooth, n_points=200, seed=0):
     return dict(n_points=int(len(sel)), max_rel_diff=float(rel.max()),
                 median_rel_diff=float(np.median(rel)),
                 B_range_T=[float(b_smooth[sel].min()), float(b_smooth[sel].max())])
+
+
+# ---------------------------------------------------------------------------
+# erro de superfície × ponto de operação (acumulado dentro do regions)
+# ---------------------------------------------------------------------------
+SAT_EDGES = np.round(np.arange(0.0, 2.6 + 1e-9, 0.005), 6)   # 520 bins de 0,005 T + overflow
+SAT_SETS = ('aco_int', 'aco')     # aço ∩ Ω_int(d) | aço inteiro (em Ω)
+
+
+class SatAccum:
+    """Erro de superfície no aço em função de |B| da referência suavizada no ponto de
+    quadratura (|B|_FEMM da métrica de superfície): histograma fino em |B| (SAT_EDGES; o
+    último índice = |B| ≥ 2,6 T, overflow) com Σw, Σe·w, Σe²·w, para cada conjunto de
+    SAT_SETS. `direct` = as mesmas somas feitas direto nos pontos (validação do histograma)."""
+
+    def __init__(self, edges=SAT_EDGES):
+        self.edges = np.asarray(edges, float)
+        nb = len(self.edges)                       # nb-1 bins regulares + 1 overflow
+        self.h = {k: np.zeros((3, nb)) for k in SAT_SETS}
+        self.direct = {k: np.zeros(3) for k in SAT_SETS}
+
+    def add(self, mag_model, mag_femm, w, masks):
+        """masks {conjunto: bool [Q]} na ordem dos pontos de mag_*/w."""
+        mm, mf, w = (np.asarray(v, np.float64) for v in (mag_model, mag_femm, w))
+        e = np.abs(mm - mf)
+        nb = len(self.edges)
+        for k, m in masks.items():
+            b = np.minimum(np.searchsorted(self.edges, mf[m], side='right') - 1, nb - 1)
+            wm, em = w[m], e[m]
+            vals = (wm, em * wm, em ** 2 * wm)
+            for j, v in enumerate(vals):
+                self.h[k][j] += np.bincount(b, v, minlength=nb)
+            self.direct[k] += [v.sum() for v in vals]
+
+
+def sat_report(acc, b_ref, n_int=50):
+    """Intervalos de MESMA ÁREA de aço (n_int, na resolução dos bins) por conjunto:
+    |B| mediano (interpolado no bin), faixa de |B|, área (mm² e fração), L1/L2 (% do b_ref,
+    o B_ref global em Ω da mesma run) + total e a conferência histograma × pontos."""
+    out = {}
+    E = acc.edges
+    width = np.append(np.diff(E), np.nan)          # overflow sem largura
+    for k in SAT_SETS:
+        W, EW, E2W = acc.h[k]
+        A = W.sum()
+        dsum = acc.direct[k]
+        chk = dict(rel_diff_sum_w=float(abs(A - dsum[0]) / max(dsum[0], 1e-300)),
+                   rel_diff_sum_ew=float(abs(EW.sum() - dsum[1]) / max(dsum[1], 1e-300)),
+                   overflow_area_frac=float(W[-1] / A) if A else None)
+        if A <= 0:
+            out[k] = dict(intervals=[], total=None, check=chk)
+            continue
+        cum = np.cumsum(W)
+        grp = np.minimum((n_int * (cum - W / 2) / A).astype(int), n_int - 1)
+        iv = []
+        for g in range(n_int):
+            sel = np.flatnonzero((grp == g) & (W > 0))
+            if not len(sel):
+                continue
+            w, ew, e2w = W[sel].sum(), EW[sel].sum(), E2W[sel].sum()
+            c = np.cumsum(W[sel])
+            j = int(np.searchsorted(c, w / 2))
+            prev = c[j - 1] if j else 0.0
+            b0 = E[sel[j]]
+            bmed = b0 + (width[sel[j]] if np.isfinite(width[sel[j]]) else 0.0) * (w / 2 - prev) / W[sel[j]]
+            hi = E[sel[-1] + 1] if sel[-1] + 1 < len(E) else float('inf')
+            iv.append(dict(B_median_T=float(bmed), B_lo_T=float(E[sel[0]]), B_hi_T=float(hi),
+                           area_mm2=float(w), area_frac=float(w / A),
+                           L1_pct=float(100 * ew / w / b_ref), L2_pct=float(100 * np.sqrt(e2w / w) / b_ref)))
+        out[k] = dict(intervals=iv, check=chk,
+                      total=dict(area_mm2=float(A), L1_pct=float(100 * EW.sum() / A / b_ref),
+                                 L2_pct=float(100 * np.sqrt(E2W.sum() / A) / b_ref)))
+    return out

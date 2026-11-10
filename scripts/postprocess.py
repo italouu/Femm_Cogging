@@ -115,13 +115,14 @@ from src.postprocess.metrics import (R_EXT_MM, R_IN_MM, Accum, merge, pstats,
 from src.postprocess.plots.errors import (fig_bars, fig_region_curves, fig_regions_map,
                                           fig_surface_error_map)
 from src.postprocess.plots.fields import fig_field
-from src.postprocess.plots.primitives import apply_style, save_fig
+from src.postprocess.plots.primitives import MODEL_COLOR, apply_style, save_fig
 from src.postprocess.plots.training import fig_training
 from src.postprocess.regions import (BAND_UNIONS, BANDS, BandAccum, SeamGeometry, band_edges,
                                      band_points, interface_edges, omega_mask, region_geometry)
-from src.postprocess.saturation import (FemmBH, check_against_femm, steel_operating_points,
+from src.postprocess.saturation import (SAT_EDGES, SAT_SETS, FemmBH, SatAccum, check_against_femm,
+                                        parse_bh_curves, sat_report, steel_operating_points,
                                         weighted_percentile)
-from src.postprocess.plots.saturation import MU_LABEL, fig_bh, fig_steel_map
+from src.postprocess.plots.saturation import MU_LABEL, fig_bh, fig_sat_error, fig_steel_map
 from src.postprocess.timing import (ARCH_STAGES, DEVICE, LAYOUT, check_mesh_vs_raw,
                                     check_preprocess, collate, encode_timed, femm_solve_timed,
                                     hardware_info, iqr_stats, preprocess_timed, time_batch)
@@ -577,6 +578,10 @@ def _regions_sample(path, row, ang_canto, edges, d_list, mask_omega=True):
                band_viol=geo.max_viol, band_fallback=geo.n_fallback,
                n_copies=(geo.n_copies_seg, geo.n_copies_corner), t_bands=time.perf_counter() - t)
     lay['overlay'].pop('xy')          # só serviu às distâncias (memória no processo principal)
+    curves = parse_bh_curves(ans.lines)  # curva B-H do aço (saturação; mesmo .ans já lido)
+    lay['bh'] = (curves[0][1], curves[0][2]) if curves else None
+    lay['bh_n_diff'] = sum(not (np.array_equal(c[1], curves[0][1]) and np.array_equal(c[2], curves[0][2]))
+                           for c in curves)
     return lay
 
 
@@ -625,12 +630,34 @@ def regions_setup(d_list=None, d_max=None, n_bins=REGIONS_N_BINS, bin_scale='lin
     return d_list, edges, params
 
 
-def regions_state(runs, edges, d_list):
-    """Estado acumulado do regions (somas + registros por amostra; pickle = checkpoint)."""
+def regions_state(runs, edges, d_list, sat=False):
+    """Estado acumulado do regions (somas + registros por amostra; pickle = checkpoint).
+    sat: acumula também o erro no aço × |B| da referência (saturation.SatAccum, por run e
+    piso; conjuntos SAT_SETS no 1º d da lista)."""
     return dict(acc={k: BandAccum(edges, d_list) for k in runs},
                 acc_floor={kd: BandAccum(edges, d_list) for kd in REGIONS_FLOORS},
                 pset={}, subs=[], idx=[], t_bands=[], t_add=[], viol=[], n_fb=0, omegas=[],
-                n_pts={'mesh': 0, 'overlay': 0}, fig_done=False)
+                n_pts={'mesh': 0, 'overlay': 0}, fig_done=False,
+                sat=({k: SatAccum() for k in runs} | {'piso_' + kd: SatAccum() for kd in REGIONS_FLOORS}
+                     if sat else None),
+                bh=None, bh_n_diff=0)
+
+
+def _sat_masks(lay, ps):
+    """Máscaras dos conjuntos SAT_SETS nos pontos do conjunto ps ('mesh'/'overlay'), em cache
+    no lay: aço (elem_mat == iron) em Ω e, para 'aco_int', na região interior (dist_f > d)
+    do 1º d da lista."""
+    cache = lay.setdefault('_sat_masks', {})
+    if ps not in cache:
+        from src.data_gen.motor_constants import MATERIAL_ID
+        M, K = lay['mesh_quad']['mag'].shape
+        tri_of = np.repeat(np.arange(M), K) if ps == 'mesh' else lay['overlay']['tri']
+        bp = lay['bands'][ps]
+        steel = (lay['elem_mat'][tri_of] == MATERIAL_ID['iron_1008']) & bp['keep']
+        inter = np.zeros(len(steel), bool)
+        inter[bp['keep']] = bp['reg'][0] == BANDS.index('interior')
+        cache[ps] = dict(aco_int=steel & inter, aco=steel)
+    return cache[ps]
 
 
 def regions_track(st, sub, idx, lay):
@@ -642,6 +669,11 @@ def regions_track(st, sub, idx, lay):
     st['viol'].append(lay['band_viol'])
     st['n_fb'] += lay['band_fallback']
     st['omegas'].append(lay['omega'])
+    if st.get('sat') is not None and lay.get('bh') is not None:
+        if st['bh'] is None:
+            st['bh'] = lay['bh']
+        st['bh_n_diff'] += lay['bh_n_diff'] + int(not (np.array_equal(lay['bh'][0], st['bh'][0])
+                                                       and np.array_equal(lay['bh'][1], st['bh'][1])))
     for name, bp in lay['bands'].items():
         st['n_pts'][name] += int(bp['keep'].sum())
     return len(st['subs']) - 1
@@ -677,6 +709,8 @@ def regions_add_floors(st, lay, pos):
             mm, mf, w, ps = _floor_points(kd, lay, with_set=True)
         t = time.perf_counter()
         st['acc_floor'][kd].add(mm, mf, w, lay['bands'][ps])
+        if st.get('sat') is not None:
+            st['sat']['piso_' + kd].add(mm, mf, w, _sat_masks(lay, ps))
         st['t_add'][pos] += time.perf_counter() - t
         st['pset']['piso_' + kd] = ps
 
@@ -691,6 +725,8 @@ def regions_add_run(st, k, r, lay, pos):
         mm, mf, w, _, ps = _surface_points(r['arch'], lay, out_hw, yn, with_set=True)
     t = time.perf_counter()
     st['acc'][k].add(mm, mf, w, lay['bands'][ps])
+    if st.get('sat') is not None:
+        st['sat'][k].add(mm, mf, w, _sat_masks(lay, ps))
     st['t_add'][pos] += time.perf_counter() - t
     st['pset'][k] = ps
 
@@ -777,7 +813,58 @@ def regions_finalize(st, runs, params, d_list, subset, out_dir: Path, fig_dir: P
           f"máx(dist_f - dist_q) = {res['checks']['max_dist_f_minus_dist_q_mm']:.2e} mm; "
           f"fallback {st['n_fb']} pontos")
     print(f"salvo em {out_dir / 'regions.json'}, {out_dir / 'regions_curves.npz'}; figuras em {fig_dir}")
+    if st.get('sat') is not None:
+        res['saturation'] = regions_saturation(st, runs, res, d_list, subset, out_dir, fig_dir, extra)
     return res
+
+
+def regions_saturation(st, runs, res, d_list, subset, out_dir: Path, fig_dir: Path, extra=None):
+    """saturation_error.json + figura: erro no aço × |B| da referência (SatAccum), 50
+    intervalos de mesma área (sat_report), L1 em % do B_ref em Ω da mesma run; μ_eff(|B|)
+    da curva B-H do .ans (FemmBH) e joelho (μ_eff = metade do máximo). Retorna o resumo das
+    conferências."""
+    bh = FemmBH(*st['bh'])
+    knee = bh.knee(0.5)
+    bref = {k: v['B_ref_global'] for k, v in res['runs'].items()}
+    bref.update({'piso_' + kd: v['B_ref_global'] for kd, v in res['floor_surface'].items()})
+    rep_ = {k: sat_report(a, bref[k]) for k, a in st['sat'].items()}
+    b = np.round(np.arange(0.01, 2.6 + 1e-9, 0.01), 4)
+    checks = dict(max_rel_diff_sum_w=max(r[s]['check']['rel_diff_sum_w'] for r in rep_.values() for s in SAT_SETS),
+                  max_rel_diff_sum_ew=max(r[s]['check']['rel_diff_sum_ew'] for r in rep_.values() for s in SAT_SETS),
+                  max_overflow_area_frac=max((r[s]['check']['overflow_area_frac'] or 0)
+                                             for r in rep_.values() for s in SAT_SETS),
+                  bh_curves_different_from_first=int(st['bh_n_diff']))
+    out = dict(**{k: v for k, v in (extra or {}).items() if k in ('placeholder', 'sample_idx')},
+               n_samples=len(st['subs']), subset=subset, d_interior_mm=float(d_list[0]),
+               definicao=dict(conjuntos={'aco_int': 'pontos de quadratura no aço (iron) em Ω_int(d) '
+                                                    '= dist_f > d, Ω = só o motor',
+                                         'aco': 'todos os pontos de quadratura no aço (em Ω)'},
+                              variavel='|B| da referência suavizada no ponto (|B|_FEMM da métrica de '
+                                       'superfície)',
+                              histograma=f'{len(SAT_EDGES) - 1} bins de 0,005 T em [0, 2,6] T + overflow',
+                              intervalos='50 de mesma área de aço (na resolução dos bins); L1/L2 em % '
+                                         'do B_ref global em Ω da mesma run (regions.json)'),
+               bh=dict(B_T=bh.B_in.tolist(), H_A_m=bh.H_in.tolist(), n_repair=bh.n_repair,
+                       mu_eff_curve=dict(B_T=b.tolist(), mu_eff=bh.mu_eff(b).tolist()), knee=knee),
+               checks=checks,
+               runs={k: dict(arch=r['arch'], loss=r['loss'], run_dir=r['run_dir'], best_epoch=r['epoch'],
+                             B_ref_omega=bref[k], **rep_[k]) for k, r in runs.items()},
+               floors={kd: dict(B_ref_omega=bref['piso_' + kd], **rep_['piso_' + kd]) for kd in REGIONS_FLOORS},
+               hist=dict(edges_T=SAT_EDGES.tolist(),
+                         sums={k: {s_: a.h[s_].tolist() for s_ in SAT_SETS} for k, a in st['sat'].items()}))
+    (out_dir / 'saturation_error.json').write_text(json.dumps(out, indent=1))
+    apply_style()
+    rep_fig = {k: v for k, v in rep_.items()}
+    save_fig(fig_sat_error(rep_fig, bh, knee,
+                           f"{len(st['subs'])} amostras ({subset}) — erro de superfície no aço × |B| da "
+                           f"referência (50 intervalos de mesma área; d = {d_list[0]:.4f} mm)",
+                           REGIONS_ARCHS, MODEL_COLOR,
+                           {'FNO_BipartiteGNN_Elem': 'Elem', 'FNO_SplitGNN': 'Split'}),
+             fig_dir / 'saturacao_erro_L1_vs_B', pdf=True, dpi=200)
+    print(f"saturação: {out_dir / 'saturation_error.json'}; conferência hist × pontos: "
+          f"Σw {checks['max_rel_diff_sum_w']:.1e}, Σe·w {checks['max_rel_diff_sum_ew']:.1e} (rel.); "
+          f"overflow ≤ {checks['max_overflow_area_frac']:.1e}; joelho {knee.get('B_knee_T')}")
+    return checks
 
 
 def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_list=None, d_max=None,
@@ -1069,7 +1156,8 @@ def femm_ref_rec(row, th, t22):
 
 def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
                idxs=None, n_theta=None, n_samples=80, n_per_chunk=8, limit=None,
-               raw_dir=None, work_dir=None, subset='test', femm_ref=False, first=None):
+               raw_dir=None, work_dir=None, subset='test', femm_ref=False, first=None,
+               cache_only=False, workers=None):
     """Torque pelo tensor de Maxwell na faixa do entreferro, REFERÊNCIA = smooth (B suavizado
     do .ans no centróide, mesma fórmula das predições; docs/claude/avaliacao.md §3), para as
     runs da loss (bateria bldc + FNO_SplitGNN; archs filtra), com o piso de cada arch
@@ -1085,7 +1173,10 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
     'femm' / T_femm -- fora de todos os resumos.
     limit: só os primeiros `limit` ângulos (theta-e/batch) ou amostras (scatter) -- smoke.
     raw_dir: raw de onde vêm valid_designs.csv e os .ans (None: samples.RAW_DIR); work_dir:
-    soluções FEMM e temporários (None: TORQUE_TMP)."""
+    soluções FEMM e temporários (None: TORQUE_TMP).
+    cache_only (batch): nunca chama o FEMM -- ângulos sem cache ou com cache inválido
+    (profundidade) são pulados e registrados em meta['cache_skipped']; workers: processos de
+    parse (None = TORQUE_WORKERS)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     raw_dir = Path(raw_dir) if raw_dir is not None else RAW_DIR
     work_dir = Path(work_dir) if work_dir is not None else TORQUE_TMP
@@ -1097,6 +1188,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
                 femm_T22_recorded=bool(femm_ref),
                 runs={r['arch']: dict(run_dir=r['run_dir'], best_epoch=r['epoch']) for r in runs.values()})
     pk = [f"pred_{r['arch']}" for r in runs.values()] + [f"floor_{r['arch']}" for r in runs.values()]
+    n_work = workers or TORQUE_WORKERS
     mNm = lambda v: np.asarray(v) * 1e3
     if mode == 'theta-e':
         n_theta = n_theta or 24
@@ -1122,7 +1214,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
             T = {'smooth': [], 'gt': [], **{k: [] for k in pk}}
             if femm_ref:
                 T['femm_T22'] = [3 * r['T22_sector'] for r in ref]
-            with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
+            with ProcessPoolExecutor(n_work) as ex:
                 futs = [ex.submit(parse_torque_sample, sw / 'raw' / f'theta_{k:03d}.ans.gz', row,
                                   _with_split(runs))
                         for k in range(len(ref))]
@@ -1158,16 +1250,28 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
                      and bad(json.loads(jsons[i, k].read_text()), rows[i])]
             if tasks:
                 print(f'  {len(tasks)} cache(s) a ressolver (profundidade / T22)', flush=True)
+        skipped = []
+        if cache_only:
+            skipped = [dict(idx=int(i), k=int(k), motivo='cache inválido (profundidade/T22)') for i, k, _ in tasks]
+            skipped += [dict(idx=int(i), k=int(k), motivo='sem cache')
+                        for i in ids for k in range(n_theta)
+                        if not (root / f'sample_{i:06d}' / f'theta_{k:02d}.json').exists()]
+            bad_set = {(d_['idx'], d_['k']) for d_ in skipped}
+            tasks = []
+            meta['cache_skipped'] = skipped
+            if skipped:
+                print(f'  --cache-only: {len(skipped)} ângulo(s) pulados: {skipped[:10]}', flush=True)
         if tasks:
             with ProcessPoolExecutor(TORQUE_FEMM_WORKERS) as ex:
                 for f in [ex.submit(_femm_batch_one, i, k, th, rows[i], work_dir, femm_ref)
                           for i, k, th in tasks]:
                     f.result()
         res = {}
-        with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
+        with ProcessPoolExecutor(n_work) as ex:
             for n, i in enumerate(ids, 1):
                 d = root / f'sample_{i:06d}'
-                ks = [k for k in range(n_theta) if (d / f'theta_{k:02d}.json').exists()][:limit]
+                ks = [k for k in range(n_theta) if (d / f'theta_{k:02d}.json').exists()
+                      and (not cache_only or (int(i), k) not in bad_set)][:limit]
                 futs = [ex.submit(parse_torque_sample, d / f'theta_{k:02d}.ans.gz', rows[i],
                                   _with_split(runs))
                         for k in ks]
@@ -1198,7 +1302,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
     elif mode == 'scatter':
         ids = scatter_ids(split_run, n_per_chunk, subset=subset)[:limit]
         out = dict(idx=[], T_smooth=[], T_gt=[], I=[], theta_e=[], rotor_phase=[], **{f'T_{kk}': [] for kk in pk})
-        with ProcessPoolExecutor(TORQUE_WORKERS) as ex:
+        with ProcessPoolExecutor(n_work) as ex:
             for b in range(0, len(ids), 32):
                 batch = ids[b:b + 32]
                 futs = [ex.submit(parse_torque_sample, raw_dir / f'sample_{i:06d}.ans.gz', rows[i],
@@ -1691,6 +1795,9 @@ if __name__ == '__main__':
     p_tq.add_argument('--femm-ref', action='store_true',
                       help='calcula e grava também o T22 do FEMM (mo_blockintegral); fora dos resumos '
                            '(a referência é sempre o smooth)')
+    p_tq.add_argument('--cache-only', action='store_true',
+                      help='batch: não chama o FEMM; ângulos sem cache válido são pulados e registrados')
+    p_tq.add_argument('--workers', type=int, default=None, help='processos de parse (default: TORQUE_WORKERS)')
     p_tq.add_argument('--first', type=int, default=None,
                       help='batch: só as K primeiras amostras da seleção (placeholder)')
     p_tq.add_argument('--n-theta', type=int, default=None, help='default: 24 (theta-e) / 16 (batch)')
@@ -1740,7 +1847,7 @@ if __name__ == '__main__':
     elif a.cmd == 'torque':
         run_torque(a.mode, a.out, a.loss, a.archs, a.femm, a.idx, a.n_theta,
                    a.n_samples, a.n_per_chunk, a.limit, a.raw_dir, a.work_dir, a.subset,
-                   a.femm_ref, a.first)
+                   a.femm_ref, a.first, a.cache_only, a.workers)
     elif a.cmd == 'saturation':
         run_saturation(a.out, a.fig, a.n, tuple(a.knee_frac), a.check_femm, a.subset)
     elif a.cmd == 'timing':

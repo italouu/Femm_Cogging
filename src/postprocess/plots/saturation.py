@@ -75,3 +75,48 @@ def fig_steel_map(panels, knee_levels, vmax):
     cb = fig.colorbar(m, ax=axs[0].tolist(), orientation='horizontal', fraction=0.04, pad=0.03)
     cb.set_label('|B| suavizado no centróide do elemento de aço [T]; linhas = níveis do joelho')
     return fig
+
+
+def fig_sat_error(rep, bh, knee, title, archs, colors, labels=None):
+    """L1 (% do B_ref em Ω) × |B| da referência no aço, por intervalos de mesma área
+    (saturation.sat_report): um painel por conjunto (aço ∩ Ω_int, aço inteiro), uma linha
+    por arch (MAE contínuo, MSE tracejado), pisos em cinza; μ_eff(|B|) da curva B-H no eixo
+    secundário e o joelho marcado. rep = {chave: sat_report}; chaves '<arch>_<loss>' e
+    'piso_<tipo>'."""
+    import matplotlib.pyplot as plt
+    labels = labels or {}
+    sets = (('aco_int', 'aço ∩ Ω_int (longe das interfaces)'), ('aco', 'aço inteiro (em Ω)'))
+    fig, axs = plt.subplots(1, 2, figsize=(13, 4.8), sharey=True)
+    b = np.linspace(0.02, 2.6, 600)
+    mu = bh.mu_eff(b)
+    for ax, (k, ttl) in zip(axs, sets):
+        for a in archs:
+            for loss, ls in (('mae', '-'), ('mse', '--')):
+                r = rep.get(f'{a}_{loss}', {}).get(k)
+                if not r or not r['intervals']:
+                    continue
+                x = [i['B_median_T'] for i in r['intervals']]
+                y = [i['L1_pct'] for i in r['intervals']]
+                ax.plot(x, y, ls, color=colors[a], lw=1.5 if loss == 'mae' else 1.0, marker='o', ms=2.5,
+                        label=f"{labels.get(a, a)} {loss.upper()}")
+        for kd, r_ in rep.items():
+            if kd.startswith('piso_') and r_.get(k) and r_[k]['intervals'] and kd in ('piso_P1_mat', 'piso_P0_elem'):
+                ax.plot([i['B_median_T'] for i in r_[k]['intervals']], [i['L1_pct'] for i in r_[k]['intervals']],
+                        ':', color='#8c8c8c', lw=1.0, label=kd.replace('_', ' '))
+        if knee and knee.get('B_knee_T'):
+            ax.axvline(knee['B_knee_T'], color=INK2, lw=0.9, ls='-.')
+            ax.text(knee['B_knee_T'], ax.get_ylim()[1] * 0.97, f" joelho {knee['B_knee_T']:.2f} T",
+                    fontsize=7.5, color=INK2, va='top')
+        a2 = ax.twinx()
+        a2.plot(b, mu, color='#b0b0b0', lw=2.0, alpha=0.6)
+        a2.set_ylabel('μ_eff (curva B-H)', color='#8c8c8c')
+        a2.tick_params(axis='y', colors='#8c8c8c')
+        a2.grid(False)
+        ax.set_zorder(a2.get_zorder() + 1)
+        ax.patch.set_visible(False)
+        ax.set(xlabel='|B| da referência suavizada no ponto [T]', title=ttl, xlim=(0, 2.6))
+    axs[0].set_ylabel('L1 [% do B_ref em Ω]')
+    axs[0].legend(frameon=False, fontsize=7, ncol=2)
+    fig.suptitle(title, fontsize=10)
+    fig.tight_layout()
+    return fig

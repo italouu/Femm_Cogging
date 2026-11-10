@@ -38,6 +38,7 @@ Execução (raiz do projeto):
 """
 import argparse
 import gc
+import sys
 import json
 import os
 import pickle
@@ -165,7 +166,7 @@ def step_regions(a, out_root: Path, placeholder: bool, log):
     runs = pp._regions_runs()
     for k, r in runs.items():
         log(f"  {k:28s} {r['run_dir']} best ép.{r['epoch']}  superfície {pp._regions_kind(r['arch'])}")
-    signature = dict(params=params, sample_idx=idx_all, chunk=a.chunk,
+    signature = dict(params=params, sample_idx=idx_all, chunk=a.chunk, saturation=not a.no_saturation,
                      runs={k: (r['run_dir'], r['epoch']) for k, r in runs.items()})
     ck_path = dados / 'regions_checkpoint.pkl'
     if a.resume and ck_path.exists():
@@ -176,7 +177,7 @@ def step_regions(a, out_root: Path, placeholder: bool, log):
     else:
         if a.resume:
             log(f'--resume: {ck_path} não existe; começando do início')
-        st, b0, blog, t_prev = pp.regions_state(runs, edges, d_list), 0, [], 0.0
+        st, b0, blog, t_prev = pp.regions_state(runs, edges, d_list, sat=not a.no_saturation), 0, [], 0.0
 
     mon = MemMonitor()
     stop_reason = None
@@ -242,7 +243,7 @@ def step_regions(a, out_root: Path, placeholder: bool, log):
         mon.stop()
     if stop_reason:
         log(f'PARADO: {stop_reason}. Checkpoint em {ck_path}; continue com --resume.')
-        return None
+        return 'STOPPED'
 
     elapsed = t_prev + (time.time() - t_sess)
     n = len(st['subs'])
@@ -256,6 +257,8 @@ def step_regions(a, out_root: Path, placeholder: bool, log):
                                 omega_area_per_sample=_omega_areas(st)))
     res = pp.regions_finalize(st, runs, params, d_list, a.subset, dados, plots, timing, extra)
     _check_regions(res, log)
+    if res.get('saturation'):
+        log(f"saturação: {res['saturation']}")
     if not a.keep_checkpoint:
         ck_path.unlink(missing_ok=True)
     return res
@@ -331,6 +334,10 @@ def main():
     ap.add_argument('--n-bins', type=int, default=pp.REGIONS_N_BINS)
     ap.add_argument('--bin-scale', default='lin', choices=('lin', 'log'))
     ap.add_argument('--ang-canto', type=float, default=30.0)
+    ap.add_argument('--no-saturation', action='store_true',
+                    help='não acumula o erro no aço × |B| (saturation_error.json)')
+    ap.add_argument('--log-dir', type=Path, default=None,
+                    help='cópia do log em <dir>/run_postprocess.log (além de <out>/dados/)')
     a = ap.parse_args()
 
     n_subset = len(samples_with_subset(find_runs(pp.ROOT_S)[('FNO2d', 'mse')], a.subset, None,
@@ -342,17 +349,27 @@ def main():
     (out_root / 'dados').mkdir(parents=True, exist_ok=True)
     log_path = out_root / 'dados' / 'run_postprocess.log'
 
+    log_paths = [log_path]
+    if a.log_dir is not None:
+        a.log_dir.mkdir(parents=True, exist_ok=True)
+        log_paths.append(a.log_dir / 'run_postprocess.log')
+
     def log(msg):
+        msg = f"[{time.strftime('%H:%M:%S')}] {msg}"
         print(msg, flush=True)
-        with open(log_path, 'a', encoding='utf-8') as f:
-            f.write(msg + '\n')
+        for lp in log_paths:
+            with open(lp, 'a', encoding='utf-8') as f:
+                f.write(msg + '\n')
 
     log(f"=== {time.strftime('%Y-%m-%d %H:%M:%S')} {vars(a)} -> {out_root} "
         f"({'PLACEHOLDER' if placeholder else 'subset inteiro'}, {n_subset} amostras no subset)")
     t0 = time.time()
+    stopped = False
     for s in a.steps:
-        STEPS[s](a, out_root, placeholder, log)
-    log(f'=== fim ({(time.time() - t0) / 60:.1f} min nesta sessão)')
+        stopped |= STEPS[s](a, out_root, placeholder, log) == 'STOPPED'
+    log(f'=== fim ({(time.time() - t0) / 60:.1f} min nesta sessão)' + (' -- PARADO (checkpoint)' if stopped else ''))
+    if stopped:
+        sys.exit(3)       # parada limpa (--max-ram-gb / --stop-after): retomar com --resume
 
 
 if __name__ == '__main__':

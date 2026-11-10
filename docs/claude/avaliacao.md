@@ -90,101 +90,111 @@ O piso P1 não é limite inferior rigoroso.
 
 ## 2. Regiões (`regions`, `src/postprocess/regions.py`)
 
-As regiões são **faixas por distância**, com a largura $d$ aberta, e os elementos são
-**cortados**: cada ponto de quadratura de §1 é atribuído pela **sua** distância, e não pelo
-triângulo.
+As regiões são **faixas por distância**, de largura $d$, e os elementos são **cortados**:
+cada ponto de quadratura de §1 é atribuído pela **sua** distância, sem subdivisão adicional.
+
+**Domínio Ω = só o motor** (`omega_mask`):
+- O que sai: os elementos dos rótulos `vacuum` cuja **posição do rótulo** tem
+  $r < $ stator_inner/2 (ar do furo interno) ou $r > $ rotor_outer/2 (ar externo ao back
+  iron), com os raios da linha do CSV de cada amostra.
+- O que fica: o entreferro e o ar das ranhuras.
+- Pontos fora de Ω não entram em nenhuma região, nem no total, nem no $B_{ref}$.
+- No teste: rótulos 40/41 (interno) e 42/43 (externo), com 91,9 e 143,8 mm² excluídos. A área
+  de Ω contra a exata $(r_{ro}^2 - r_{si}^2)\,\theta/2$ difere em −0,005%.
 
 **Definição**
-- $\Gamma$ = união das arestas de interface (`interface_edges`: arestas compartilhadas por
-  elementos de materiais diferentes; a borda externa do domínio fica de fora).
-- $\mathcal V_c$ = vértices de canto (`corner_nodes`): vértice de fronteira com 2 arestas de
-  interface e mudança de direção $> 30°$ (`--ang-canto`), ou com $\ge 3$ arestas de interface,
-  ou que toca $\ge 3$ materiais.
-- $\Omega_f(d) = \{x : \mathrm{dist}(x,\Gamma) \le d\}$ (fronteira),
-  $\Omega_q(d) = \{x : \mathrm{dist}(x,\mathcal V_c) \le d\}$ (quinas),
-  $\Omega_{int}(d) = \Omega \setminus \Omega_f(d)$ (interior). O mesmo $d$ vale para as duas.
-- dist = distância euclidiana exata no plano (ponto↔segmento, ponto↔ponto).
-- Como $\mathcal V_c$ são vértices de $\Gamma$, $\mathrm{dist}_f \le \mathrm{dist}_q$ ponto a
-  ponto e $\Omega_q(d) \subseteq \Omega_f(d)$ para todo $d$.
-
-**Distâncias** (`band_distances`, uma vez por amostra e por conjunto de pontos: quadratura da
-malha, com xy = baricêntricas · vértices, e overlay da grade, com `grid_mesh_overlay['xy']`;
-reutilizadas por todas as runs e pisos):
-- $\mathcal V_c$: `cKDTree` (exato).
-- $\Gamma$ (`_dist_to_segments`): cada aresta é dividida em sub-segmentos de no máximo
-  0,02 mm. A união é o mesmo conjunto, então isso não é densificar. Para cada ponto, calcula
-  a distância exata aos sub-segmentos dos $k$ pontos médios mais próximos ($k$ = 16, depois
-  64). O resultado é aceito quando o limite inferior dos demais, $|p - m_k| - h/2$, é
-  $\ge$ o mínimo. Sobra um fallback `shapely.STRtree.query_nearest`, que não foi acionado na
-  amostra conferida.
-- Pontos com $\mathrm{dist}_f > d_{max}$ **garantido** ficam com um limite superior, já que só
-  caem no bin de excesso.
-- Conferido contra o shapely em 200 mil pontos: diferença máxima de 4e-15 mm.
-- $\mathrm{dist}_f$ é levado a $\min(\mathrm{dist}_f, \mathrm{dist}_q)$ para que a inclusão
-  valha também no arredondamento (violação medida: 0).
+- $\Gamma$ = arestas de interface (`interface_edges`) e $\mathcal V_c$ = vértices de canto
+  (`corner_nodes`: mudança de direção $> 30°$, ramificação ou $\ge 3$ materiais). As duas são
+  calculadas na malha **inteira**.
+- $\Omega_f(d) = \{x \in \Omega : \mathrm{dist}(x,\Gamma) \le d\}$,
+  $\Omega_q(d) = \{x \in \Omega : \mathrm{dist}(x,\mathcal V_c) \le d\}$ e
+  $\Omega_{int}(d) = \Omega \setminus \Omega_f(d)$.
+- Regiões disjuntas: **quinas** $\Omega_q$, **fronteira sem quinas**
+  $\Omega_f \setminus \Omega_q$ e **interior**; a **fronteira** é $\Omega_f$ inteira.
+- **$d$ padrão** = $R_{in}\,\theta_{setor}/N_A$ = 0,2163 mm, o passo angular da grade no menor
+  raio. `--d` aceita outros valores.
+- **Costura periódica de 120°** (`SeamGeometry`): os segmentos de Γ e os cantos a até $d_{max}$
+  das retas θ = 0 e θ = 120° são copiados, girados de ±120°. Um ponto perto de 0° enxerga a
+  interface perto de 120° pelo outro lado. O custo é cerca de 10% a mais nas distâncias.
+- dist = euclidiana exata (`_dist_to_segments` com `cKDTree`, conferida contra o shapely com
+  diferença de 4e-15 mm; fallback shapely nos raros pontos sem prova de exatidão).
+  $\mathrm{dist}_f = \min(\mathrm{dist}_f, \mathrm{dist}_q)$ garante $\Omega_q \subseteq \Omega_f$.
 
 **Acumulação** (`BandAccum`), com $e = ||B|_{modelo} - |B|_{FEMM}|$ e peso $w$ do ponto:
-- **Histogramas** em $\mathrm{dist}_f$ e em $\mathrm{dist}_q$ de $\Sigma w$, $\Sigma e w$ e
-  $\Sigma e^2 w$ (`band_edges`):
-  - bins uniformes (`--bin-scale lin`, padrão) ou log entre 0 e `--d-max` (padrão 2 mm), com
-    `--n-bins` (padrão 400, ou seja, 0,005 mm);
-  - os `--d` são inseridos como bordas exatas;
-  - bin $k$ = $\{e_{k-1} < \mathrm{dist} \le e_k\}$, e o último bin é $\{\mathrm{dist} > d_{max}\}$.
-  - A soma acumulada dá $\Omega_f(d)$ e $\Omega_q(d)$ em qualquer borda, sem reprocessar.
-- **Regiões disjuntas por $d$ da lista**: quinas $\Omega_q$, fronteira sem quinas
-  $\Omega_f \setminus \Omega_q$ ($\mathrm{dist}_f \le d < \mathrm{dist}_q$) e interior.
-  - São acumuladas **diretamente** pelo código do ponto (`band_points`), com os dois limiares
-    no mesmo ponto.
-  - Pela inclusão acima, também valem como diferença dos dois histogramas 1-D; o teste
-    confere que as duas formas coincidem.
-- **Global**: $\Sigma w$, $\Sigma e w$, $\Sigma e^2 w$ e $\Sigma |B|_{FEMM}^2 w$ ($B_{ref}$).
+- **Histogramas** em $\mathrm{dist}_f$ e $\mathrm{dist}_q$ de $\Sigma w$, $\Sigma e w$ e
+  $\Sigma e^2 w$: 400 bins até `--d-max` 2 mm, com os $d$ inseridos como bordas. Eles dão as
+  curvas em qualquer $d$ sem reprocessar.
+- **Regiões disjuntas** acumuladas diretamente pelo código do ponto (`band_points`).
+- **Global:** $\Sigma w$, $\Sigma e w$, $\Sigma e^2 w$ e $\Sigma |B|_{FEMM}^2 w$, que dá o
+  $B_{ref}$ **em Ω**.
+
+**Runs e pisos**
+- Runs: FNO2d, FNO_GNN e FNO_BipartiteGNN_Elem da bateria `bldc`, mais FNO_SplitGNN da
+  bateria `split`, × mse/mae, sempre com o `best.pth`.
+- Pisos: `grade`, `P1_nos`, `P0_elem` e `P1_mat`; este último é a N_base do gabarito,
+  `fields.split_corner_values`.
+- Superfície da Split = P1 por material (`_split_points`).
 
 **Saída**
-- `dados/regions.json`, com `params` (todos os valores usados), `timing`, `checks` (violação da
-  inclusão, pontos no fallback) e, por run (`runs`) e por piso (`floor_surface`):
-  - `point_set` (`mesh` ou `overlay`);
-  - `B_ref_global` e `total` ($L1_A$/$L2_A$ em %, iguais aos do `eval` nas mesmas amostras);
-  - `by_d[d]` com as regiões `quinas`, `fronteira_sem_quinas`, `interior` (disjuntas) e
-    `fronteira` ($\Omega_f$ inteira). Cada uma traz $L1_A$ e $L2_A$ normalizados pela área
-    **da região**, em % do $B_{ref}$ **global** (e em T), `area_frac` e `L1_contrib_frac`
-    (fração de $\int e\,dA$ total).
-- `dados/regions_curves.npz`: por chave (run ou `piso_<tipo>`) e campo,
-  `<chave>__d` (bordas) e, para `f` ($\Omega_f$) e `q` ($\Omega_q$):
-  - `_area_frac`, `_eta` (fração do erro total) e `_L1_pct`/`_L2_pct` da região;
-  - as somas cruas `_cum_w`/`_cum_e`/`_cum_e2`.
-- `plots/regions_curvas.{png,pdf}`: colunas fronteira e quinas, linhas mse e mae. Em cada
-  painel, a fração da área (cinza tracejado) e η por modelo; os $d$ da tabela ficam marcados e
-  o eixo $d$ é log.
-- `plots/regions_bands_sample_<idx>_d<d>.png` (ponto decimal como `p`, ex. `d0p05`), na 1ª amostra e para cada $d$: as faixas reais
-  (buffer de $\Gamma$ e de $\mathcal V_c$ recortados ao domínio, `band_polygons`) sobre a
-  malha, com zoom no entreferro.
+- `dados/regions.json`:
+  - `params`, `omega` (rótulos, áreas por anel × exata), `timing`, `checks`, `sample_idx`;
+  - `execution` (lotes, picos, área de Ω por amostra), quando rodado pelo
+    `scripts/run_postprocess.py`;
+  - por run e por piso: `B_ref_global` (em Ω), `total` e `by_d[d][região]` com `L1_area_pct`,
+    `L2_area_pct` (normalizados pela área da região, em % do $B_{ref}$), `area_frac` e
+    `L1_contrib_frac` (η, a fração de $\int e\,dA$).
+- `dados/regions_curves.npz` e `plots/regions_curvas.{png,pdf}`: curvas acumuladas em $d$.
+- `plots/regions_map_sample_<idx>_d<d>.png`: verificação numa amostra. Os subtriângulos da
+  quadratura são pintados pela região (quina vermelho, fronteira sem quinas verde, interior
+  azul, fora de Ω cinza), com Γ e $\mathcal V_c$ em preto. Há um painel do setor e um zoom
+  num canto da ranhura.
+- Junto, se rodado com saturação: `dados/saturation_error.json` (§4.1).
 
-**Resolução da quadratura** (`tests/check_regions_bands.py`, amostra 5408): erro relativo da
-área de $\Omega_f(d)$ e $\Omega_q(d)$ pela soma dos pesos × área exata (shapely: buffer ∩
-domínio).
+**Validação**
+- Com a máscara desligada, o total reproduz o `eval` (32 amostras, ≤ 4e-8 pp).
+- No resultado final (608 amostras):
+  - a soma das 3 regiões disjuntas reproduz o total com erro de 7,7e-12 pp;
+  - máx($\mathrm{dist}_f - \mathrm{dist}_q$) = 4,4e-16 mm;
+  - 8857 pontos foram pelo fallback shapely (exato);
+  - os resultados por lote batem com uma execução contínua; as GNNs diferem em até 1e-7 pp,
+    pelo não determinismo da inferência na GPU.
 
-| $d$ [mm] | $\Omega_f$ malha | $\Omega_f$ overlay | $\Omega_q$ malha | $\Omega_q$ overlay |
+**Resolução da quadratura** (amostra 5408, nível 0): no $d$ padrão, a área de $\Omega_f$ tem
+erro de −0,03% na malha e −0,5% no overlay. Em $d \le 0{,}1$ mm passa de 1% na malha (−8,2% em
+0,05 mm); o n_sub não foi aumentado.
+
+**Resultados** (2026-11-10; 608 amostras de teste, $d$ = 0,2163 mm, $B_{ref}$ em Ω =
+0,6829 T): $L1_A$ da região em % do $B_{ref}$ [fração da área | η].
+
+| run / piso | quinas | fronteira sem quinas | interior | total L1 / L2 |
 |---|---|---|---|---|
-| 0,05 | −8,2% | +4,4% | −0,10% | +0,11% |
-| 0,1 | +0,70% | +4,5% | +0,27% | −0,27% |
-| 0,2 | −0,39% | +0,81% | +0,09% | +0,18% |
-| 0,5 | −0,10% | +0,48% | −0,05% | −0,01% |
+| FNO2d mse | 20,79 [0,018 \| 0,071] | 12,48 [0,193 \| 0,465] | 3,03 [0,790 \| 0,464] | 5,17 / 17,00 |
+| FNO2d mae | 20,55 [0,018 \| 0,072] | 12,32 [0,193 \| 0,472] | 2,90 [0,790 \| 0,456] | 5,03 / 16,97 |
+| FNO_GNN mse | 10,27 [0,018 \| 0,028] | 15,40 [0,193 \| 0,466] | 4,10 [0,789 \| 0,506] | 6,39 / 15,79 |
+| FNO_GNN mae | 10,22 [0,018 \| 0,031] | 14,92 [0,193 \| 0,491] | 3,56 [0,789 \| 0,478] | 5,88 / 15,58 |
+| Elem mse | 6,72 [0,018 \| 0,024] | 5,15 [0,193 \| 0,202] | 4,84 [0,789 \| 0,774] | 4,93 / 7,02 |
+| Elem mae | 6,52 [0,018 \| 0,027] | 4,46 [0,193 \| 0,203] | 4,14 [0,789 \| 0,770] | 4,24 / 6,34 |
+| Split mse | 5,32 [0,018 \| 0,028] | 3,62 [0,193 \| 0,212] | 3,18 [0,789 \| 0,759] | 3,30 / 4,62 |
+| Split mae | 4,94 [0,018 \| 0,031] | 3,12 [0,193 \| 0,214] | 2,69 [0,789 \| 0,754] | 2,81 / 4,17 |
+| piso grade | 19,59 [0,018 \| 0,099] | 10,77 [0,193 \| 0,591] | 1,38 [0,790 \| 0,310] | 3,51 / 16,62 |
+| piso P1_nos | 4,74 [0,018 \| 0,029] | 12,09 [0,193 \| 0,811] | 0,58 [0,789 \| 0,160] | 2,88 / 15,03 |
+| piso P0_elem | 1,69 [0,018 \| 0,013] | 1,74 [0,193 \| 0,149] | 2,39 [0,789 \| 0,837] | 2,25 / 4,16 |
+| piso P1_mat | 0,01 [0,018 \| 0,005] | 0,01 [0,193 \| 0,105] | 0,02 [0,789 \| 0,890] | 0,02 / 0,05 |
 
-Com $d \le 0{,}1$ mm, $\Omega_f$ passa de 1%: a faixa é mais estreita que os subtriângulos da
-quadratura nos elementos grandes ao longo de $\Gamma$ (malha n_sub=2, overlay n_sub=1). O n_sub
-não foi aumentado.
+O que a tabela mostra:
+- **Representações contínuas (grade e P1 nos nós):** concentram o erro na fronteira: 47–54%
+  de η em 21% da área.
+- **Representações por material (Elem e Split):** o erro fica no interior (75–77% de η).
+- A Tabela 1 em Ω está em `artigo_v1/tabelas/tab_main_omega.tex` e `dados/tab_main_omega.md`.
 
-**Tempo** (1 processo, só a parte das regiões): 0,93 s/amostra antes (`classify_triangles` +
-`RegionAccum`) contra cerca de 30 s depois (7,4 M distâncias exatas por amostra: 3,2 M da
-malha e 4,2 M do overlay). As distâncias rodam nos workers do parse.
-`regions` completo, 32 amostras do teste, 4 workers (RTX 4080, 32 GB): 3,5 s/amostra de parede antes contra 11,0 s
-depois (faixas 29,6 s por amostra no worker; acumulação de 10 runs + 3 pisos 4,3 s no processo
-principal). Validação nas mesmas 32 amostras: total e soma das 3 regiões disjuntas = `eval`
-(diferença ≤ 1e-7 pp em $L1_A$/$L2_A$, $B_{ref}$ idêntico); curvas monótonas e
-$\Omega_q \subseteq \Omega_f$ sem violação.
+**Tempo** (`scripts/run_postprocess.py`, 2 workers, lotes de 8; RTX 4080, 32 GB):
+- cerca de 18 s/amostra de parede, ou 3 h para as 608 amostras (a run levou 7,1 h porque o PC
+  ficou suspenso cerca de 4 h);
+- pico de RAM de 5,7 GiB e de VRAM de 0,33 GiB.
 
-`classify_triangles` (região fixa por triângulo) continua no módulo só para
-`scripts/artigo_v1.py` (mapa F3a e pontos de zoom); `RegionAccum` está comentado.
+`classify_triangles` (região fixa por triângulo) fica no módulo só para `scripts/artigo_v1.py`
+(mapa F3a). `band_distances`, `band_polygons` e `mesh_domain` ficam para
+`tests/check_regions_bands.py`.
 
 ## 3. Torque (`torque {theta-e,batch,scatter}`, `src/postprocess/torque.py`)
 
@@ -273,26 +283,42 @@ caminho ao gabarito da Split (`elem_y`) em 80 soluções do batch.
   $|\Delta\mathbf B|$ contra o smooth ≤ 2,2e-7 T, o float32 do `elem_y`.
 - **Vértices de interface e da costura:** o FEMM dá um valor nodal por elemento, e o N_base
   usa a média. A diferença chega a 0,49 T num elemento, e o torque difere ≤ 0,44 mN·m.
-- Por isso o piso da Split é cerca de 0,004% (não exatamente zero).
+- Por isso o piso da Split é cerca de 0,001% (não exatamente zero).
 
-**Resultados PLACEHOLDER** (2026-11-10; `resultados/BLDC_138x276/placeholder/dados/torque/`)
-- **Pisos e Split:** 10 primeiras amostras da seleção × 16 θe.
-- **Archs bldc nas 80 amostras:** recalculadas sem rodar nada, a partir do
-  `dados/torque/theta_e_batch_<loss>.json` (`recalc80_ref_smooth_<loss>.json`).
-- **Erro relativo mediano contra o smooth:**
+**Resultados** (2026-11-10)
+- **Seleção:** 80 amostras de teste estratificadas por corrente × 16 θe, só com o cache do
+  FEMM (`--cache-only`, nenhum ângulo pulado); 4 archs e pisos.
+- **Arquivos:** `dados/torque/theta_e_batch_<loss>{,_summary}.json`, com os anteriores
+  (referência T22) em `dados/torque/_antes_ref_smooth/`.
+- **Tabelas:** `artigo_v1/tabelas/tab_torque_smooth.tex` e `dados/torque/tab_torque_smooth.md`.
+- **Recálculo das 5 archs `bldc`** com a referência smooth, a partir do batch anterior:
+  `dados/torque/recalc_ref_smooth_bldc_<loss>.json`.
 
-  | | FNO2d | FNO_GNN | Elem | Split |
-  |---|---|---|---|---|
-  | mse | 21,9% | 37,7% | 33,7% | 29,3%* |
-  | mae | 20,7% | 22,3% | 25,6% | 15,0%* |
+Erro relativo mediano (%) contra o smooth, e por faixa de corrente:
 
-  \* Split só nas 10 amostras. Nessas mesmas 10, as outras archs têm, em mse/mae:
-  FNO2d 35,7/31,6%, FNO_GNN 60,5/38,2%, Elem 36,4/44,7%.
-- **Pisos (10 amostras):** FNO2d 15,9%, FNO_GNN 20,4%, Elem 0, Split 0,004%. A
-  reconstrução nodal e a de grade, sozinhas, já perdem 16–20% do torque na faixa.
-- **Efeito da suavização** (gt × smooth, 80 amostras): `rel` 3,3% e `A_ratio` 0,972. Por
-  faixa de corrente: 5,0% (0–2 A), 3,4% (2–4 A), 3,2% (4–6 A), 3,3% (6–8 A) e 3,0%
-  (8–10 A).
+| | perda | rel. | p90 | A_ratio | 0–2 A | 2–4 A | 4–6 A | 6–8 A | 8–10 A |
+|---|---|---|---|---|---|---|---|---|---|
+| FNO2d | MSE | 21,9 | 52,5 | 1,123 | 41,9 | 29,3 | 23,8 | 19,3 | 16,1 |
+| FNO2d | MAE | 20,7 | 58,6 | 1,103 | 52,8 | 26,9 | 14,9 | 13,1 | 11,3 |
+| FNO_GNN | MSE | 37,7 | 85,0 | 1,188 | 84,1 | 55,4 | 26,7 | 31,6 | 27,2 |
+| FNO_GNN | MAE | 22,3 | 55,8 | 1,149 | 36,5 | 38,2 | 19,7 | 20,4 | 18,3 |
+| Elem | MSE | 33,7 | 79,0 | 0,840 | 72,9 | 47,3 | 38,7 | 30,0 | 28,0 |
+| Elem | MAE | 25,6 | 100,2 | 0,950 | 96,0 | 41,4 | 24,8 | 20,5 | 19,2 |
+| Split | MSE | 22,3 | 49,6 | 0,847 | 50,2 | 20,9 | 22,5 | 20,0 | 19,1 |
+| Split | MAE | **13,9** | 30,5 | 0,933 | 28,7 | 13,8 | 12,2 | 13,3 | 11,9 |
+| piso FNO2d (grade) | — | 7,4 | 38,3 | 1,094 | 15,5 | 9,9 | 7,3 | 5,3 | 7,3 |
+| piso FNO_GNN (nós) | — | 18,3 | 41,6 | 1,175 | 22,5 | 19,5 | 17,0 | 21,3 | 16,8 |
+| piso Elem | — | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| piso Split | — | 0,001 | 0,009 | 1,000 | 0,004 | 0,003 | 0,001 | 0,001 | 0,001 |
+| suavização (gt × smooth) | — | 3,3 | 6,2 | 0,972 | 5,0 | 3,4 | 3,2 | 3,3 | 3,0 |
+
+O que a tabela mostra:
+- **Pisos:** a reconstrução nodal com prioridade de material perde cerca de 18% do torque na
+  faixa só pela representação, e a grade cerca de 7%. Elem e Split não perdem nada.
+- **Split MAE:** é a melhor em todas as faixas de corrente.
+- **Corrente baixa:** o erro relativo cresce, porque o torque é menor.
+- **Custo:** 68–71 min por loss com 2 processos de parse; pico de RAM de 4,0 GiB e de VRAM de
+  2,4 GB.
 
 ## 4. Saturação (`saturation`, `src/postprocess/saturation.py`)
 
@@ -316,6 +342,56 @@ Só o gabarito, sem modelos.
 - `--check-femm` compara $\mu_{eff}$ com o $\mu$ do pós-processador do FEMM
   (`mo_getpointvalues`).
 - Saída: `dados/saturation.json` e `plots/saturacao_*`.
+
+### 4.1 Erro × ponto de operação (dentro do `regions`)
+
+O erro de superfície no aço em função do $|\mathbf B|$ da referência no ponto, acumulado na
+**mesma passagem** do `regions`, sem nova leitura das amostras (`saturation.SatAccum`;
+ligado por padrão no `scripts/run_postprocess.py`, `--no-saturation` desliga).
+
+**Conjuntos**
+- Pontos de quadratura no aço (rótulo `iron_1008`) em Ω.
+- `aco_int`: aço ∩ $\Omega_{int}(d)$, ou seja, $\mathrm{dist}_f > d$ (o mesmo $d$ do
+  `regions`).
+- `aco`: o aço inteiro.
+
+**Acumulação e intervalos**
+- **Variável:** $|\mathbf B|$ da referência suavizada no ponto (o $|B|_{FEMM}$ da métrica de
+  superfície).
+- **Histograma**, por run e por piso: 520 bins de 0,005 T em [0; 2,6] T mais um bin de
+  overflow, com $\Sigma w$, $\Sigma e w$ e $\Sigma e^2 w$.
+- **Intervalos** (`sat_report`): 50 de mesma área de aço, na resolução dos bins. Cada um traz
+  o $|B|$ mediano (interpolado no bin), a faixa, a área e $L1$/$L2$ em % do $B_{ref}$ em Ω da
+  mesma run.
+
+**Curva B-H:** lida do `.ans` no worker; é igual em todas as amostras (0 diferentes). Dela
+saem $\mu_{eff}(|B|) = |B|/(\mu_0 H(|B|))$ (`FemmBH`) e o joelho, onde $\mu_{eff}$ cai à
+metade do máximo: **1,431 T** (máximo de 2171 em 0,83 T).
+
+**Saída:** `dados/saturation_error.json`, com definições, `bh` (pontos, curva $\mu_{eff}$,
+joelho), `checks`, `runs`/`floors` (intervalos e total por conjunto) e `hist` (somas cruas para
+reagrupar). A figura é `plots/saturacao_erro_L1_vs_B.{png,pdf}`: L1 × $|B|$ por arch (MAE
+contínuo, MSE tracejado), pisos P0_elem/P1_mat pontilhados, $\mu_{eff}$ no eixo secundário e
+o joelho marcado.
+
+**Validação:** a soma do histograma contra a soma feita direto nos pontos, com as máscaras
+recodificadas à parte (`tests/check_night_prep.py`), difere em ≤ 1,5e-15 relativo. O overflow
+($|B| \ge 2{,}6$ T) é ≤ 2e-6 da área.
+
+**Resultados** (608 amostras; $L1$ total, % do $B_{ref}$ em Ω, `aco_int` / `aco`):
+
+| | FNO2d | FNO_GNN | Elem | Split | piso grade | piso P0_elem | piso P1 (nós/mat) |
+|---|---|---|---|---|---|---|---|
+| MSE | 4,01 / 5,79 | 4,42 / 4,63 | 5,99 / 6,15 | 3,82 / 4,01 | 1,80 / 3,53 | 3,43 / 3,32 | 0,03 / 0,03 |
+| MAE | 3,96 / 5,76 | 4,01 / 4,23 | 5,58 / 5,72 | 3,56 / 3,76 | | | |
+
+O que se vê:
+- **Abaixo de 1 T:** o erro de todas as archs cresce suavemente com $|B|$.
+- **Perto do joelho:** sobe de 1,5 a 2 vezes. O último intervalo, acima do joelho, tem 2% da
+  área de aço e fica com L1 de 6,4–8,7% em `aco_int`.
+- **FNO2d no aço inteiro:** chega a cerca de 22% no alto $|B|$, porque o aço muito saturado
+  fica junto das interfaces (dentes) e a grade não representa o salto.
+- **Split:** é a menor em todo o intervalo.
 
 ## 5. Custo computacional (`timing`, `src/postprocess/timing.py`; Windows com FEMM e GPU)
 
@@ -365,9 +441,21 @@ finalize`, que o subcomando `regions` também usa), sem cálculo próprio. Por o
 
 ```
 python -m scripts.run_postprocess --steps regions --n 10 --workers 2      # placeholder
+python -m scripts.run_postprocess --steps regions --all --workers 2 --max-ram-gb 24 --resume --log-dir resultados/BLDC_138x276/logs
 python -m scripts.run_postprocess --steps regions --all --workers 3 [--max-ram-gb 26]
 python -m scripts.run_postprocess --steps regions --all --resume          # continua
 ```
+
+**Opções novas (2026-11-10)**
+- A saturação por ponto de operação (§4.1) é acumulada na mesma passagem; `--no-saturation`
+  desliga.
+- `--log-dir DIR` grava uma cópia do log, com horário em cada linha.
+- Parada limpa (`--max-ram-gb`/`--stop-after`): o script sai com código 3 e o checkpoint fica
+  para `--resume`.
+- As conferências (soma das disjuntas, área de Ω) vão para o log; o `regions.json` traz
+  `execution.omega_area_per_sample`.
+- Execução noturna (orquestrador avulso, fora do git): `tests/run_night.py` (etapas 1 e 2,
+  relança com 1 worker, valida, faz backup e copia) e `tests/night_report.py`.
 
 **Amostras**
 - `--n N` (padrão 10) usa as $N$ primeiras amostras do subset, na ordem do split.

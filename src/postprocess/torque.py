@@ -128,8 +128,6 @@ def femm_solve(row, theta_e, work_dir: Path, gz_out: Path, femm_ref=False):
             t22 = float(np.atleast_1d(femm.mo_blockintegral(22))[0])
             femm.mo_clearblock()
         femm.closefemm()
-        # [REMOVIDO] antes o T22 era sempre calculado (mi_loadsolution + mo_blockintegral,
-        # bloco acima sem o `if femm_ref`); agora só com femm_ref=True / --femm-ref.
         Path(gz_out).parent.mkdir(parents=True, exist_ok=True)
         with open(work_dir / 'model.ans', 'rb') as f, gzip.open(str(gz_out) + '.part', 'wb') as g:
             shutil.copyfileobj(f, g)
@@ -298,14 +296,6 @@ def curve_row(th, R, P):
                 dT0=float(T0p - T0r), T0_ref=float(T0r), peak_ratio=float(np.ptp(P) / np.ptp(R)))
 
 
-# [REMOVIDO] curve_row × FEMM T22 (referência antiga) com o method_check (gt × FEMM):
-# def curve_row(th, F, P, G):
-#     T0f, Af, phf = fundamental(th, F)
-#     T0p, Ap, php = fundamental(th, P)
-#     return dict(rms_femm=..., rmse=..., rmse_gt_femm=float(np.sqrt(np.mean((G - F) ** 2))),
-#                 A_femm=..., A_ratio=..., dphi=..., dT0=..., T0_femm=..., peak_ratio=...)
-
-
 def batch_summary(rows_):
     S = {k: np.array([r[k] for r in rows_]) for k in rows_[0] if not isinstance(rows_[0][k], dict)}
     S['rel'] = 100 * S['rmse'] / S['rms_ref']
@@ -314,7 +304,6 @@ def batch_summary(rows_):
                 A_ratio_mean=float(S['A_ratio'].mean()), A_ratio_std=float(S['A_ratio'].std()),
                 dphi_mean_deg=float(S['dphi'].mean()), dphi_std_deg=float(S['dphi'].std()),
                 dT0_mean_mNm=float(S['dT0'].mean()), dT0_std_mNm=float(S['dT0'].std()),
-                # [REMOVIDO] method_check_rmse_gt_vs_femm_median_mNm (referência FEMM T22)
                 rel_median_por_faixa={f'{a}-{a + 2}A': float(np.median(S['rel'][(S['I'] >= a) & (S['I'] < a + 2)]))
                                       for a in range(0, 10, 2) if ((S['I'] >= a) & (S['I'] < a + 2)).any()})
 

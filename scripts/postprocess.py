@@ -978,6 +978,105 @@ def femm_ref_rec(row, th, t22):
         dict(femm_ref(row, th, 0.0), T22_sector=None)
 
 
+def run_torque_freq(out_dir: Path, fig_dir: Path, losses=('mae', 'mse')):
+    """Torque no domínio da frequência, SEM inferência nem FEMM: lê theta_e_batch_<loss>.json
+    (80 amostras × N ângulos θe) e decompõe T(θe) da referência (smooth) e do FNO_SplitGNN em
+    harmônicas de ordem n por 360° elétricos (theta_e_harmonics). Por ordem: |X_n| da
+    referência e do Split, erro complexo |ΔX_n| e a parcela do erro quadrático (Parseval:
+    mean((P−R)²) = |ΔX_0|² + Σ |ΔX_n|²/2 + |ΔX_Nyq|²), conferida com o RMSE em θe.
+    Saída: <out_dir>/theta_e_batch_split_freq.json + <fig_dir>/theta_e_batch_split_freq.{png,pdf}."""
+    from src.postprocess.plots.torque import fig_torque_freq
+    from src.postprocess.torque import theta_e_harmonics
+    R, X, meta, ids = None, {}, {}, None
+    for loss in losses:
+        d = json.loads((out_dir / f'theta_e_batch_{loss}.json').read_text(encoding='utf-8'))
+        smp = d['samples']
+        th = np.array(smp[next(iter(smp))]['curves']['theta_e_deg'])
+        N = len(th)
+        assert np.allclose(th, np.arange(N) * 360.0 / N), 'θe não igualmente espaçado numa volta'
+        Rl = np.array([s['curves']['smooth'] for s in smp.values()]) * 1e3          # mN·m
+        if R is None:
+            R, ids = Rl, list(smp)
+            I = np.array([s['I'] for s in smp.values()])
+            ph = np.array([s['rotor_phase'] for s in smp.values()])
+            X['ref'] = theta_e_harmonics(R)
+        assert list(smp) == ids and np.array_equal(Rl, R), f'{loss}: amostras/referência diferentes'
+        P = np.array([s['curves']['pred_FNO_SplitGNN'] for s in smp.values()]) * 1e3
+        X[loss] = theta_e_harmonics(P)
+        meta[loss] = dict(run_dir=d['runs']['FNO_SplitGNN']['run_dir'],
+                          best_epoch=d['runs']['FNO_SplitGNN']['best_epoch'])
+        # Parseval: erro quadrático médio em θe = soma por ordem
+        D = X[loss] - X['ref']
+        wt = np.full(D.shape[1], 0.5)
+        wt[0] = 1.0
+        if N % 2 == 0:
+            wt[-1] = 1.0
+        mse_n = (np.abs(D) ** 2) * wt
+        assert np.allclose(mse_n.sum(1), np.mean((P - R) ** 2, axis=1), rtol=1e-9), 'Parseval'
+        meta[loss]['err_sq_by_order'] = mse_n
+        meta[loss]['rel_rmse'] = np.sqrt(np.mean((P - R) ** 2, axis=1)) / np.sqrt(np.mean(R ** 2, axis=1))
+    n = np.arange(X['ref'].shape[1])
+    amp = {k: np.abs(v) for k, v in X.items()}
+    err = {k: np.abs(X[k] - X['ref']) for k in losses}
+    # amostra-exemplo: erro relativo mediano do Split com a 1ª loss
+    rr = meta[losses[0]]['rel_rmse']
+    j = int(np.argsort(rr)[len(rr) // 2])
+    ex = {k: amp[k][j] for k in amp}
+    ex_title = (f'amostra {ids[j]} (erro rel. em θe = mediana {losses[0].upper()}: {100 * rr[j]:.1f}%)\n'
+                f'I = {I[j]:.2f} A, fase do rotor = {ph[j]:.1f}°')
+    q = lambda a: dict(p25=np.percentile(a, 25, axis=0).tolist(), median=np.median(a, axis=0).tolist(),
+                       p75=np.percentile(a, 75, axis=0).tolist())
+    out = dict(fonte=[f'theta_e_batch_{l}.json' for l in losses], n_samples=len(ids), sample_idx=ids,
+               n_theta=int(N), order=n.tolist(),
+               definicao='X_n = harmônica de ordem n de T(θe) numa volta elétrica, T = Σ |X_n|·cos(nθe + ∠X_n); '
+                         'erro = |X_n(Split) − X_n(ref)| (complexo); referência = smooth; mN·m',
+               ref=dict(abs=q(amp['ref'])),
+               split={l: dict(run_dir=meta[l]['run_dir'], best_epoch=meta[l]['best_epoch'],
+                              rel_rmse_median_pct=float(100 * np.median(meta[l]['rel_rmse'])),
+                              abs=q(amp[l]), err=q(err[l]),
+                              rel_err_median=np.median(err[l] / amp['ref'], axis=0).tolist(),
+                              err_sq_share_pct=(100 * meta[l]['err_sq_by_order'].sum(0)
+                                                / meta[l]['err_sq_by_order'].sum()).tolist())
+                      for l in losses},
+               exemplo=dict(sample=ids[j], I_A=float(I[j]), rotor_phase_deg=float(ph[j]),
+                            abs={k: v.tolist() for k, v in ex.items()}),
+               per_sample={ids[i]: dict(I_A=float(I[i]), rotor_phase_deg=float(ph[i]),
+                                        rel_rmse_pct={l: float(100 * meta[l]['rel_rmse'][i]) for l in losses},
+                                        abs={k: amp[k][i].tolist() for k in amp},
+                                        err={l: err[l][i].tolist() for l in losses})
+                           for i in range(len(ids))})
+    (out_dir / 'theta_e_batch_split_freq.json').write_text(json.dumps(out, indent=1, ensure_ascii=False),
+                                                           encoding='utf-8')
+    apply_style()
+    save_fig(fig_torque_freq(n, ex, amp, err, ex_title), fig_dir / 'theta_e_batch_split_freq', pdf=True, dpi=200)
+    # todas as amostras: 1 figura cada + grade com os percentis P5..P95 do erro rel. (1ª loss)
+    from src.postprocess.plots.torque import fig_torque_freq_grid, fig_torque_freq_sample
+    title = lambda i: (f'amostra {ids[i]}: I = {I[i]:.2f} A, fase {ph[i]:.1f}°\n'
+                       + ', '.join(f'erro rel. {l.upper()} {100 * meta[l]["rel_rmse"][i]:.1f}%' for l in losses))
+    for i in range(len(ids)):
+        save_fig(fig_torque_freq_sample(n, {k: amp[k][i] for k in amp}, title(i)),
+                 fig_dir / 'freq_amostras' / f'amostra_{int(ids[i]):06d}', pdf=False, dpi=150)
+    o = np.argsort(rr, kind='stable')
+    pcts = list(range(5, 100, 10))
+    pick = [int(o[min(len(o) - 1, int(round(p / 100 * (len(o) - 1))))]) for p in pcts]
+    save_fig(fig_torque_freq_grid(n, [{k: amp[k][i] for k in amp} for i in pick],
+                                  [f'P{p}: ' + title(i) for p, i in zip(pcts, pick)]),
+             fig_dir / 'theta_e_batch_split_freq_amostras', pdf=True, dpi=200)
+    out['grade'] = dict(criterio=f'percentis do erro rel. em θe do Split {losses[0].upper()}',
+                        amostras={f'P{p}': ids[i] for p, i in zip(pcts, pick)})
+    (out_dir / 'theta_e_batch_split_freq.json').write_text(json.dumps(out, indent=1, ensure_ascii=False),
+                                                           encoding='utf-8')
+    print(f"{len(ids)} figuras em {fig_dir / 'freq_amostras'}; grade P5..P95: "
+          + ', '.join(f'P{p}={ids[i]}' for p, i in zip(pcts, pick)))
+    print(f'{len(ids)} amostras × {N} ângulos θe; ordens 0..{n[-1]} (mN·m, medianas)')
+    print(' n   |X_n| ref ' + ''.join(f'  |X_n| {l.upper()}  |ΔX_n| {l.upper()}  %erro² {l.upper()}' for l in losses))
+    for i in n:
+        print(f'{i:2d} {out["ref"]["abs"]["median"][i]:10.3f} ' + ''.join(
+            f'{out["split"][l]["abs"]["median"][i]:11.3f} {out["split"][l]["err"]["median"][i]:11.3f} '
+            f'{out["split"][l]["err_sq_share_pct"][i]:10.2f}%' for l in losses))
+    print(f"salvo em {out_dir / 'theta_e_batch_split_freq.json'}; figura {fig_dir / 'theta_e_batch_split_freq'}.png/.pdf")
+
+
 def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
                idxs=None, n_theta=None, n_samples=80, n_per_chunk=8, limit=None,
                raw_dir=None, work_dir=None, subset='test', femm_ref=False, first=None,
@@ -1589,7 +1688,9 @@ if __name__ == '__main__':
     p_rg.add_argument('--out', type=Path, default=OUT_ROOT / 'dados', help='diretório de saída')
     p_rg.add_argument('--fig', type=Path, default=OUT_ROOT / 'plots', help='diretório da figura')
     p_tq = sp.add_parser('torque', help='torque FEMM × gabarito × modelos (theta-e/batch/scatter)')
-    p_tq.add_argument('mode', choices=('theta-e', 'batch', 'scatter'))
+    p_tq.add_argument('mode', choices=('theta-e', 'batch', 'scatter', 'freq'),
+                      help='freq: harmônicas de T(θe) do batch, referência × FNO_SplitGNN (sem FEMM/inferência)')
+    p_tq.add_argument('--fig', type=Path, default=OUT_ROOT / 'plots' / 'torque', help='freq: diretório da figura')
     p_tq.add_argument('--idx', type=int, nargs='+', default=None,
                       help='theta-e: índices das amostras no raw (default: 5 amostras do conjunto de '
                            'TESTE do split.json da run de referência, 1 por faixa de 2 A de corrente, '
@@ -1662,6 +1763,8 @@ if __name__ == '__main__':
                     pct=a.pct, eval_dir=a.eval_data)
     elif a.cmd == 'regions':
         run_regions(a.out, a.fig, a.n, a.d, a.d_max, a.n_bins, a.bin_scale, a.ang_canto, a.subset)
+    elif a.cmd == 'torque' and a.mode == 'freq':
+        run_torque_freq(a.out, a.fig)
     elif a.cmd == 'torque':
         run_torque(a.mode, a.out, a.loss, a.archs, a.femm, a.idx, a.n_theta,
                    a.n_samples, a.n_per_chunk, a.limit, a.raw_dir, a.work_dir, a.subset,

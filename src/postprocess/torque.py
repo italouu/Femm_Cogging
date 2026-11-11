@@ -287,6 +287,22 @@ def fundamental(th_deg, T):
     return c[0], np.hypot(c[1], c[2]), np.rad2deg(np.arctan2(c[2], c[1]))
 
 
+def theta_e_harmonics(T, axis=-1):
+    """Harmônicas de T(θe) amostrado em N ângulos igualmente espaçados numa volta elétrica
+    (θe_k = 360°·k/N, sem repetir 360°): amplitudes complexas de um lado X_n, n = 0..N//2,
+    tais que T(θe) = Σ_n |X_n|·cos(n·θe + ∠X_n) (n = ordem por 360° elétricos)."""
+    T = np.asarray(T, float)
+    N = T.shape[axis]
+    X = np.fft.rfft(T, axis=axis) / N
+    w = np.full(X.shape[axis], 2.0)
+    w[0] = 1.0
+    if N % 2 == 0:
+        w[-1] = 1.0                                    # Nyquist
+    shape = [1] * X.ndim
+    shape[axis] = -1
+    return X * w.reshape(shape)
+
+
 def curve_row(th, R, P):
     """Curva P (modelo, piso ou gt) × referência R (smooth), em mNm."""
     T0r, Ar, phr = fundamental(th, R)

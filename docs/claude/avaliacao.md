@@ -320,6 +320,80 @@ O que a tabela mostra:
 - **Custo:** 68–71 min por loss com 2 processos de parse; pico de RAM de 4,0 GiB e de VRAM de
   2,4 GB.
 
+### 3.1 Torque do FNO_SplitGNN pelo método híbrido (fluxo concatenado + cogging por simetria)
+
+**Método adotado para o torque do Split** (2026-11-11). Script:
+`python -m tests.check_split_torque_fluxlinkage [IDX ...] [--n 10] [--run DIR]` (sem FEMM; usa o
+cache `data/temp/torque_theta_e_batch/`).
+
+**Por que não só o tensor de Maxwell.** O fluxo do Split é bom ponto a ponto (MAE ~9 mT no
+entreferro, viés ~0), mas `band_torque` amplifica o erro:
+- depende do produto $B_r B_\theta$ e é dominado pelo termo $B_r\,\Delta B_\theta$ ($|B_r| \approx 0{,}39$ T
+  contra $|B_\theta| \approx 0{,}14$ T); o erro de $B_\theta$ do Split é coerente com o sinal de $B_r$
+  (correlação +0,44 na amostra 2252), então soma em vez de cancelar;
+- o torque líquido é só ~26% da soma das contribuições locais em módulo
+  ($\int B_r B_\theta\,d\theta / \int |B_r B_\theta|\,d\theta \approx -0{,}26$), o que amplifica o erro relativo ~4×.
+
+**Forma da curva.** Com o rotor fixo e $|I|$ fixo, $T(\theta_e) = T_0 + A\cos(\theta_e - \varphi)$ explica o GT
+com resíduo mediano de 0,15% do rms (52 amostras); a 2ª harmônica (relutância) é 0,12% da
+fundamental ($L_d \approx L_q$, ímãs de superfície). $T_0$ = cogging na posição do rotor. O erro do
+Split por Maxwell está nos parâmetros, não na forma: $|\Delta T_0|$ ~11% e $\Delta A$ ~−7% (mediana).
+
+**Passos:**
+1. **A nodal a partir do B do Split:** mínimos quadrados P1,
+   $\min \sum_e S_e \lVert \nabla A_e - (-B_y, B_x)_e \rVert^2$ (xy em mm, B em T, A em Wb/m; 1 nó fixo, a
+   constante cancela em ψ). B do Split por elemento = média das 3 cópias N_base do material do
+   elemento (o mesmo do torque). Também remove a parte não rotacional do B previsto.
+   Conferência: com o B exato curl(A) do GT, reproduz o A do FEMM (torque idêntico).
+2. **Fluxo concatenado** por circuito, como o FEMM: $\psi_c = L\,N/S_c \int_{S_c} A\,dS$; por fase,
+   $\psi_{fase} = \sum_k s_k\,(\psi_{k,0} - \psi_{k,1})$ com `WINDING_SECTOR` (dente $k$: `coil_k_0` ida,
+   `coil_k_1` volta).
+3. **Torque de excitação** (sem cogging), Clarke amplitude-invariante:
+   $T_{exc} = 3 \cdot \tfrac{3}{2}\,p\,(\psi_\alpha i_\beta - \psi_\beta i_\alpha)$, $p = 21$, 3 setores.
+4. **Cogging** $T_0$ = média em θe de $\tfrac12(T^{Maxwell}_{Split} + T^{Maxwell}_{Split,RS})$: a variante RS
+   (espelho na reta de 60° + ímãs invertidos, $T' = -T$) erra o $T_0$ com sinal oposto ao original
+   e a média cancela o viés (ver abaixo).
+5. **Híbrido:** $T(\theta_e) = T_{exc}(\theta_e) + T_0$.
+
+Referência = smooth (Maxwell no B suavizado). O fluxo concatenado aplicado ao GT difere ~3% do
+Maxwell no GT (diferença entre métodos, entra no erro do híbrido).
+
+**Resultado (Split mae run_0002, 10 amostras de 0,7 a 9,8 A, erro rel. mediano rmse/rms):**
+
+| | erro |
+|---|---|
+| excitação: Split Maxwell (sem a média) | 11,4% |
+| excitação: Split fluxo concatenado | **4,1%** |
+| excitação: GT fluxo concatenado × GT Maxwell (diferença de método) | 3,1% |
+| total: Split original (Maxwell) | 18,8% |
+| total: (Split original + Split RS)/2 (Maxwell) | 11,5% |
+| total: **híbrido** | **5,2%** |
+
+- Melhora 9 de 10 amostras; a #3954 (8,8 A) piora (5,3% → 9,2%: o fluxo concatenado
+  superestima o pico) e a #3942 (0,7 A) fica em 14% (torque quase todo cogging).
+- O achatamento do pico em corrente alta (ex. #1883: Maxwell 23% → híbrido 6,2%) era do
+  cálculo por Maxwell, não do fluxo previsto.
+- Saída: `dados/torque/fluxlink_split_<loss>.json`, `plots/torque/fluxlink_split_<loss>_{excitacao,total}.png`.
+
+**Simetrias exatas usadas (TTA)** — `tests/check_split_symmetry_torque.py` monta as variantes em
+memória a partir do texto do `.ans` (mesma malha ou espelhada; sem FEMM), elemento $e$ da variante =
+elemento $e$ (espelhado) da original:
+
+| variante | o que muda | campo no referencial original | torque |
+|---|---|---|---|
+| S | correntes −I, ímãs +180° | $B' = -B$ | $T' = T$ |
+| R | espelho na reta de 60° + correntes −I | no ponto espelhado: $B_r' = B_r$, $B_\theta' = -B_\theta$ | $T' = -T$ |
+| RS | espelho + ímãs +180° | no ponto espelhado: $B_r' = -B_r$, $B_\theta' = B_\theta$ | $T' = -T$ |
+
+- Relações conferidas resolvendo cada variante no FEMM (amostra 2252): S exato; R/RS dentro do
+  piso de troca de malha (~4 mT, torque a 0,8%). O estator é simétrico em 60°.
+- Torque por Maxwell, 52 amostras: cada variante sozinha ~15% (rel. mediano), mas
+  original/S com viés médio −72 mN·m e R/RS +69 mN·m; original+R, original+RS ou as 4 (pesos ½–½)
+  zeram o viés e dão ~9,6–9,8% (47/52 melhoram). Dados em `data/temp/symmetry_batch/mae/`
+  (52 amostras; o lote foi interrompido, é retomável).
+- Mexer só na malha (permutar a entrada, ruído nos nós, segmento solto) quase não descorrelaciona
+  o erro; mudar a densidade da malha no entreferro (6,6×) quebra o Split (erro ~5×).
+
 ## 4. Saturação (`saturation`, `src/postprocess/saturation.py`)
 
 Só o gabarito, sem modelos.

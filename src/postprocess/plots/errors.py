@@ -176,16 +176,17 @@ ARTICLE_WIDE_IN = 18.0 / 2.54    # largura de 2 colunas (figure*)
 
 
 def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cmap='hot_r',
-                           ncols=2, width_in=ARTICLE_WIDE_IN):
+                           ncols=2, width_in=ARTICLE_WIDE_IN, tick_step=0.1):
     """Erro no domínio de várias archs numa figura só (artigo): painéis e_tri [M] em grade
     ncols × ceil(n/ncols), MESMA escala (vmin = 0, vmax dado) e UMA colorbar horizontal embaixo
     vertical à direita (sem seta, só a unidade); fora de Ω em cinza claro; fronteiras entre
     materiais em linha fina preta; nome da arch centralizado acima de cada painel.
-    Sem título. Usar dentro de plt.rc_context(ARTICLE_RC)."""
+    Ticks da colorbar a cada tick_step (T). Sem título. Usar com primitives.apply_article_style()
+    dentro de plt.rc_context()."""
     import matplotlib.pyplot as plt
     import matplotlib.tri as mtri
     from matplotlib.collections import LineCollection
-    from matplotlib.ticker import FuncFormatter
+    from matplotlib.ticker import FuncFormatter, MultipleLocator
     keep = np.asarray(in_omega, bool)
     t_in = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems, mask=~keep)
     t_out = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems, mask=keep) if not keep.all() else None
@@ -229,7 +230,10 @@ def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cma
     x_cb = (ncols * pw + (ncols - 1) * gap + 0.12) / width_in
     cax = fig.add_axes([x_cb, 0.0, 0.08 / width_in, (H - h_t) / H])
     cb = fig.colorbar(m, cax=cax, orientation='vertical')
-    cb.ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f'{v:.2f}'.replace('.', ',')))
+    # [REMOVIDO] ticks automáticos com 2 casas (passo 0,2) -- agora passo tick_step com 1 casa
+    # cb.ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f'{v:.2f}'.replace('.', ',')))
+    cb.ax.yaxis.set_major_locator(MultipleLocator(tick_step))
+    cb.ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f'{v:.1f}'.replace('.', ',')))
     cb.ax.grid(False)                             # o apply_style liga a grade nos eixos
     cb.outline.set_linewidth(0.4)
     cb.ax.tick_params(width=0.4, length=2)

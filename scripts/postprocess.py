@@ -144,7 +144,7 @@ from src.postprocess.plots.errors import (ARTICLE_RC, fig_bars, fig_region_curve
                                           fig_surface_error_grid, fig_surface_error_map,
                                           fig_surface_error_single)
 from src.postprocess.plots.fields import fig_field
-from src.postprocess.plots.primitives import MODEL_COLOR, apply_style, save_fig
+from src.postprocess.plots.primitives import MODEL_COLOR, apply_article_style, apply_style, save_fig
 from src.postprocess.plots.training import fig_training
 from src.postprocess.regions import (BAND_UNIONS, BANDS, BandAccum, SeamGeometry, band_edges,
                                      band_points, interface_edges, omega_mask, region_geometry)
@@ -694,7 +694,10 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
     #     for a in archs:
     #         save_fig(fig_surface_error_single(xy, tri, E[a], in_omega, iface, vmax_used),
     #                  fig_article / names[a], pdf=True, dpi=300)
-    with plt.rc_context(ARTICLE_RC):
+    # [REMOVIDO] with plt.rc_context(ARTICLE_RC): -- cópia do _style do artigo_v1; trocado por
+    # primitives.apply_article_style() (Times New Roman 8 pt, stix), só nesta figura
+    with plt.rc_context():
+        apply_article_style()
         save_fig(fig_surface_error_grid(xy, tri, [E[a] for a in archs],
                                         [ARTICLE_ARCH_NAME[a] for a in archs], in_omega, iface,
                                         vmax_used, cmap=cmap),

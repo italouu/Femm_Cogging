@@ -47,20 +47,28 @@ def fig_bars(res, run_order):
     return fig
 
 
-def fig_surface_error_map(res, xy, elems, E, archs, iface, floor):
+def fig_surface_error_map(res, xy, elems, E, archs, iface, floor, vmax=None, in_omega=None):
     """Mapa por triângulo do erro de superfície: 1 painel por arch +
     1 painel com o piso da representação em grade (floor = (rótulo, E_piso [M], dict com
     L1_A/L2_A)); MESMA escala de cor em todos (corte no p99 de todos os painéis, piso
     incluído); contornos das fronteiras entre materiais (iface [K,2], regions.interface_edges)
-    sobrepostos; barras de L1_A / L2_A embaixo."""
+    sobrepostos; barras de L1_A / L2_A embaixo.
+    vmax: escala dada (senão o p99 acima); in_omega [M] bool: triângulos fora de Ω em cinza
+    claro, fora da escala e do p99."""
     import matplotlib.pyplot as plt
     import matplotlib.tri as mtri
     from matplotlib.collections import LineCollection
     f_lab, f_E, f_r = floor
     panels = [(a, E[a], res['erros'][a]) for a in archs] + [(f_lab, f_E, f_r)]
     n = len(panels)
-    tri = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems)
-    vmax = float(np.percentile(np.concatenate([p[1] for p in panels]), 99))
+    # [REMOVIDO] tri / vmax sem Ω -- substituídos pela versão com in_omega opcional abaixo
+    # tri = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems)
+    # vmax = float(np.percentile(np.concatenate([p[1] for p in panels]), 99))
+    keep = np.ones(len(elems), bool) if in_omega is None else np.asarray(in_omega, bool)
+    tri = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems, mask=~keep)
+    tri_out = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems, mask=keep) if not keep.all() else None
+    if vmax is None:
+        vmax = float(np.percentile(np.concatenate([p[1][keep] for p in panels]), 99))
     seg = xy[iface]
     fig = plt.figure(figsize=(4.2 * n, 9.4))
     gs = fig.add_gridspec(3, n, height_ratios=[1, 0.045, 0.95], hspace=0.55, wspace=0.06)
@@ -69,14 +77,21 @@ def fig_surface_error_map(res, xy, elems, E, archs, iface, floor):
     bar_ax = fig.add_subplot(gs[2, 0:n])
     for a, (lab, e, r) in zip(axes, panels):
         m = a.tripcolor(tri, facecolors=e, cmap='Blues', vmin=0, vmax=vmax, rasterized=True)
+        if tri_out is not None:
+            a.tripcolor(tri_out, facecolors=np.zeros(len(elems)), cmap=_OUT_CMAP(), vmin=0, vmax=1,
+                        rasterized=True)
         a.add_collection(LineCollection(seg, colors=INK2, linewidths=0.25, alpha=0.8))
         a.set_aspect('equal')
         a.axis('off')
         a.set_title(f'{lab} [{r["surface_kind"]}]\nL1 = {r["L1_A_T"]:.4f} T ({r["L1_A_pct"]:.2f}%)   '
                     f'L2 = {r["L2_A_T"]:.4f} T ({r["L2_A_pct"]:.2f}%)'.replace('.', ','), fontsize=9)
     cb = fig.colorbar(m, cax=cax, orientation='horizontal')
-    cb.set_label(f'erro de superfície médio no triângulo (T) — mesma escala em todos os painéis, '
-                 f'corte no p99 = {vmax:.3f} T; linhas = fronteiras entre materiais'.replace('.', ','))
+    # [REMOVIDO] rótulo fixo "corte no p99" -- o vmax agora pode vir de fora (p99 em Ω ou --vmax)
+    # cb.set_label(f'erro de superfície médio no triângulo (T) — mesma escala em todos os painéis, '
+    #              f'corte no p99 = {vmax:.3f} T; linhas = fronteiras entre materiais'.replace('.', ','))
+    cb.set_label((f'erro de superfície médio no triângulo (T) — mesma escala em todos os painéis, '
+                  f'vmax = {vmax:.3f} T' + ('; cinza = fora de Ω' if tri_out is not None else '')
+                  + '; linhas = fronteiras entre materiais').replace('.', ','))
 
     x = np.arange(2)
     w = 0.8 / n
@@ -102,6 +117,58 @@ def fig_surface_error_map(res, xy, elems, E, archs, iface, floor):
            if sel else '')
     fig.suptitle(f'Erro de superfície de |B| — amostra {res["sample_idx"]}{how}, '
                  f'loss {res["loss"]}, best.pth', fontsize=11)
+    return fig
+
+
+OUT_OMEGA_COLOR = '#ececec'      # triângulos fora de Ω nos mapas de erro (sem cor da escala)
+ARTICLE_RC = {'font.size': 7, 'axes.titlesize': 7.5, 'axes.labelsize': 7, 'legend.fontsize': 6.5,
+              'xtick.labelsize': 6.5, 'ytick.labelsize': 6.5, 'pdf.fonttype': 42,
+              'savefig.dpi': 300}   # estilo das figuras do artigo (mesmo de scripts/artigo_v1._style)
+ARTICLE_WIDTH_IN = 8.8 / 2.54    # largura de 1 coluna (8,8 cm)
+
+
+def _OUT_CMAP():
+    from matplotlib.colors import ListedColormap
+    return ListedColormap([OUT_OMEGA_COLOR])
+
+
+def fig_surface_error_single(xy, elems, e_tri, in_omega, iface, vmax, cmap='Blues',
+                             width_in=ARTICLE_WIDTH_IN):
+    """1 painel do erro no domínio para o artigo (sem título; legenda no LaTeX): tripcolor do
+    erro por triângulo e_tri [M] (surface_error_per_triangle) em Ω, vmin = 0, vmax dado
+    (comum às archs); fora de Ω em cinza claro; fronteiras entre materiais (iface [K,2]) em
+    linha fina preta; colorbar horizontal embaixo (extend='max'). figsize e limites dependem
+    só de xy e width_in, então os painéis de archs diferentes da mesma amostra alinham.
+    Usar dentro de plt.rc_context(ARTICLE_RC)."""
+    import matplotlib.pyplot as plt
+    import matplotlib.tri as mtri
+    from matplotlib.collections import LineCollection
+    from matplotlib.ticker import FuncFormatter
+    keep = np.asarray(in_omega, bool)
+    x0, x1 = float(xy[:, 0].min()), float(xy[:, 0].max())
+    y0, y1 = float(xy[:, 1].min()), float(xy[:, 1].max())
+    h_map = width_in * (y1 - y0) / (x1 - x0)
+    h_cb = 0.55                                   # faixa da colorbar + rótulo (pol.)
+    fig = plt.figure(figsize=(width_in, h_map + h_cb))
+    H = h_map + h_cb
+    ax = fig.add_axes([0, h_cb / H, 1, h_map / H])
+    m = ax.tripcolor(mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems, mask=~keep),
+                     facecolors=e_tri, cmap=cmap, vmin=0, vmax=vmax, rasterized=True)
+    if not keep.all():
+        ax.tripcolor(mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems, mask=keep),
+                     facecolors=np.zeros(len(elems)), cmap=_OUT_CMAP(), vmin=0, vmax=1,
+                     rasterized=True)
+    ax.add_collection(LineCollection(xy[iface], colors='k', linewidths=0.2))
+    ax.set_xlim(x0, x1)
+    ax.set_ylim(y0, y1)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    cax = fig.add_axes([0.15, 0.36 / H, 0.70, 0.07 / H])
+    cb = fig.colorbar(m, cax=cax, orientation='horizontal', extend='max')
+    cb.ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f'{v:.2f}'.replace('.', ',')))
+    cb.outline.set_linewidth(0.4)
+    cb.ax.tick_params(width=0.4, length=2)
+    cb.set_label('|e| = ||B|$_\\mathrm{modelo}$ − |B|$_\\mathrm{ref}$| [T]')
     return fig
 
 

@@ -26,13 +26,19 @@ Subcomandos:
       visualização; amostras P50/P95 do L1_A de superfície da REF_RUN).
       Saída: plots/ (+ dados/figures_smooth.json).
 
-  surface IDX [LOSS] — erro de superfície dos 5 modelos (loss LOSS, default mae) em 1
-      amostra: dados/surface_error/sample_XXXXXX_<loss>.{json,npz} + mapa da densidade do
-      erro por triângulo em plots/surface_error/sample_XXXXXX_<loss>.png.
-  surface --pct P [LOSS] [--eval-data DIR] — a amostra do percentil P do L1_A de
-      superfície da REF_RUN no .npz do eval (mesma regra de figures); sufixo _P<P>.
-      Mapa: mesma escala em todos os painéis, contornos dos materiais, painel extra com o
-      piso da representação em grade.
+  surface IDX [LOSS] — erro no domínio em 1 amostra (artigo, "Pisos de representação e erro
+      no domínio"): archs do artigo (FNO2d, FNO_GNN, FNO_BipartiteGNN_Elem, FNO_SplitGNN N_base;
+      loss LOSS, default mae), cada uma na superfície nativa (grade, P1_nos, P0_elem, P1_mat),
+      com o layout, o Split e Ω do regions (_regions_sample); L1_A/L2_A/B_ref só em Ω.
+      Mapa e_tri = Σe·w/Σw por triângulo (surface_error_per_triangle); fora de Ω em cinza.
+      Escala comum: vmax = p99 dos 4 mapas em Ω, para cima em 0,01 T (--vmax fixa à mão).
+      Saída: docs/figures/erro_dominio_<FNO2d|FNO_GNN|FNO_Bipartite|FNO_SplitGNN>.{pdf,png}
+      (1 por arch, mesmo tamanho e escala; --fig-article troca o destino) + diagnóstico em
+      dados/surface_error/sample_XXXXXX_<loss>.{json,npz} e plots/surface_error/*.png (4 archs
+      + piso grade; JSON com 'checks' contra o regions).
+  surface --pct P [LOSS] [--eval-data DIR] [--ref-run FNO2d_mae] — a amostra do percentil P
+      do L1_A de superfície da --ref-run no .npz do eval (sem Ω; regra de figures); sufixo _P<P>.
+  [REMOVIDO] texto antigo: "surface ... dos 5 modelos ... percentil da REF_RUN ... sem Ω"
 
   train-table [--out DIR] — tabela de treinamento dos 10 runs a partir dos logs (config.json,
       run_summary.json, epochs.csv; nada recalculado): parâmetros, pico de memória da GPU,
@@ -133,8 +139,8 @@ from src.postprocess.inference import (ARCHS, INTERP_MODE, RUN_ORDER, find_runs,
                                        to_torch_sample)
 from src.postprocess.metrics import (R_EXT_MM, R_IN_MM, Accum, merge, pstats,
                                      surface_error_per_triangle, surface_values_p1)
-from src.postprocess.plots.errors import (fig_bars, fig_region_curves, fig_regions_map,
-                                          fig_surface_error_map)
+from src.postprocess.plots.errors import (ARTICLE_RC, fig_bars, fig_region_curves, fig_regions_map,
+                                          fig_surface_error_map, fig_surface_error_single)
 from src.postprocess.plots.fields import fig_field
 from src.postprocess.plots.primitives import MODEL_COLOR, apply_style, save_fig
 from src.postprocess.plots.training import fig_training
@@ -485,65 +491,211 @@ def _pick_by_pct(per, q, ref_run=REF_RUN):
                      L1_A_surface_ref_T=float(l1[pos]))
 
 
-def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_dir=None):
-    """Erro de superfície oficial em 1 amostra: L1_A/L2_A de cada modelo e mapa da
-    densidade do erro por triângulo do FEMM (surface_error_per_triangle), com o piso da
-    representação em grade como painel extra e contornos dos materiais.
-    pct: escolhe a amostra pelo percentil do L1_A de superfície da REF_RUN no .npz do eval
-    (eval_dir) -- sample_idx ignorado."""
+# [REMOVIDO] run_surface antiga: archs da bateria antiga (load_set), sem Ω, sem o Split e
+# seleção --pct pela REF_RUN global; substituída pela run_surface abaixo (archs do artigo, Ω,
+# --ref-run, escala comum e 1 figura por arch em docs/figures).
+# def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_dir=None):
+#     """Erro de superfície oficial em 1 amostra: L1_A/L2_A de cada modelo e mapa da
+#     densidade do erro por triângulo do FEMM (surface_error_per_triangle), com o piso da
+#     representação em grade como painel extra e contornos dos materiais.
+#     pct: escolhe a amostra pelo percentil do L1_A de superfície da REF_RUN no .npz do eval
+#     (eval_dir) -- sample_idx ignorado."""
+#     apply_style()
+#     data_dir.mkdir(parents=True, exist_ok=True)
+#     selection = None
+#     if pct is not None:
+#         per = np.load((eval_dir or OUT_ROOT / 'dados') / 'eval_smooth_per_sample.npz')
+#         sample_idx, selection = _pick_by_pct(per, pct)
+#         print(f"P{pct:g} do L1_A de superfície de {REF_RUN} ({selection['subset']}, "
+#               f"{selection['n_candidates']} amostras): amostra {sample_idx}")
+#     row = design_rows()[sample_idx]
+#     print(f'amostra {sample_idx}: {sample_path(sample_idx)}')
+#     lay = parse_smooth(sample_path(sample_idx), row, with_elem=True, with_overlay=True)
+#     ts = to_torch_sample(lay)
+#     n_tri = len(lay['tri'])
+#     runs = load_set(ROOT_S, losses=(loss,))
+#     res = dict(sample_idx=sample_idx, loss=loss, n_tri=int(n_tri), selection=selection,
+#                runs={}, erros={})
+#     E = {}
+#     for r in runs.values():
+#         a = r['arch']
+#         out_hw, yn = predict(a, r['model'], r['normalizer'], ts)
+#         mm, mf, w, t_idx = _surface_points(a, lay, out_hw, yn)
+#         acc = Accum()
+#         acc.add_surface(mm, mf, w)
+#         x = acc.report()
+#         E[a] = surface_error_per_triangle(n_tri, t_idx, mm, mf, w)
+#         res['erros'][a] = dict(surface_kind=_surface_kind(a), B_ref_T=x['B_ref'],
+#                                L1_A_T=x['L1_area'], L1_A_pct=x['L1_area_pct'],
+#                                L2_A_T=x['L2_area'], L2_A_pct=x['L2_area_pct'])
+#         res['runs'][a] = dict(run_dir=r['run_dir'], epoch=r['epoch'])
+#         print(f"  {a:22s} [{_surface_kind(a):7s}] L1_A={x['L1_area']:.4f} T ({x['L1_area_pct']:.2f}%)  "
+#               f"L2_A={x['L2_area']:.4f} T ({x['L2_area_pct']:.2f}%)")
+#     # piso da representação em grade, por triângulo
+#     mm, mf, w = _floor_points('grade', lay)
+#     acc = Accum()
+#     acc.add_surface(mm, mf, w)
+#     x = acc.report()
+#     E_floor = surface_error_per_triangle(n_tri, _floor_tri_idx('grade', lay), mm, mf, w)
+#     res['floor_grade'] = dict(surface_kind='grade', B_ref_T=x['B_ref'],
+#                               L1_A_T=x['L1_area'], L1_A_pct=x['L1_area_pct'],
+#                               L2_A_T=x['L2_area'], L2_A_pct=x['L2_area_pct'])
+#     print(f"  {'piso grade':22s} [grade  ] L1_A={x['L1_area']:.4f} T ({x['L1_area_pct']:.2f}%)  "
+#           f"L2_A={x['L2_area']:.4f} T ({x['L2_area_pct']:.2f}%)")
+#     nodes, elems = _mesh(sample_idx)
+#     iface = interface_edges(lay['tri'], lay['elem_mat'])
+#     stem = f'sample_{sample_idx:06d}_{loss}' + (f'_P{pct:g}' if pct is not None else '')
+#     (data_dir / f'{stem}.json').write_text(json.dumps(res, indent=1))
+#     np.savez_compressed(data_dir / f'{stem}.npz', xy=nodes[:, :2], elems=elems[:, :3],
+#                         iface_edges=iface, e_tri_floor_grade=E_floor,
+#                         **{f'e_tri_{a}': E[a] for a in E})
+#     save_fig(fig_surface_error_map(res, nodes[:, :2], elems[:, :3], E, [a for a in ARCHS if a in E],
+#                                    iface, ('piso grade', E_floor, res['floor_grade'])),
+#              fig_dir / stem, pdf=False, dpi=150)
+#     print(f'figura: {fig_dir / stem}.png')
+
+
+ARTICLE_FIG_DIR = Path('docs/figures')        # figuras versionadas do artigo
+ARTICLE_ARCH_NAME = {'FNO2d': 'FNO2d', 'FNO_GNN': 'FNO_GNN', 'FNO_BipartiteGNN_Elem': 'FNO_Bipartite',
+                     'FNO_SplitGNN': 'FNO_SplitGNN'}     # nomes das archs no texto do artigo
+SURFACE_REF_RUN = 'FNO2d_mae'                  # surface --pct: run que escolhe a amostra (--ref-run)
+
+
+def _json_default(o):
+    return o.tolist() if hasattr(o, 'tolist') else str(o)
+
+
+def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_dir=None,
+                ref_run=SURFACE_REF_RUN, vmax=None, fig_article: Path = ARTICLE_FIG_DIR):
+    """Erro no domínio em 1 amostra (artigo, "Pisos de representação e erro no domínio"):
+    archs do artigo (REGIONS_ARCHS, só a loss dada), cada uma na sua superfície nativa
+    (grade, P1_nos, P0_elem, P1_mat do N_base do Split), e o piso da grade.
+      - Layout, Split e Ω exatamente como no regions (_regions_sample: parse_smooth +
+        parse_split_smooth + regions.omega_mask); L1_A/L2_A/B_ref só em Ω.
+      - Mapa: e_tri = surface_error_per_triangle (Σ e·w / Σ w por triângulo); fora de Ω em
+        cinza claro, fora da escala.
+      - vmax comum = p99 de e_tri das 4 archs em Ω, arredondado para cima em 0,01 T (ou vmax).
+      - Conferências (JSON 'checks'): média de e_tri ponderada pela área em Ω × L1_A; L1_A/L2_A
+        em Ω × o caminho do regions (BandAccum, regions_add_run).
+    pct: amostra do percentil pct do L1_A de superfície de ref_run no .npz do eval (eval_dir).
+    Saída: data_dir/<stem>.{json,npz}, fig_dir/<stem>.png (diagnóstico, 4 archs + piso grade) e
+    fig_article/erro_dominio_<arch>.{pdf,png} (1 arquivo por arch, mesma escala e tamanho)."""
+    import matplotlib.pyplot as plt
     apply_style()
     data_dir.mkdir(parents=True, exist_ok=True)
     selection = None
     if pct is not None:
         per = np.load((eval_dir or OUT_ROOT / 'dados') / 'eval_smooth_per_sample.npz')
-        sample_idx, selection = _pick_by_pct(per, pct)
-        print(f"P{pct:g} do L1_A de superfície de {REF_RUN} ({selection['subset']}, "
-              f"{selection['n_candidates']} amostras): amostra {sample_idx}")
+        sample_idx, selection = _pick_by_pct(per, pct, ref_run)
+        print(f"P{pct:g} do L1_A de superfície de {ref_run} ({selection['subset']}, "
+              f"{selection['n_candidates']} amostras, eval sem Omega): amostra {sample_idx} "
+              f"(L1_A = {selection['L1_A_surface_ref_T']:.4f} T)")
     row = design_rows()[sample_idx]
-    print(f'amostra {sample_idx}: {sample_path(sample_idx)}')
-    lay = parse_smooth(sample_path(sample_idx), row, with_elem=True, with_overlay=True)
+    path = sample_path(sample_idx)
+    print(f'amostra {sample_idx}: {path}')
+    d_list, edges, _ = regions_setup()
+    lay = _regions_sample(path, row, 30.0, edges, d_list)       # layouts + Split + Ω do regions
+    xy, tri, in_omega = lay['xy'], lay['tri'], lay['in_omega']
+    n_tri = len(tri)
+    M, K = lay['mesh_quad']['mag'].shape
+    P = xy[tri]
+    area = 0.5 * np.abs((P[:, 1, 0] - P[:, 0, 0]) * (P[:, 2, 1] - P[:, 0, 1])
+                        - (P[:, 2, 0] - P[:, 0, 0]) * (P[:, 1, 1] - P[:, 0, 1]))
+    runs = {k: r for k, r in _regions_runs().items() if r['loss'] == loss}
     ts = to_torch_sample(lay)
-    n_tri = len(lay['tri'])
-    runs = load_set(ROOT_S, losses=(loss,))
-    res = dict(sample_idx=sample_idx, loss=loss, n_tri=int(n_tri), selection=selection,
-               runs={}, erros={})
-    E = {}
-    for r in runs.values():
-        a = r['arch']
-        out_hw, yn = predict(a, r['model'], r['normalizer'], ts)
-        mm, mf, w, t_idx = _surface_points(a, lay, out_hw, yn)
+    st = regions_state(runs, edges, d_list)
+    pos = regions_track(st, 'surface', sample_idx, lay)
+    res = dict(sample_idx=sample_idx, loss=loss, n_tri=int(n_tri), n_tri_omega=int(in_omega.sum()),
+               selection=selection,
+               metric='erro de superfície de |B| em Ω (superfície nativa do modelo × FEMM P1); '
+                      'L1_A, L2_A e B_ref só com os pontos de quadratura dos triângulos em Ω',
+               omega=dict(applied=True, rule='regions.omega_mask (igual ao regions)', **lay['omega']),
+               runs={}, erros={}, checks={})
+
+    def _report(mm, mf, w, t_idx):
+        keep = in_omega[t_idx]
         acc = Accum()
-        acc.add_surface(mm, mf, w)
+        acc.add_surface(mm[keep], mf[keep], w[keep])
         x = acc.report()
-        E[a] = surface_error_per_triangle(n_tri, t_idx, mm, mf, w)
-        res['erros'][a] = dict(surface_kind=_surface_kind(a), B_ref_T=x['B_ref'],
+        e_tri = surface_error_per_triangle(n_tri, t_idx, mm, mf, w)
+        den = np.bincount(t_idx, np.asarray(w, np.float64), minlength=n_tri)
+        chk = dict(L1_A_from_e_tri_area=float((e_tri * area)[in_omega].sum() / area[in_omega].sum()),
+                   L1_A_from_e_tri_sumw=float((e_tri * den)[in_omega].sum() / den[in_omega].sum()))
+        chk['rel_diff_area'] = abs(chk['L1_A_from_e_tri_area'] / x['L1_area'] - 1)
+        chk['rel_diff_sumw'] = abs(chk['L1_A_from_e_tri_sumw'] / x['L1_area'] - 1)
+        return x, e_tri, chk
+
+    E = {}
+    for k, r in runs.items():
+        a = r['arch']
+        if a == 'FNO_SplitGNN':
+            _, y_base = predict_split(r['model'], r['normalizer'], lay['split'])
+            mm, mf, w, _ = _split_points(lay, y_base)
+            t_idx = np.repeat(np.arange(M), K)
+        else:
+            out_hw, yn = predict(a, r['model'], r['normalizer'], ts)
+            mm, mf, w, t_idx = _surface_points(a, lay, out_hw, yn)
+        x, E[a], chk = _report(mm, mf, w, t_idx)
+        regions_add_run(st, k, r, lay, pos)          # caminho do regions, independente
+        xr = st['acc'][k].report()
+        chk.update(regions_L1_A_pct=xr['total']['L1_area_pct'], regions_L2_A_pct=xr['total']['L2_area_pct'],
+                   regions_B_ref=xr['B_ref_global'],
+                   rel_diff_regions_L1=abs(xr['total']['L1_area_pct'] / x['L1_area_pct'] - 1))
+        res['checks'][a] = chk
+        res['erros'][a] = dict(surface_kind=_regions_kind(a), B_ref_T=x['B_ref'],
                                L1_A_T=x['L1_area'], L1_A_pct=x['L1_area_pct'],
                                L2_A_T=x['L2_area'], L2_A_pct=x['L2_area_pct'])
         res['runs'][a] = dict(run_dir=r['run_dir'], epoch=r['epoch'])
-        print(f"  {a:22s} [{_surface_kind(a):7s}] L1_A={x['L1_area']:.4f} T ({x['L1_area_pct']:.2f}%)  "
+        print(f"  {a:22s} [{_regions_kind(a):7s}] em Omega: L1_A={x['L1_area']:.4f} T ({x['L1_area_pct']:.2f}%)  "
               f"L2_A={x['L2_area']:.4f} T ({x['L2_area_pct']:.2f}%)")
-    # piso da representação em grade, por triângulo
+    # piso da representação em grade
     mm, mf, w = _floor_points('grade', lay)
-    acc = Accum()
-    acc.add_surface(mm, mf, w)
-    x = acc.report()
-    E_floor = surface_error_per_triangle(n_tri, _floor_tri_idx('grade', lay), mm, mf, w)
+    x, E_floor, chk = _report(mm, mf, w, _floor_tri_idx('grade', lay))
+    res['checks']['piso_grade'] = chk
     res['floor_grade'] = dict(surface_kind='grade', B_ref_T=x['B_ref'],
                               L1_A_T=x['L1_area'], L1_A_pct=x['L1_area_pct'],
                               L2_A_T=x['L2_area'], L2_A_pct=x['L2_area_pct'])
-    print(f"  {'piso grade':22s} [grade  ] L1_A={x['L1_area']:.4f} T ({x['L1_area_pct']:.2f}%)  "
+    print(f"  {'piso grade':22s} [grade  ] em Omega: L1_A={x['L1_area']:.4f} T ({x['L1_area_pct']:.2f}%)  "
           f"L2_A={x['L2_area']:.4f} T ({x['L2_area_pct']:.2f}%)")
-    nodes, elems = _mesh(sample_idx)
-    iface = interface_edges(lay['tri'], lay['elem_mat'])
+
+    # escala comum: p99 dos 4 mapas em Ω, para cima em 0,01 T
+    archs = [a for a in REGIONS_ARCHS if a in E]
+    p99 = float(np.percentile(np.concatenate([E[a][in_omega] for a in archs]), 99))
+    vmax_auto = float(np.ceil(round(p99 * 100, 9)) / 100)
+    vmax_used = vmax_auto if vmax is None else float(vmax)
+    above = {a: dict(tri_frac=float((E[a][in_omega] > vmax_used).mean()),
+                     area_frac=float(area[in_omega & (E[a] > vmax_used)].sum() / area[in_omega].sum()))
+             for a in archs}
+    res.update(vmax_T=vmax_used, vmax_rule=('--vmax (manual)' if vmax is not None else
+                                            'p99 de e_tri das 4 archs em Ω, para cima em 0,01 T'),
+               p99_T=p99, vmax_auto_T=vmax_auto, above_vmax=above)
+
+    iface = interface_edges(tri, lay['elem_mat'])
+    names = {a: f'erro_dominio_{ARTICLE_ARCH_NAME[a]}' for a in archs}
+    res['figures_article'] = {a: str(fig_article / f'{n}.pdf') for a, n in names.items()}
     stem = f'sample_{sample_idx:06d}_{loss}' + (f'_P{pct:g}' if pct is not None else '')
-    (data_dir / f'{stem}.json').write_text(json.dumps(res, indent=1))
-    np.savez_compressed(data_dir / f'{stem}.npz', xy=nodes[:, :2], elems=elems[:, :3],
-                        iface_edges=iface, e_tri_floor_grade=E_floor,
+    (data_dir / f'{stem}.json').write_text(json.dumps(res, indent=1, default=_json_default))
+    np.savez_compressed(data_dir / f'{stem}.npz', xy=xy, elems=tri, iface_edges=iface,
+                        in_omega=in_omega, e_tri_floor_grade=E_floor,
                         **{f'e_tri_{a}': E[a] for a in E})
-    save_fig(fig_surface_error_map(res, nodes[:, :2], elems[:, :3], E, [a for a in ARCHS if a in E],
-                                   iface, ('piso grade', E_floor, res['floor_grade'])),
+    save_fig(fig_surface_error_map(res, xy, tri, E, archs, iface, ('piso grade', E_floor, res['floor_grade']),
+                                   vmax=vmax_used, in_omega=in_omega),
              fig_dir / stem, pdf=False, dpi=150)
-    print(f'figura: {fig_dir / stem}.png')
+    with plt.rc_context(ARTICLE_RC):
+        for a in archs:
+            save_fig(fig_surface_error_single(xy, tri, E[a], in_omega, iface, vmax_used),
+                     fig_article / names[a], pdf=True, dpi=300)
+
+    crit = (f"P{pct:g} do L1_A de superfície de {ref_run} em {selection['subset']}" if selection
+            else 'índice dado')
+    print(f'\namostra {sample_idx} ({crit}); vmax = {vmax_used:.2f} T ({res["vmax_rule"].replace("Ω", "Omega")}; p99 = {p99:.4f} T)')
+    for a in archs:
+        c = res['checks'][a]
+        print(f"  {a:22s} acima do vmax: {100 * above[a]['tri_frac']:.2f}% dos triângulos "
+              f"({100 * above[a]['area_frac']:.2f}% da área) | e_tri x area vs L1_A: "
+              f"{c['rel_diff_area']:.1e}, e_tri x sum_w: {c['rel_diff_sumw']:.1e}, regions: {c['rel_diff_regions_L1']:.1e}")
+    print(f'dados: {data_dir / stem}.json/.npz; diagnóstico: {fig_dir / stem}.png')
+    print('artigo: ' + ', '.join(str(fig_article / f'{n}.pdf') for n in names.values()))
 
 
 SEAM_RAD = float(np.deg2rad(ANG_2 - ANG_1))                    # setor periódico (120°)
@@ -1980,12 +2132,20 @@ if __name__ == '__main__':
     p_fig = sp.add_parser('figures', help='curvas de treino, barras de erro, campo P50/P95 (após eval)')
     p_fig.add_argument('--data', type=Path, default=OUT_ROOT / 'dados', help='saída do eval')
     p_fig.add_argument('--out', type=Path, default=OUT_ROOT / 'plots', help='diretório das figuras')
-    p_sur = sp.add_parser('surface', help='mapa de erro de superfície dos 5 modelos em 1 amostra')
+    # [REMOVIDO] help antigo: 'mapa de erro de superfície dos 5 modelos em 1 amostra' e --pct pela REF_RUN
+    p_sur = sp.add_parser('surface', help='erro no domínio (Omega) das 4 archs do artigo em 1 amostra: '
+                                          '1 figura por arch em docs/figures + diagnóstico')
     p_sur.add_argument('idx', nargs='?', default=None,
                        help='índice da amostra no raw (com --pct: omitir; pode receber a LOSS)')
     p_sur.add_argument('loss', nargs='?', default=None, choices=('mse', 'mae'))
     p_sur.add_argument('--pct', type=float, default=None,
-                       help='percentil P do L1_A de superfície da REF_RUN no .npz do eval')
+                       help='percentil P do L1_A de superfície da --ref-run no .npz do eval')
+    p_sur.add_argument('--ref-run', default=SURFACE_REF_RUN,
+                       help=f'run (chave do .npz do eval) que escolhe a amostra com --pct (default {SURFACE_REF_RUN})')
+    p_sur.add_argument('--vmax', type=float, default=None,
+                       help='topo da escala de cor em T (default: p99 dos 4 mapas em Omega, para cima em 0,01 T)')
+    p_sur.add_argument('--fig-article', type=Path, default=ARTICLE_FIG_DIR,
+                       help=f'destino das figuras por arch do artigo (default {ARTICLE_FIG_DIR})')
     p_sur.add_argument('--eval-data', type=Path, default=OUT_ROOT / 'dados',
                        help='diretório com eval_smooth_per_sample.npz (para --pct)')
     p_sur.add_argument('--data', type=Path, default=OUT_ROOT / 'dados' / 'surface_error')
@@ -2125,7 +2285,8 @@ if __name__ == '__main__':
         if a.pct is None and a.idx is None:
             ap.error('surface: informe IDX ou --pct P')
         run_surface(None if a.idx is None else int(a.idx), a.loss or 'mae', a.data, a.out,
-                    pct=a.pct, eval_dir=a.eval_data)
+                    pct=a.pct, eval_dir=a.eval_data, ref_run=a.ref_run, vmax=a.vmax,
+                    fig_article=a.fig_article)
     elif a.cmd == 'regions':
         run_regions(a.out, a.fig, a.n, a.d, a.d_max, a.n_bins, a.bin_scale, a.ang_canto, a.subset)
     elif a.cmd == 'torque' and a.mode == 'freq':

@@ -469,34 +469,128 @@ O que se vê:
 
 ## 5. Custo computacional (`timing`, `src/postprocess/timing.py`; Windows com FEMM e GPU)
 
-**FEMM** (`femm_solve_timed`): para 50 amostras igualmente espaçadas do conjunto do `eval`,
-cronometra à parte `openfemm`, a geometria, `mi_createmesh` (`mesh`), `mi_analyze` (`solve`)
-e `closefemm`. A comparação usa só `solve`. O `check_mesh_vs_raw` confere que a malha é igual
-à do raw e mede $|\Delta A|$. O tempo `solve` é o do `mi_analyze`; se ele refaz a malha,
-`solve` = malha + solução. [VERIFICAR] se o `mi_analyze` remalha
-(`tests/check_analyze_remesh.py`, ver lista).
+Compara a solução do FEMM com a inferência de cada modelo, com a **mesma malha** dos dois
+lados; a geração da malha não entra em nenhum tempo. Tabela `tab:cost` do artigo.
 
-**Pré-processamento** (`preprocess_timed`): do `.ans` resolvido até as entradas, por etapa.
-São as mesmas funções dos parsers, sem o gabarito; `check_preprocess` confere igualdade
-exata.
-- Etapas: `read_ans` (`_parse_solution` sobre o `.ans` não comprimido), `materials`, `x_hw`,
-  `node_pos`, `graph_topology`, `v1_graph`, `bip_graph` e `elem_graph`.
-- O custo de cada arch é a soma das etapas de `ARCH_STAGES[arch]` mais `encode_timed`
-  (CPU → GPU e z-score).
+```
+python -m scripts.postprocess timing [remesh|femm|infer|table|all]   # padrão: all
+```
 
-**Inferência** (`time_batch`): `best.pth`, `torch.inference_mode`.
-- Mede o forward mais a desnormalização (e a interpolação grade → nós no FNO2d).
-- Lote 1 com a amostra de nº de nós mediano entre 32 do 1º chunk do subset, e lotes
-  $2, 4, \ldots$ até OOM ou 512.
-- 10 aquecimentos e 100 repetições com `cuda.synchronize`; mediana e IQR.
-- Limite de 95% da VRAM.
+**Amostras e runs.** As mesmas 50 amostras igualmente espaçadas do subset `test` nos três
+tempos (índices em `sample_idx` do JSON; 29 292–35 198 nós, mediana 32 135). Runs **MAE**
+de FNO2d, FNO_GNN, FNO_BipartiteGNN_Elem (= "FNO_BipartiteGNN" no artigo) e FNO_SplitGNN
+(`run_0002` de cada, as mesmas dos resultados principais). Todos os números são **medianas
+entre amostras** das medianas por amostra; o IQR é entre amostras; média e desvio padrão
+ficam só no JSON.
 
-**Acelerações** (`_timing_table`, medianas em ms por amostra):
+### 5.1 O `mi_analyze` remalha (verificado em 2026-11-12, `timing remesh`)
 
-$$ \text{acel}_1 = \frac{t_{solve}}{t_{pre} + t_{inf,1}},\quad \text{acel}^{pura}_1 = \frac{t_{solve}}{t_{inf,1}},\quad
-\text{acel}_{max} = \frac{t_{solve}}{t_{pre} + t_{inf,max}/b_{max}},\quad \text{acel}^{pura}_{max} = \frac{t_{solve}}{t_{inf,max}/b_{max}} $$
+`check_analyze_remesh` (amostra 5408, 3 rep.; o `.fem` salvo sem malha e reaberto) mede os
+filhos do `femm.exe` em cada chamada:
 
-Saída: `dados/timing.json`, com hardware, `femm_preproc`, `inference` e `table`.
+| Chamada | ms (mediana) | Processos |
+|---|---|---|
+| `mi_createmesh` | 397 | `triangle.exe` ×2 |
+| `mi_analyze` sem malha antes | 3858 | `triangle.exe` ×2 + `fkn.exe` |
+| `mi_analyze` após `mi_createmesh` | 3870 | `triangle.exe` ×2 (263) + `fkn.exe` (3524) |
+
+O `mi_analyze` **sempre** roda o `triangle.exe` de novo, com ou sem malha prévia. A malha das
+duas soluções é idêntica entre si e à do raw, com $|\Delta A| = 0$. Logo, o tempo do
+`mi_analyze` inteiro inclui a malha e não serve como $t_{FEMM}$. Nada é subtraído: mede-se o
+solver diretamente.
+
+### 5.2 Definições
+
+**$t_{FEMM}$** (`femm_solve_timed_procs`): duração do processo **`fkn.exe`** (o solver)
+disparado pelo `mi_analyze`.
+- Medida por polling dos filhos do `femm.exe` (`ChildWatch`: `psutil.pids()` a cada leitura,
+  com nome e pai consultados só nos PIDs novos). A espera alvo é `POLL_S` = 4 ms; o
+  intervalo real foi de **5,0 ms** de mediana, p99 ≤ 7,7 ms e máximo de 19,2 ms (0,47% das
+  leituras > 10 ms). A duração medida (última − 1ª leitura) subestima a real em até cerca
+  de 1 intervalo em cada ponta.
+- **O `fkn.exe` inclui a leitura da malha (`.node/.ele/.pbc`) e a escrita do `.ans` pelo
+  próprio solver**, que não dá para separar de fora.
+- Fora: `openfemm`, desenho da geometria, `mi_createmesh`, os 2 `triangle.exe` dentro do
+  `mi_analyze`, `closefemm` e a leitura do `.ans` (todos gravados no JSON).
+- Conferência por amostra: `mi_analyze` = triangle + fkn + resto, com o resto de **85 ms**
+  de mediana (IQR 6,3; 71–96 ms), que são o intervalo entre processos e o overhead do FEMM.
+  Em todas as 50 amostras houve exatamente 2 `triangle.exe` + 1 `fkn.exe`.
+
+**$t_{pre}$** (`preprocess_timed` + `encode_timed`): do `.ans` resolvido até a entrada
+codificada na GPU, pelo mesmo caminho da construção do dataset (`check_preprocess` =
+igualdade exata com `parse_smooth` e `parse_split_smooth`, todas as chaves dos 4 layouts, 50/50).
+- Etapas:
+  - `read_mesh`: linhas do `.ans` + x, y dos nós + conectividade/rótulos (`usecols`, sem
+    converter a coluna A).
+  - `materials`, `x_hw` (malha → grade: trifinder + valor do elemento em cada célula) e
+    `node_pos`.
+  - `graph_topology` (arestas + pares do wrap), `v1_graph` (vértices), `elem_feats` (o
+    `elem_x` do bipartido, comum a bip/Elem/Split), `bip_graph`, `elem_graph` e
+    `split_graph`.
+  - `encode`: `_prepare` da inferência (numpy → tensor → GPU + z-score), com
+    `cuda.synchronize`.
+- $t_{pre}$ da arch = soma das etapas de `ARCH_STAGES[arch]` + encode, por repetição;
+  1 aquecimento + 5 rep. por amostra.
+- Fora: geração da malha e `read_solution` (conversão da coluna A, gravada à parte: 8,9 ms).
+  Ressalva: no `.ans`, x, y e A estão na mesma linha, então os bytes de A são lidos do disco
+  no `read_mesh`. Lê o `.ans` não comprimido que o FEMM acabou de gravar.
+- FNO2d: inclui `node_pos` e o envio de r/c dos nós (0,32 ms), porque entrega o campo nos
+  nós como o FEMM.
+
+**$t_{inf}$** (`time_per_sample`): `best.pth`, `torch.inference_mode`, lote 1, forward +
+desnormalização, com `cuda.synchronize` antes e depois.
+- FNO2d: + interpolação grade → nós (parcelas `grid` e `interp` à parte no JSON).
+- Split: saídas N_aux e N_base desnormalizadas.
+- 3 aquecimentos no início de cada run + 10 rep. por amostra, com a entrada já na GPU.
+- Entradas: `preprocess_timed` sobre o `.ans.gz` do raw (malha e A idênticos aos do FEMM).
+- Fora: $t_{pre}$ e qualquer pós-processamento.
+
+### 5.3 Condições de medição
+
+- **Afinidade de CPU** (`--cpu-affinity pcores`, padrão): o processo Python e o `femm.exe`
+  ficam só nos núcleos P (lógicos 0–15 do i9-13900KF, detectados por `EfficiencyClass`); o
+  `triangle.exe` e o `fkn.exe` herdam a afinidade (conferido nas 50 amostras).
+  - Motivo: a inferência de lote 1 é limitada pelo lançamento de kernels (CPU). Sem
+    afinidade, o Windows alterna a thread entre núcleos P e E e os tempos ficam bimodais
+    (FNO2d 2,1 × 3,4 ms; Elem 3,8 × 6,1 ms). Fixado dos dois lados por igualdade.
+- **Spin-up da GPU** (`--gpu-spinup-s 2`): antes dos aquecimentos de cada run, 2 s de matmul
+  genérico, sem o modelo. Sem isso, a 1ª amostra do 1º modelo saía cerca de 3× mais lenta
+  (GPU em repouso; os 3 aquecimentos somam cerca de 10 ms).
+- Limite de 95% da VRAM (WDDM: OOM real em vez de transbordar para a RAM).
+- Hardware: i9-13900KF (24 núcleos, 32 lógicos), 31,8 GiB de RAM, RTX 4080 16 GB (driver
+  610.88), Windows 11 Pro, Python 3.12.2, torch 2.3.1+cu121, FEMM 4.2 (`femm.exe` de
+  2019-04-21).
+
+### 5.4 Resultados (2026-11-12)
+
+$t_{FEMM}$ = **3184,8 ms** (IQR 435,4; 2491–4445 ms). O `mi_analyze` inteiro dá 3549,6 ms;
+o `triangle.exe` ×2, 262,8 ms.
+
+| Arquitetura | $t_{inf}$ ms (IQR) | % do FEMM | $t_{pre}$ ms (IQR) | encode ms |
+|---|---|---|---|---|
+| FNO2d | 2,25 (0,11) | 0,07 | 374,9 (51,1) | 3,6 |
+| FNO_GNN | 3,33 (0,07) | 0,10 | 472,1 (52,1) | 3,5 |
+| FNO_BipartiteGNN_Elem | 3,91 (0,11) | 0,12 | 498,6 (55,9) | 5,8 |
+| FNO_SplitGNN | 5,68 (0,18) | 0,18 | 447,3 (61,3) | 8,4 |
+
+- FNO2d: grade 1,96 + interpolação 0,21 ms.
+- $t_{pre}$ por etapa (mediana, ms): `read_mesh` 39,9, `materials` 2,2, **`x_hw` 327,8**
+  (IQR 50,5), `node_pos` 0,5, `graph_topology` 80,0, `v1_graph` 10,4, `elem_feats` 1,6,
+  `bip_graph` 12,6, `elem_graph` 21,4, `split_graph` 63,4. A interpolação malha → grade é
+  66% (Elem) a 87% (FNO2d) do $t_{pre}$ e domina o custo: o pré-processamento é de 79×
+  (Split) a 167× (FNO2d) a inferência.
+- Lote máximo (fora da tabela): FNO2d 512 (0,80 ms/amostra), FNO_GNN 128 (2,28), Elem 128
+  (3,55), Split 64 (6,21 — não melhora em relação ao lote 1).
+- A/B do refatoramento: com o `preprocess_timed` antigo e o novo intercalados (10 amostras,
+  as duas ordens), a soma das etapas sem a leitura fica igual dentro de 1% em todas as
+  archs antigas; a divisão de `bip_graph` em `elem_feats` + `bip_graph` custa cerca de
+  0,2 ms. A única mudança de $t_{pre}$ é a leitura: `read_ans` (59–60 ms, com A) →
+  `read_mesh` (41–42 ms).
+
+Saída: `dados/timing.json` com `remesh_check`, `cpu_affinity`, `femm_preproc` (por amostra,
+etapas, conferências, polling), `inference` (repetições por amostra, varredura de lote),
+`hardware` e `table`, e `dados/timing_table.tex` (gerado do JSON: ms com 1 casa, fração com
+1 casa ou 2 se < 1%, vírgula decimal, `--decimal` para trocar).
 
 ## 6. Outros subcomandos
 

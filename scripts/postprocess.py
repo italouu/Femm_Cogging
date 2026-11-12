@@ -82,12 +82,20 @@ Subcomandos:
       Ω_int), omitindo os de pouca área, com μ_eff(|B|), pico e joelho. Saída:
       dados/saturation_error_mu.json + plots/saturacao_erro_mu[_nN].
 
-  timing [femm|infer|all] [--n-femm 50] — (máquina Windows com FEMM e GPU) custo
-      computacional com a malha dada aos dois lados: FEMM = só o mi_analyze (redesenho com os
-      parâmetros do CSV, malha fora do cronômetro; malha e A conferidos × raw); pré-
-      processamento .ans -> entrada codificada por etapa (funções dos parsers smooth,
-      conferido × parsers); inferência best.pth lote 1 e lote máx. (mediana/IQR, com
-      desnormalização). Saída: dados/timing.json (hardware, tabelas, acelerações).
+  timing [remesh|femm|infer|table|all] [--n-samples 50] — (Windows com FEMM e GPU) custo
+      computacional com a MESMA malha nos dois lados (a geração da malha fora de todos os
+      tempos), nas mesmas 50 amostras igualmente espaçadas do subset; runs MAE de FNO2d,
+      FNO_GNN, FNO_BipartiteGNN_Elem e FNO_SplitGNN. Medianas entre amostras das medianas
+      por amostra, com IQR:
+        t_FEMM = duração do fkn.exe (solver) dentro do mi_analyze, por polling dos filhos do
+                 femm.exe (o mi_analyze remalha com o triangle.exe -- modo remesh); inclui a
+                 leitura da malha e a escrita do .ans pelo solver;
+        t_pre  = .ans -> entrada codificada na GPU (read_mesh sem a coluna A, materiais, x_hw,
+                 grafos, z-score + CPU -> GPU), conferido igual aos parsers; 1 + 5 rep.;
+        t_inf  = forward + desnormalização (+ grade -> nós no FNO2d), lote 1; 3 aquec. + 10 rep.
+      Varredura de lote até OOM (fora da tabela). Saída: dados/timing.json +
+      dados/timing_table.tex (tab:cost, gerada do JSON).
+  [REMOVIDO] texto antigo: "FEMM = só o mi_analyze ... inferência best.pth lote 1 e lote máx."
 
 Subset: eval, regions, saturation, timing e torque usam o 'test' por padrão e aceitam
   --subset val; figures e surface --pct usam o subset gravado pelo eval.
@@ -102,7 +110,7 @@ Execução (raiz do projeto):
   python -m scripts.postprocess saturation [N]
   python -m scripts.postprocess sat-bh [--data DIR] [--fig DIR]
   python -m scripts.postprocess sat-mu [--data DIR] [--fig DIR]
-  python -m scripts.postprocess timing [femm|infer|all]
+  python -m scripts.postprocess timing [remesh|femm|infer|table|all]
   python -m scripts.postprocess torque theta-e|batch|scatter [--loss mae]
 """
 import argparse
@@ -138,9 +146,15 @@ from src.postprocess.saturation import (SAT_EDGES, SAT_SETS, FemmBH, SatAccum, c
 from src.postprocess.plots.saturation import (MU_LABEL, fig_bh, fig_sat_error, fig_sat_error_bh,
                                               fig_sat_error_mu,
                                               fig_steel_map)
-from src.postprocess.timing import (ARCH_STAGES, DEVICE, LAYOUT, check_mesh_vs_raw,
-                                    check_preprocess, collate, encode_timed, femm_solve_timed,
-                                    hardware_info, iqr_stats, preprocess_timed, time_batch)
+# [REMOVIDO] import antigo do timing (femm_solve_timed comentada em src/postprocess/timing.py)
+# from src.postprocess.timing import (ARCH_STAGES, DEVICE, LAYOUT, check_mesh_vs_raw,
+#                                     check_preprocess, collate, encode_timed, femm_solve_timed,
+#                                     hardware_info, iqr_stats, preprocess_timed, time_batch)
+from src.postprocess.timing import (ARCH_STAGES, DEVICE, LAYOUT, POLL_S, check_analyze_remesh,
+                                    check_mesh_vs_raw, check_preprocess, collate, encode_timed,
+                                    femm_solve_timed_procs, hardware_info, iqr_stats,
+                                    gpu_spinup, performance_cpus, preprocess_timed, set_affinity, time_batch,
+                                    time_per_sample, to_torch)
 from src.postprocess.torque import (batch_summary, curve_row, femm_ref, femm_ref_ok, femm_solve, gap,
                                     summarize_batch,
                                     parse_torque_sample, read_rows, sample_torques, scatter_ids,
@@ -1483,86 +1497,337 @@ def _merge_json(path: Path, key, value):
     path.write_text(json.dumps(d, indent=2))
 
 
-def _timing_femm(out_json, n_femm, runs, subset='test'):
-    """FEMM (só mi_analyze) + pré-processamento por etapa + codificação, em n_femm amostras do
-    conjunto do eval igualmente espaçadas; confere malha/A × raw e entradas × parsers."""
+# [REMOVIDO] _timing_femm / _timing_infer / _timing_table / run_timing antigos (2026-11-12):
+# t_FEMM = mi_analyze inteiro (que remalha), inferência numa única amostra mediana, 10 runs
+# da bateria bldc sem a Split, sem repetições no pré-processamento. Substituídos pelas
+# versões abaixo (t_FEMM = fkn.exe, 50 amostras, runs MAE das 4 archs, tabela LaTeX).
+# def _timing_femm(out_json, n_femm, runs, subset='test'):
+#     """FEMM (só mi_analyze) + pré-processamento por etapa + codificação, em n_femm amostras do
+#     conjunto do eval igualmente espaçadas; confere malha/A × raw e entradas × parsers."""
+#     import gzip as _gz
+#     rows = design_rows()
+#     samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], subset, None, N_SAMPLES)
+#     pick = [samples[i] for i in np.linspace(0, len(samples) - 1, n_femm).round().astype(int)]
+#     rec, checks = [], []
+#     for n, (_, _, idx, raw_gz) in enumerate(pick):
+#         row = rows[idx]
+#         r_in, r_ext = float(row['inner_diameter [mm]']) / 2, float(row['outer_diameter [mm]']) / 2
+#         d = TIMING_WORK / f's{idx:06d}'
+#         tm, ans = femm_solve_timed(row, d)
+#         tp, arrays, (nodes, elems) = preprocess_timed(ans, r_in, r_ext, ANG_1, ANG_2, N_R, N_A)
+#         te = encode_timed(runs, arrays)
+#         # conferências (fora do cronômetro)
+#         gz = d / 'model.ans.gz'
+#         with open(ans, 'rb') as fi, _gz.open(gz, 'wb') as fo:
+#             shutil.copyfileobj(fi, fo)
+#         ref = parse_smooth(gz, row, with_elem=True)
+#         eq = check_preprocess(arrays, ref)
+#         chk = dict(sample_idx=idx, **check_mesh_vs_raw(nodes, elems, raw_gz),
+#                    preproc_equal_parsers=all(eq.values()), preproc_equal_detail=eq)
+#         checks.append(chk)
+#         pre = {a: sum(tp[st] for st in ARCH_STAGES[a]) + te[a] for a in te}
+#         rec.append(dict(sample_idx=idx, n_nodes=chk['n_nodes'], n_elems=chk['n_elems'],
+#                         femm=tm, pre_stage=tp, encode=te, pre_total=pre))
+#         shutil.rmtree(d, ignore_errors=True)
+#         print(f"  [{n + 1}/{len(pick)}] amostra {idx}: nós={chk['n_nodes']}  malha {tm['mesh'] * 1e3:.0f} ms "
+#               f"(fora)  solução {tm['solve'] * 1e3:.0f} ms  pré(Elem) {pre.get('FNO_BipartiteGNN_Elem', 0) * 1e3:.0f} ms"
+#               f"  malha=raw:{chk['mesh_equal_raw']} |ΔA|={chk['max_abs_dA_vs_raw']}  "
+#               f"entradas=parsers:{chk['preproc_equal_parsers']}", flush=True)
+#     ms = lambda v: iqr_stats(1e3 * np.array(v))
+#     res = dict(n_samples=len(rec), sample_idx=[r['sample_idx'] for r in rec],
+#                note='geometria e malha fora da comparação; solução = só mi_analyze',
+#                femm_ms={k: ms([r['femm'][k] for r in rec]) for k in rec[0]['femm']},
+#                pre_stage_ms={k: ms([r['pre_stage'][k] for r in rec]) for k in rec[0]['pre_stage']},
+#                encode_ms={a: ms([r['encode'][a] for r in rec]) for a in rec[0]['encode']},
+#                pre_total_ms={a: ms([r['pre_total'][a] for r in rec]) for a in rec[0]['pre_total']},
+#                arch_stages={a: list(v) for a, v in ARCH_STAGES.items()},
+#                n_mesh_equal_raw=sum(c['mesh_equal_raw'] for c in checks),
+#                max_abs_dA_vs_raw=max((c['max_abs_dA_vs_raw'] or 0.0) for c in checks),
+#                all_preproc_equal_parsers=all(c['preproc_equal_parsers'] for c in checks),
+#                n_nodes=iqr_stats([r['n_nodes'] for r in rec]), checks=checks, per_sample=rec)
+#     _merge_json(out_json, 'femm_preproc', res)
+#
+#
+# def _timing_infer(out_json, runs, n_samples, n_warmup, n_reps, max_batch, subset='test'):
+#     """best.pth das runs, lote 1 (amostra de nº de nós mediano) e potências de 2 até OOM ou
+#     max_batch (amostras do 1º chunk do subset repetidas ciclicamente)."""
+#     rows = design_rows()
+#     samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], subset, None, N_SAMPLES)
+#     first = [x for x in samples if x[0] == samples[0][0]][:n_samples]
+#     with ProcessPoolExecutor(max_workers=min(N_WORKERS, len(first))) as ex:
+#         lays = list(ex.map(parse_smooth, [x[3] for x in first], [rows[x[2]] for x in first],
+#                            [True] * len(first)))
+#     ts = [to_torch_sample(l) for l in lays]
+#     del lays
+#     n_nodes = np.array([t['vertex']['node_x'].shape[0] for t in ts])
+#     i_med = int(np.argsort(n_nodes)[len(n_nodes) // 2])
+#     torch.cuda.set_per_process_memory_fraction(MEM_FRACTION, 0)
+#     for r in runs.values():
+#         r['model'].to('cpu')
+#     torch.cuda.empty_cache()
+#     res = dict(batch1_sample_idx=int(first[i_med][2]), batch1_n_nodes=int(n_nodes[i_med]),
+#                chunk=first[0][0], n_samples_cycled=len(ts), n_warmup=n_warmup, n_reps=n_reps,
+#                mem_fraction_limit=MEM_FRACTION, max_batch_tried=max_batch, runs={})
+#     for k, r in runs.items():
+#         arch, lay = r['arch'], LAYOUT[r['arch']]
+#         r['model'].to(DEVICE).eval()
+#         torch.cuda.empty_cache()
+#         out = dict(arch=arch, loss=r['loss'], run=r['run'])
+#         out['batch1'] = time_batch(arch, r, collate([ts[i_med][lay]], lay), n_warmup, n_reps)
+#         print(f"  {k:26s} lote 1: {out['batch1']['ms']['median']:.2f} ms (IQR {out['batch1']['ms']['iqr']:.2f}), "
+#               f"pico {out['batch1']['peak_mem_gib']:.2f} GiB", flush=True)
+#         sizes, bmax, b = {}, 1, 2
+#         while b <= max_batch:
+#             try:
+#                 rr = time_batch(arch, r, collate([ts[i % len(ts)][lay] for i in range(b)], lay),
+#                                 n_warmup, n_reps)
+#             except torch.cuda.OutOfMemoryError:
+#                 torch.cuda.empty_cache()
+#                 break
+#             rr['ms_per_sample_median'] = rr['ms']['median'] / b
+#             sizes[str(b)], bmax = rr, b
+#             print(f"      lote {b:3d}: {rr['ms']['median']:.1f} ms ({rr['ms_per_sample_median']:.2f} ms/amostra), "
+#                   f"pico {rr['peak_mem_gib']:.2f} GiB", flush=True)
+#             torch.cuda.empty_cache()
+#             b *= 2
+#         out.update(batch_sweep=sizes, batch_max=bmax,
+#                    batch_max_ms_per_sample=(sizes[str(bmax)]['ms_per_sample_median'] if bmax > 1
+#                                             else out['batch1']['ms']['median']))
+#         r['model'].to('cpu')
+#         torch.cuda.empty_cache()
+#         res['runs'][k] = out
+#     _merge_json(out_json, 'inference', res)
+#
+#
+# def _timing_table(out_json):
+#     d = json.loads(out_json.read_text())
+#     fp, inf = d.get('femm_preproc'), d.get('inference')
+#     if not (fp and inf):
+#         return None
+#     solve = fp['femm_ms']['solve']['median']
+#     tab = {}
+#     for k, r in inf['runs'].items():
+#         pre = fp['pre_total_ms'][r['arch']]['median']
+#         i1, im = r['batch1']['ms']['median'], r['batch_max_ms_per_sample']
+#         tab[k] = dict(femm_solve_ms=solve, preproc_ms=pre, infer_batch1_ms=i1,
+#                       infer_batchmax_ms_per_sample=im, batch_max=r['batch_max'],
+#                       speedup_batch1=solve / (pre + i1), speedup_infer_only_batch1=solve / i1,
+#                       speedup_batchmax=solve / (pre + im), speedup_infer_only_batchmax=solve / im)
+#     _merge_json(out_json, 'table', dict(
+#         note='medianas (ms/amostra); aceleração = solução FEMM (só mi_analyze) / (pré-proc. + '
+#              'inferência); aceleração da inferência pura = solução / inferência; lote máx. = '
+#              'tempo por amostra no maior lote que coube', rows=tab))
+#     print(f"{'run':26s} {'FEMM ms':>8s} {'pré ms':>8s} {'inf(1) ms':>9s} {'inf(máx)':>9s} "
+#           f"{'acel.(1)':>8s} {'inf.pura(1)':>11s} {'acel.(máx)':>10s} {'inf.pura(máx)':>13s}")
+#     for k, t in tab.items():
+#         print(f"{k:26s} {t['femm_solve_ms']:8.0f} {t['preproc_ms']:8.0f} {t['infer_batch1_ms']:9.2f} "
+#               f"{t['infer_batchmax_ms_per_sample']:9.2f} {t['speedup_batch1']:8.1f} "
+#               f"{t['speedup_infer_only_batch1']:11.0f} {t['speedup_batchmax']:10.1f} "
+#               f"{t['speedup_infer_only_batchmax']:13.0f}")
+#     return tab
+#
+#
+# def run_timing(what, out_dir: Path, n_femm=50, n_warmup=10, n_reps=100, max_batch=512,
+#                n_infer_samples=32, subset='test'):
+#     """Custo computacional: FEMM (só mi_analyze) | pré-processamento | inferência."""
+#     out_dir.mkdir(parents=True, exist_ok=True)
+#     out_json = out_dir / 'timing.json'
+#     runs = load_set(ROOT_S)
+#     if what in ('femm', 'all'):
+#         _timing_femm(out_json, n_femm, runs, subset)
+#     if what in ('infer', 'all'):
+#         _timing_infer(out_json, runs, n_infer_samples, n_warmup, n_reps, max_batch, subset)
+#     _merge_json(out_json, 'hardware', hardware_info())
+#     _timing_table(out_json)
+#     print(f'salvo em {out_json}')
+
+TIMING_ARCHS = ('FNO2d', 'FNO_GNN', 'FNO_BipartiteGNN_Elem', 'FNO_SplitGNN')
+# linhas da tab:cost do artigo: (rótulo no artigo, arch no repositório)
+TIMING_TABLE_ROWS = (('FNO2d', 'FNO2d'), ('FNO_GNN', 'FNO_GNN'),
+                     ('FNO_BipartiteGNN', 'FNO_BipartiteGNN_Elem'), ('FNO_SplitGNN', 'FNO_SplitGNN'))
+TIMING_DEFS = dict(
+    t_femm='duração do processo fkn.exe (solver) disparado pelo mi_analyze, por polling dos filhos '
+           'do femm.exe; inclui a leitura da malha e a escrita do .ans pelo solver. Fora: abrir/'
+           'fechar o FEMM, geometria, mi_createmesh, triangle.exe (o mi_analyze remalha), ler o .ans',
+    t_pre='.ans resolvido -> entrada codificada na GPU: read_mesh (sem converter a coluna A; os '
+          'bytes de A estão nas mesmas linhas e são lidos do disco), materiais, x_hw (malha -> '
+          'grade), grafos da arch e encode (_prepare: CPU -> GPU + z-score, cuda.synchronize). '
+          'Fora: malha, read_solution (coluna A). Soma das etapas de arch_stages + encode, por '
+          'repetição; mediana das repetições por amostra',
+    t_inf='best.pth, torch.inference_mode, lote 1: forward + desnormalização (+ grade -> nós no '
+          'FNO2d), cuda.synchronize antes e depois; mediana das repetições por amostra',
+    agregacao='mediana entre amostras das medianas por amostra (IQR entre amostras); média e '
+              'desvio padrão só para registro')
+
+
+def _timing_runs(loss='mae', archs=TIMING_ARCHS):
+    """{run_key: dict(arch, loss, run, run_dir, model, normalizer, epoch)}: bateria bldc +
+    FNO_SplitGNN (bateria split), uma run por arch na loss dada."""
+    found = find_runs(ROOT_S)
+    out = {}
+    for arch in archs:
+        d = find_split_runs(ROOT_S)[loss] if arch == 'FNO_SplitGNN' else found[(arch, loss)]
+        model, nrm, cfg, ep = load_model(d)
+        assert cfg['arch'] == arch, (d, cfg['arch'])
+        out[f'{arch}_{loss}'] = dict(arch=arch, loss=loss, run=d.name, run_dir=str(d),
+                                     model=model, normalizer=nrm, epoch=int(ep))
+    return out
+
+
+def _timing_pick(n, subset):
+    """n amostras igualmente espaçadas do subset (as mesmas para t_FEMM, t_pre e t_inf)."""
+    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], subset, None, N_SAMPLES)
+    return [samples[i] for i in np.linspace(0, len(samples) - 1, n).round().astype(int)]
+
+
+def _med(recs, key):
+    return float(np.median([r[key] for r in recs]))
+
+
+def _ms_stats(v_s):
+    return iqr_stats(1e3 * np.asarray(v_s, dtype=np.float64))
+
+
+def _timing_remesh(out_json, subset, reps, cpus=None):
+    """O mi_analyze remalha? (1ª amostra do subset; check_analyze_remesh)."""
+    _, _, idx, raw_gz = _timing_pick(1, subset)[0]
+    print(f'remalha: amostra {idx}, {reps} repetições', flush=True)
+    res = check_analyze_remesh(design_rows()[idx], raw_gz, TIMING_WORK / 'remesh', reps, cpus)
+    res['sample_idx'] = int(idx)
+    _merge_json(out_json, 'remesh_check', res)
+    print(f"  remalha: {res['remeshes']} | medianas (ms): "
+          + ', '.join(f'{k} {v:.0f}' for k, v in res['mediana_ms'].items()), flush=True)
+    return res
+
+
+def _timing_femm(out_json, n, runs, subset, pre_warmup, pre_reps, cpus=None):
+    """t_FEMM (fkn.exe) + t_pre por etapa (pre_warmup + pre_reps por amostra) nas n amostras;
+    confere malha/A × raw, os processos do mi_analyze e as entradas × parsers."""
     import gzip as _gz
     rows = design_rows()
-    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], subset, None, N_SAMPLES)
-    pick = [samples[i] for i in np.linspace(0, len(samples) - 1, n_femm).round().astype(int)]
+    pick = _timing_pick(n, subset)
     rec, checks = [], []
-    for n, (_, _, idx, raw_gz) in enumerate(pick):
+    for n_, (_, _, idx, raw_gz) in enumerate(pick):
         row = rows[idx]
         r_in, r_ext = float(row['inner_diameter [mm]']) / 2, float(row['outer_diameter [mm]']) / 2
         d = TIMING_WORK / f's{idx:06d}'
-        tm, ans = femm_solve_timed(row, d)
-        tp, arrays, (nodes, elems) = preprocess_timed(ans, r_in, r_ext, ANG_1, ANG_2, N_R, N_A)
-        te = encode_timed(runs, arrays)
-        # conferências (fora do cronômetro)
+        tm, info, ans = femm_solve_timed_procs(row, d, cpus)
+        reps = []
+        for k in range(pre_warmup + pre_reps):
+            tp, arrays, (nodes, elems) = preprocess_timed(ans, r_in, r_ext, ANG_1, ANG_2, N_R, N_A)
+            te, tparts = encode_timed(runs, arrays)
+            if k >= pre_warmup:
+                tot = {a: sum(tp[st] for st in ARCH_STAGES[a]) + te[a] for a in te}
+                reps.append(dict(stage=tp, encode=te, parts=tparts, total=tot))
+        pre_stage = {st: _med([r['stage'] for r in reps], st) for st in reps[0]['stage']}
+        encode = {a: _med([r['encode'] for r in reps], a) for a in reps[0]['encode']}
+        parts = {p: _med([r['parts'] for r in reps], p) for p in reps[0]['parts']}
+        pre_total = {a: _med([r['total'] for r in reps], a) for a in reps[0]['total']}
+        # conferências (fora do cronômetro), sobre as entradas da última repetição
         gz = d / 'model.ans.gz'
         with open(ans, 'rb') as fi, _gz.open(gz, 'wb') as fo:
             shutil.copyfileobj(fi, fo)
-        ref = parse_smooth(gz, row, with_elem=True)
+        ans_data = read_ans(gz)
+        ref = parse_smooth(gz, row, with_elem=True, ans=ans_data)
+        ref['split'] = parse_split_smooth(gz, r_in, r_ext, ANG_1, ANG_2, N_R, N_A, ans=ans_data)
         eq = check_preprocess(arrays, ref)
         chk = dict(sample_idx=idx, **check_mesh_vs_raw(nodes, elems, raw_gz),
-                   preproc_equal_parsers=all(eq.values()), preproc_equal_detail=eq)
+                   preproc_equal_parsers=all(eq.values()),
+                   preproc_mismatch=[k for k, v in eq.items() if not v],
+                   n_triangle=info['n_triangle'], n_fkn=info['n_fkn'],
+                   femm_procs_ok=bool(info['n_triangle'] == 2 and info['n_fkn'] == 1),
+                   children_affinity_ok=info['children_affinity_ok'])
         checks.append(chk)
-        pre = {a: sum(tp[st] for st in ARCH_STAGES[a]) + te[a] for a in te}
         rec.append(dict(sample_idx=idx, n_nodes=chk['n_nodes'], n_elems=chk['n_elems'],
-                        femm=tm, pre_stage=tp, encode=te, pre_total=pre))
+                        n_split_copies=int(arrays['split']['elem_L'][0]), femm=tm, femm_info=info,
+                        pre_stage=pre_stage, encode=encode, encode_parts=parts, pre_total=pre_total))
+        del ref, ans_data, arrays
         shutil.rmtree(d, ignore_errors=True)
-        print(f"  [{n + 1}/{len(pick)}] amostra {idx}: nós={chk['n_nodes']}  malha {tm['mesh'] * 1e3:.0f} ms "
-              f"(fora)  solução {tm['solve'] * 1e3:.0f} ms  pré(Elem) {pre.get('FNO_BipartiteGNN_Elem', 0) * 1e3:.0f} ms"
-              f"  malha=raw:{chk['mesh_equal_raw']} |ΔA|={chk['max_abs_dA_vs_raw']}  "
-              f"entradas=parsers:{chk['preproc_equal_parsers']}", flush=True)
-    ms = lambda v: iqr_stats(1e3 * np.array(v))
-    res = dict(n_samples=len(rec), sample_idx=[r['sample_idx'] for r in rec],
-               note='geometria e malha fora da comparação; solução = só mi_analyze',
-               femm_ms={k: ms([r['femm'][k] for r in rec]) for k in rec[0]['femm']},
-               pre_stage_ms={k: ms([r['pre_stage'][k] for r in rec]) for k in rec[0]['pre_stage']},
-               encode_ms={a: ms([r['encode'][a] for r in rec]) for a in rec[0]['encode']},
-               pre_total_ms={a: ms([r['pre_total'][a] for r in rec]) for a in rec[0]['pre_total']},
-               arch_stages={a: list(v) for a, v in ARCH_STAGES.items()},
-               n_mesh_equal_raw=sum(c['mesh_equal_raw'] for c in checks),
-               max_abs_dA_vs_raw=max((c['max_abs_dA_vs_raw'] or 0.0) for c in checks),
-               all_preproc_equal_parsers=all(c['preproc_equal_parsers'] for c in checks),
-               n_nodes=iqr_stats([r['n_nodes'] for r in rec]), checks=checks, per_sample=rec)
+        print(f"  [{n_ + 1}/{len(pick)}] amostra {idx}: nós={chk['n_nodes']}  mi_analyze "
+              f"{tm['mi_analyze'] * 1e3:.0f} ms = triangle×{info['n_triangle']} {tm['triangle'] * 1e3:.0f} "
+              f"+ fkn {tm['fkn'] * 1e3:.0f} + resto {tm['closure'] * 1e3:.0f} | pré "
+              + ' '.join(f"{a.replace('FNO_', '')[:10]} {v * 1e3:.0f}" for a, v in pre_total.items())
+              + f" ms | malha=raw:{chk['mesh_equal_raw']} |ΔA|={chk['max_abs_dA_vs_raw']} "
+              f"entradas=parsers:{chk['preproc_equal_parsers']} poll {info['poll_ms']['median']:.1f}/"
+              f"{info['poll_ms']['max']:.1f} ms", flush=True)
+    res = dict(
+        n_samples=len(rec), subset=subset, sample_idx=[r['sample_idx'] for r in rec],
+        pre_warmup=pre_warmup, pre_reps=pre_reps, definitions=TIMING_DEFS,
+        t_femm_key='fkn', poll_s_target=POLL_S,
+        poll_interval_ms=dict(median=float(np.median([r['femm_info']['poll_ms']['median'] for r in rec])),
+                              p99_max=float(max(r['femm_info']['poll_ms']['p99'] for r in rec)),
+                              max=float(max(r['femm_info']['poll_ms']['max'] for r in rec)),
+                              frac_above_10ms=float(np.mean([r['femm_info']['poll_ms']['frac_above_10ms'] for r in rec]))),
+        femm_ms={k: _ms_stats([r['femm'][k] for r in rec]) for k in rec[0]['femm']},
+        pre_stage_ms={k: _ms_stats([r['pre_stage'][k] for r in rec]) for k in rec[0]['pre_stage']},
+        encode_ms={a: _ms_stats([r['encode'][a] for r in rec]) for a in rec[0]['encode']},
+        encode_parts_ms={p: _ms_stats([r['encode_parts'][p] for r in rec]) for p in rec[0]['encode_parts']},
+        pre_total_ms={a: _ms_stats([r['pre_total'][a] for r in rec]) for a in rec[0]['pre_total']},
+        arch_stages={a: list(ARCH_STAGES[a]) for a in rec[0]['pre_total']},
+        runs={k: dict(arch=r['arch'], loss=r['loss'], run=r['run']) for k, r in runs.items()},
+        n_mesh_equal_raw=sum(c['mesh_equal_raw'] for c in checks),
+        max_abs_dA_vs_raw=max((c['max_abs_dA_vs_raw'] or 0.0) for c in checks),
+        all_preproc_equal_parsers=all(c['preproc_equal_parsers'] for c in checks),
+        n_femm_procs_ok=sum(c['femm_procs_ok'] for c in checks),
+        n_children_affinity_ok=sum(bool(c['children_affinity_ok']) for c in checks),
+        n_nodes=iqr_stats([r['n_nodes'] for r in rec]), n_elems=iqr_stats([r['n_elems'] for r in rec]),
+        checks=checks, per_sample=rec)
     _merge_json(out_json, 'femm_preproc', res)
 
 
-def _timing_infer(out_json, runs, n_samples, n_warmup, n_reps, max_batch, subset='test'):
-    """best.pth das runs, lote 1 (amostra de nº de nós mediano) e potências de 2 até OOM ou
-    max_batch (amostras do 1º chunk do subset repetidas ciclicamente)."""
+def _timing_infer(out_json, runs, n, subset, n_warmup, n_reps, sweep, sweep_warmup, sweep_reps,
+                  max_batch, spinup_s=2.0):
+    """t_inf de lote 1 nas mesmas n amostras (entradas do preprocess_timed sobre o .ans.gz do
+    raw -- malha e A idênticos aos do FEMM, conferido no femm_preproc); varredura de lote
+    (potências de 2 até OOM ou max_batch, amostras repetidas ciclicamente; fora da tabela)."""
     rows = design_rows()
-    samples = samples_with_subset(find_runs(ROOT_S)[('FNO2d', 'mse')], subset, None, N_SAMPLES)
-    first = [x for x in samples if x[0] == samples[0][0]][:n_samples]
-    with ProcessPoolExecutor(max_workers=min(N_WORKERS, len(first))) as ex:
-        lays = list(ex.map(parse_smooth, [x[3] for x in first], [rows[x[2]] for x in first],
-                           [True] * len(first)))
-    ts = [to_torch_sample(l) for l in lays]
-    del lays
-    n_nodes = np.array([t['vertex']['node_x'].shape[0] for t in ts])
-    i_med = int(np.argsort(n_nodes)[len(n_nodes) // 2])
+    pick = _timing_pick(n, subset)
+    idxs = [int(x[2]) for x in pick]
+    if out_json.exists():
+        fp = json.loads(out_json.read_text()).get('femm_preproc')
+        if fp and fp.get('sample_idx') != idxs:
+            raise RuntimeError('amostras do infer diferentes das do femm_preproc')
+    lays = sorted({LAYOUT[r['arch']] for r in runs.values()})
+    ts = {l: [] for l in lays}
+    for _, _, idx, raw_gz in pick:
+        row = rows[idx]
+        r_in, r_ext = float(row['inner_diameter [mm]']) / 2, float(row['outer_diameter [mm]']) / 2
+        _, arrays, _ = preprocess_timed(raw_gz, r_in, r_ext, ANG_1, ANG_2, N_R, N_A)
+        for l in lays:
+            ts[l].append(to_torch(arrays[l]))
+        del arrays
     torch.cuda.set_per_process_memory_fraction(MEM_FRACTION, 0)
     for r in runs.values():
         r['model'].to('cpu')
     torch.cuda.empty_cache()
-    res = dict(batch1_sample_idx=int(first[i_med][2]), batch1_n_nodes=int(n_nodes[i_med]),
-               chunk=first[0][0], n_samples_cycled=len(ts), n_warmup=n_warmup, n_reps=n_reps,
-               mem_fraction_limit=MEM_FRACTION, max_batch_tried=max_batch, runs={})
+    res = dict(n_samples=len(idxs), subset=subset, sample_idx=idxs, n_warmup=n_warmup,
+               n_reps=n_reps, input_from='preprocess_timed sobre o .ans.gz do raw',
+               mem_fraction_limit=MEM_FRACTION, sweep=sweep, sweep_warmup=sweep_warmup,
+               sweep_reps=sweep_reps, max_batch_tried=max_batch, gpu_spinup_s=spinup_s, runs={})
     for k, r in runs.items():
         arch, lay = r['arch'], LAYOUT[r['arch']]
         r['model'].to(DEVICE).eval()
         torch.cuda.empty_cache()
-        out = dict(arch=arch, loss=r['loss'], run=r['run'])
-        out['batch1'] = time_batch(arch, r, collate([ts[i_med][lay]], lay), n_warmup, n_reps)
-        print(f"  {k:26s} lote 1: {out['batch1']['ms']['median']:.2f} ms (IQR {out['batch1']['ms']['iqr']:.2f}), "
-              f"pico {out['batch1']['peak_mem_gib']:.2f} GiB", flush=True)
+        gpu_spinup(spinup_s)            # clock da GPU fora do repouso (sem o modelo)
+        per, peak = time_per_sample(arch, r, ts[lay], n_warmup, n_reps)
+        med = {p: [float(np.median(x[p])) for x in per] for p in per[0]}
+        out = dict(arch=arch, loss=r['loss'], run=r['run'],
+                   batch1=dict(ms=iqr_stats(med['total']), peak_mem_gib=peak),
+                   per_sample_median_ms=med['total'], per_sample_reps_ms=[x['total'] for x in per])
+        if arch == 'FNO2d':
+            out['batch1_parts'] = {p: dict(ms=iqr_stats(med[p]), per_sample_median_ms=med[p])
+                                   for p in ('grid', 'interp')}
+        b1 = out['batch1']['ms']
+        print(f"  {k:28s} lote 1: mediana {b1['median']:.2f} ms (IQR {b1['iqr']:.2f}, "
+              f"mín {b1['min']:.2f}, máx {b1['max']:.2f}), pico {peak:.2f} GiB"
+              + (f" | grade {out['batch1_parts']['grid']['ms']['median']:.2f} + interp "
+                 f"{out['batch1_parts']['interp']['ms']['median']:.2f} ms" if arch == 'FNO2d' else ''),
+              flush=True)
         sizes, bmax, b = {}, 1, 2
-        while b <= max_batch:
+        while sweep and b <= max_batch:
             try:
-                rr = time_batch(arch, r, collate([ts[i % len(ts)][lay] for i in range(b)], lay),
-                                n_warmup, n_reps)
+                rr = time_batch(arch, r, collate([ts[lay][i % len(idxs)] for i in range(b)], lay),
+                                sweep_warmup, sweep_reps)
             except torch.cuda.OutOfMemoryError:
                 torch.cuda.empty_cache()
                 break
@@ -1574,53 +1839,106 @@ def _timing_infer(out_json, runs, n_samples, n_warmup, n_reps, max_batch, subset
             b *= 2
         out.update(batch_sweep=sizes, batch_max=bmax,
                    batch_max_ms_per_sample=(sizes[str(bmax)]['ms_per_sample_median'] if bmax > 1
-                                            else out['batch1']['ms']['median']))
+                                            else b1['median']))
         r['model'].to('cpu')
         torch.cuda.empty_cache()
         res['runs'][k] = out
     _merge_json(out_json, 'inference', res)
 
 
-def _timing_table(out_json):
+def _fmt_dec(x, nd, dec):
+    return f'{x:.{nd}f}'.replace('.', dec)
+
+
+TIMING_TEX = r"""\begin{table}[!t]
+\renewcommand{\arraystretch}{1.2}
+\caption{Custo de inferência mediano por amostra, considerando a malha pré-processada (inferência de lote unitário).}
+\label{tab:cost}
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+\multicolumn{4}{l}{Tempo de Solução (FEMM): %(femm)s ms} \\
+\midrule
+Arquitetura & \makecell{Inferência\\(ms)} & \makecell{Fração do\\FEMM (\%%)} & \makecell{Pré-processamento\\da Entrada (ms)}\\
+\midrule
+%(rows)s
+\bottomrule
+\end{tabular}
+\end{table}
+"""
+
+
+def _timing_table(out_json, out_dir: Path, decimal=','):
+    """tab:cost a partir do timing.json (sem número à mão): t_FEMM, t_inf (lote 1), fração
+    100·t_inf/t_FEMM e t_pre, todos medianas entre amostras. ms com 1 casa; fração com 1 casa
+    (2 se < 1%). Saída: <out_dir>/timing_table.tex + chave 'table' do JSON."""
     d = json.loads(out_json.read_text())
     fp, inf = d.get('femm_preproc'), d.get('inference')
-    if not (fp and inf):
+    if not (fp and inf and 'sample_idx' in inf and 't_femm_key' in fp):
+        print('tabela: falta femm_preproc ou inference no formato atual -- rode timing femm e infer')
         return None
-    solve = fp['femm_ms']['solve']['median']
-    tab = {}
-    for k, r in inf['runs'].items():
-        pre = fp['pre_total_ms'][r['arch']]['median']
-        i1, im = r['batch1']['ms']['median'], r['batch_max_ms_per_sample']
-        tab[k] = dict(femm_solve_ms=solve, preproc_ms=pre, infer_batch1_ms=i1,
-                      infer_batchmax_ms_per_sample=im, batch_max=r['batch_max'],
-                      speedup_batch1=solve / (pre + i1), speedup_infer_only_batch1=solve / i1,
-                      speedup_batchmax=solve / (pre + im), speedup_infer_only_batchmax=solve / im)
+    if fp['sample_idx'] != inf['sample_idx']:
+        raise RuntimeError('femm_preproc e inference com amostras diferentes')
+    t_femm = fp['femm_ms'][fp['t_femm_key']]
+    by_arch = {r['arch']: r for r in inf['runs'].values()}
+    rows, lines = {}, []
+    for label, arch in TIMING_TABLE_ROWS:
+        if arch not in by_arch or arch not in fp['pre_total_ms']:
+            continue
+        r = by_arch[arch]
+        ti, tp = r['batch1']['ms'], fp['pre_total_ms'][arch]
+        frac = 100 * ti['median'] / t_femm['median']
+        rows[label] = dict(arch=arch, loss=r['loss'], run=r['run'], t_inf_ms=ti, t_pre_ms=tp,
+                           frac_femm_pct=frac, speedup_infer_only_batch1=t_femm['median'] / ti['median'],
+                           speedup_pre_plus_infer_batch1=t_femm['median'] / (tp['median'] + ti['median']),
+                           batch_max=r['batch_max'],
+                           infer_batchmax_ms_per_sample=r['batch_max_ms_per_sample'])
+        lines.append(f"{label:<18s}& {_fmt_dec(ti['median'], 1, decimal)} & "
+                     f"{_fmt_dec(frac, 2 if frac < 1 else 1, decimal)} & "
+                     f"{_fmt_dec(tp['median'], 1, decimal)} \\\\")
+    tex = TIMING_TEX % dict(femm=_fmt_dec(t_femm['median'], 1, decimal), rows='\n'.join(lines))
+    tex_path = out_dir / 'timing_table.tex'
+    tex_path.write_text(tex, encoding='utf-8')
     _merge_json(out_json, 'table', dict(
-        note='medianas (ms/amostra); aceleração = solução FEMM (só mi_analyze) / (pré-proc. + '
-             'inferência); aceleração da inferência pura = solução / inferência; lote máx. = '
-             'tempo por amostra no maior lote que coube', rows=tab))
-    print(f"{'run':26s} {'FEMM ms':>8s} {'pré ms':>8s} {'inf(1) ms':>9s} {'inf(máx)':>9s} "
-          f"{'acel.(1)':>8s} {'inf.pura(1)':>11s} {'acel.(máx)':>10s} {'inf.pura(máx)':>13s}")
-    for k, t in tab.items():
-        print(f"{k:26s} {t['femm_solve_ms']:8.0f} {t['preproc_ms']:8.0f} {t['infer_batch1_ms']:9.2f} "
-              f"{t['infer_batchmax_ms_per_sample']:9.2f} {t['speedup_batch1']:8.1f} "
-              f"{t['speedup_infer_only_batch1']:11.0f} {t['speedup_batchmax']:10.1f} "
-              f"{t['speedup_infer_only_batchmax']:13.0f}")
-    return tab
+        note='medianas entre amostras (ms/amostra); fração = 100·t_inf/t_FEMM (só inferência); '
+             'IQR entre amostras em t_*_ms', t_femm_ms=t_femm, rows=rows, latex=str(tex_path)))
+    print(f"t_FEMM (fkn.exe): mediana {t_femm['median']:.1f} ms (IQR {t_femm['iqr']:.1f})")
+    print(f"{'linha':18s} {'t_inf ms':>9s} {'IQR':>6s} {'frac %':>7s} {'t_pre ms':>9s} {'IQR':>6s}")
+    for label, t in rows.items():
+        print(f"{label:18s} {t['t_inf_ms']['median']:9.2f} {t['t_inf_ms']['iqr']:6.2f} "
+              f"{t['frac_femm_pct']:7.3f} {t['t_pre_ms']['median']:9.1f} {t['t_pre_ms']['iqr']:6.1f}")
+    print(tex)
+    return rows
 
 
-def run_timing(what, out_dir: Path, n_femm=50, n_warmup=10, n_reps=100, max_batch=512,
-               n_infer_samples=32, subset='test'):
-    """Custo computacional: FEMM (só mi_analyze) | pré-processamento | inferência."""
+def run_timing(what, out_dir: Path, n=50, n_warmup=3, n_reps=10, pre_warmup=1, pre_reps=5,
+               sweep=True, sweep_warmup=10, sweep_reps=100, max_batch=512, subset='test',
+               loss='mae', archs=TIMING_ARCHS, remesh_reps=3, decimal=',', cpu_affinity='pcores',
+               spinup_s=2.0):
+    """Custo computacional: remalha | FEMM (fkn.exe) + pré-processamento | inferência | tabela.
+    cpu_affinity='pcores': este processo e o femm.exe (triangle/fkn herdam) só nos núcleos P
+    (CPU híbrida: nos núcleos E o lançamento de kernels e o numpy ficam ~1,6-1,8× mais lentos
+    e o Windows alterna a thread entre os dois -- tempos bimodais); 'none' = sem afinidade."""
     out_dir.mkdir(parents=True, exist_ok=True)
     out_json = out_dir / 'timing.json'
-    runs = load_set(ROOT_S)
+    cpus = performance_cpus() if cpu_affinity == 'pcores' else None
+    if what != 'table':
+        if cpus is not None:
+            set_affinity(cpus)
+        _merge_json(out_json, 'cpu_affinity', dict(mode=cpu_affinity, cpus=cpus,
+                    applies_to='processo Python (t_pre, t_inf) e femm.exe -> triangle.exe/fkn.exe'))
+    if what in ('remesh', 'all'):
+        _timing_remesh(out_json, subset, remesh_reps, cpus)
+    runs = _timing_runs(loss, archs) if what in ('femm', 'infer', 'all') else None
     if what in ('femm', 'all'):
-        _timing_femm(out_json, n_femm, runs, subset)
+        _timing_femm(out_json, n, runs, subset, pre_warmup, pre_reps, cpus)
     if what in ('infer', 'all'):
-        _timing_infer(out_json, runs, n_infer_samples, n_warmup, n_reps, max_batch, subset)
-    _merge_json(out_json, 'hardware', hardware_info())
-    _timing_table(out_json)
+        _timing_infer(out_json, runs, n, subset, n_warmup, n_reps, sweep, sweep_warmup,
+                      sweep_reps, max_batch, spinup_s)
+    if what != 'table':
+        _merge_json(out_json, 'hardware', hardware_info())
+    _timing_table(out_json, out_dir, decimal)
     print(f'salvo em {out_json}')
 
 
@@ -1738,13 +2056,60 @@ if __name__ == '__main__':
     p_sm.add_argument('--width', type=float, default=0.04, help='largura dos intervalos em |B|, T')
     p_sm.add_argument('--min-frac', type=float, default=0.002,
                       help='omite intervalos com área < esta fração da área de aço')
-    p_tm = sp.add_parser('timing', help='custo: FEMM (mi_analyze) × pré-processamento + inferência')
-    p_tm.add_argument('what', nargs='?', default='all', choices=('femm', 'infer', 'all'))
-    p_tm.add_argument('--n-femm', type=int, default=50, help='amostras do FEMM (igualmente espaçadas)')
-    p_tm.add_argument('--warmup', type=int, default=10)
-    p_tm.add_argument('--reps', type=int, default=100)
+    # [REMOVIDO] argumentos antigos do timing (--warmup 10 --reps 100 só do lote,
+    # --n-infer-samples 32 do 1º chunk): substituídos abaixo
+    # p_tm = sp.add_parser('timing', help='custo: FEMM (mi_analyze) × pré-processamento + inferência')
+    # p_tm.add_argument('what', nargs='?', default='all', choices=('femm', 'infer', 'all'))
+    # p_tm.add_argument('--n-femm', type=int, default=50, help='amostras do FEMM (igualmente espaçadas)')
+    # p_tm.add_argument('--warmup', type=int, default=10)
+    # p_tm.add_argument('--reps', type=int, default=100)
+    # p_tm.add_argument('--max-batch', type=int, default=512, help='maior lote tentado (potências de 2)')
+    # p_tm.add_argument('--n-infer-samples', type=int, default=32, help='amostras do 1º chunk do subset')
+    # p_tm.add_argument('--subset', **SUBSET_ARG)
+    # p_tm.add_argument('--out', type=Path, default=OUT_ROOT / 'dados')
+    p_tm = sp.add_parser(
+        'timing', formatter_class=argparse.RawDescriptionHelpFormatter,
+        help='custo: t_FEMM (fkn.exe) × t_pre + t_inf, mesma malha; tabela tab:cost',
+        description=(
+            'Custo computacional com a MESMA malha nos dois lados; a geração da malha não entra '
+            'em nenhum tempo. Medianas entre amostras (IQR entre amostras).\n'
+            '  t_FEMM: só o solver = duração do fkn.exe disparado pelo mi_analyze (polling dos '
+            f'filhos do femm.exe a {POLL_S * 1e3:.0f} ms; o intervalo real vai no JSON); inclui a '
+            'leitura da malha e a escrita do .ans pelo solver. O mi_analyze REMALHA (triangle.exe '
+            '2×, ver "remesh"), então não é o t_FEMM. Fora: abrir/fechar o FEMM, geometria, '
+            'mi_createmesh, triangle.exe, ler o .ans.\n'
+            '  t_pre: .ans -> entrada codificada na GPU, mesmas funções dos parsers (conferido '
+            'igual): read_mesh (sem a coluna A; os bytes de A estão nas mesmas linhas), '
+            'materiais, x_hw (malha -> grade), grafos, encode (CPU -> GPU + z-score). Fora: '
+            'malha e read_solution (A, gravada à parte). 1 aquecimento + 5 rep./amostra.\n'
+            '  t_inf: best.pth, inference_mode, lote 1, forward + desnormalização (+ grade -> nós '
+            'no FNO2d; parcelas à parte), cuda.synchronize antes/depois. 3 aquecimentos no '
+            'início + 10 rep./amostra.\n'
+            'Afinidade (--cpu-affinity pcores): Python e femm.exe (triangle/fkn herdam) só nos '
+            'núcleos P de CPUs híbridas, nos dois lados.\n'
+            'Modos: remesh (o mi_analyze remalha?), femm (t_FEMM + t_pre), infer (t_inf + '
+            'varredura de lote), table (só refaz a tabela), all (remesh + femm + infer).\n'
+            'Saída: dados/timing.json + dados/timing_table.tex. Windows com FEMM e GPU.'))
+    p_tm.add_argument('what', nargs='?', default='all',
+                      choices=('remesh', 'femm', 'infer', 'table', 'all'))
+    p_tm.add_argument('--n-samples', '--n-femm', dest='n_samples', type=int, default=50,
+                      help='amostras igualmente espaçadas do subset (as mesmas nos 3 tempos)')
+    p_tm.add_argument('--warmup', type=int, default=3, help='aquecimentos da inferência (no início)')
+    p_tm.add_argument('--reps', type=int, default=10, help='repetições da inferência por amostra')
+    p_tm.add_argument('--pre-warmup', type=int, default=1, help='aquecimentos do t_pre por amostra')
+    p_tm.add_argument('--pre-reps', type=int, default=5, help='repetições do t_pre por amostra')
+    p_tm.add_argument('--no-sweep', action='store_true', help='sem a varredura de lote')
+    p_tm.add_argument('--sweep-warmup', type=int, default=10)
+    p_tm.add_argument('--sweep-reps', type=int, default=100)
     p_tm.add_argument('--max-batch', type=int, default=512, help='maior lote tentado (potências de 2)')
-    p_tm.add_argument('--n-infer-samples', type=int, default=32, help='amostras do 1º chunk do subset')
+    p_tm.add_argument('--loss', default='mae', choices=('mse', 'mae'))
+    p_tm.add_argument('--archs', nargs='+', default=list(TIMING_ARCHS))
+    p_tm.add_argument('--remesh-reps', type=int, default=3)
+    p_tm.add_argument('--decimal', default=',', help="separador decimal da tabela LaTeX")
+    p_tm.add_argument('--cpu-affinity', default='pcores', choices=('pcores', 'none'),
+                      help='pcores: Python e femm.exe só nos núcleos P (CPU híbrida)')
+    p_tm.add_argument('--gpu-spinup-s', type=float, default=2.0,
+                      help='GPU ocupada (matmul, sem o modelo) antes dos aquecimentos de cada run')
     p_tm.add_argument('--subset', **SUBSET_ARG)
     p_tm.add_argument('--out', type=Path, default=OUT_ROOT / 'dados')
     p_tt = sp.add_parser('train-table', help='tabela de treinamento a partir dos logs das runs')
@@ -1776,7 +2141,10 @@ if __name__ == '__main__':
     elif a.cmd == 'sat-mu':
         run_sat_mu(a.data, a.fig, a.loss, width=a.width, min_frac=a.min_frac)
     elif a.cmd == 'timing':
-        run_timing(a.what, a.out, a.n_femm, a.warmup, a.reps, a.max_batch, a.n_infer_samples,
-                   a.subset)
+        # [REMOVIDO] run_timing(a.what, a.out, a.n_femm, a.warmup, a.reps, a.max_batch,
+        #                       a.n_infer_samples, a.subset)
+        run_timing(a.what, a.out, a.n_samples, a.warmup, a.reps, a.pre_warmup, a.pre_reps,
+                   not a.no_sweep, a.sweep_warmup, a.sweep_reps, a.max_batch, a.subset, a.loss,
+                   tuple(a.archs), a.remesh_reps, a.decimal, a.cpu_affinity, a.gpu_spinup_s)
     elif a.cmd == 'train-table':
         run_train_table(a.out)

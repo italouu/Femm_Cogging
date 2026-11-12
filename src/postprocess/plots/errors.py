@@ -178,8 +178,8 @@ ARTICLE_WIDE_IN = 18.0 / 2.54    # largura de 2 colunas (figure*)
 def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cmap='hot_r',
                            ncols=2, width_in=ARTICLE_WIDE_IN, tick_step=0.1):
     """Erro no domínio de várias archs numa figura só (artigo): painéis e_tri [M] em grade
-    ncols × ceil(n/ncols), MESMA escala (vmin = 0, vmax dado) e UMA colorbar horizontal embaixo
-    vertical à direita (sem seta, só a unidade); fora de Ω em cinza claro; fronteiras entre
+    ncols × ceil(n/ncols), MESMA escala (vmin = 0, vmax dado) e UMA colorbar vertical à direita
+    (sem seta, só a unidade); serve também para 1 painel (ex.: |B| de referência, ncols=1); fora de Ω em cinza claro; fronteiras entre
     materiais em linha fina preta; nome da arch centralizado acima de cada painel.
     Ticks da colorbar a cada tick_step (T). Sem título. Usar com primitives.apply_article_style()
     dentro de plt.rc_context()."""

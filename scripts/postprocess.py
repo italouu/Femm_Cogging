@@ -34,6 +34,7 @@ Subcomandos:
       Escala comum: vmax = p99 dos 4 mapas em Ω, para cima em 0,01 T (--vmax fixa à mão).
       Saída: docs/figures/erro_dominio.{pdf,png} (as 4 archs em 2×2 com o nome em cima; uma
       colorbar vertical, sem seta; --cmap, default hot_r; --fig-article troca o destino) +
+      docs/figures/campo_referencia.{pdf,png} (|B| do FEMM, 1 painel, 1 coluna, 0..2,5 T) +
       diagnóstico em
       dados/surface_error/sample_XXXXXX_<loss>.{json,npz} e plots/surface_error/*.png (4 archs
       + piso grade; JSON com 'checks' contra o regions).
@@ -144,7 +145,9 @@ from src.postprocess.plots.errors import (ARTICLE_RC, fig_bars, fig_region_curve
                                           fig_surface_error_grid, fig_surface_error_map,
                                           fig_surface_error_single)
 from src.postprocess.plots.fields import fig_field
-from src.postprocess.plots.primitives import MODEL_COLOR, apply_article_style, apply_style, save_fig
+from src.postprocess.plots.primitives import (B_VMAX, MODEL_COLOR, apply_article_style, apply_style,
+                                              save_fig)
+from src.postprocess.plots.errors import ARTICLE_WIDTH_IN
 from src.postprocess.plots.training import fig_training
 from src.postprocess.regions import (BAND_UNIONS, BANDS, BandAccum, SeamGeometry, band_edges,
                                      band_points, interface_edges, omega_mask, region_geometry)
@@ -562,6 +565,7 @@ ARTICLE_ARCH_NAME = {'FNO2d': 'FNO2d', 'FNO_GNN': 'FNO_GNN', 'FNO_BipartiteGNN_E
                      'FNO_SplitGNN': 'FNO_SplitGNN'}     # nomes das archs no texto do artigo
 SURFACE_REF_RUN = 'FNO2d_mae'                  # surface --pct: run que escolhe a amostra (--ref-run)
 ARTICLE_FIG_NAME = 'erro_dominio'              # docs/figures/erro_dominio.{pdf,png} (4 archs, 2×2)
+ARTICLE_REF_FIG_NAME = 'campo_referencia'      # docs/figures/campo_referencia.{pdf,png} (|B| do FEMM)
 SURFACE_CMAP = 'hot_r'                         # escala do mapa do artigo (0 = branco)
 
 
@@ -676,14 +680,20 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
                p99_T=p99, vmax_auto_T=vmax_auto, above_vmax=above)
 
     iface = interface_edges(tri, lay['elem_mat'])
+    mq = lay['mesh_quad']
+    B_ref_tri = surface_error_per_triangle(n_tri, np.repeat(np.arange(M), K), mq['mag'].ravel(),
+                                           np.zeros(M * K), np.repeat((mq['area'] / K)[:, None], K, axis=1).ravel())
     names = {a: f'erro_dominio_{ARTICLE_ARCH_NAME[a]}' for a in archs}
     # [REMOVIDO] res['figures_article'] = {a: str(fig_article / f'{n}.pdf') for a, n in names.items()}
     res['figure_article'] = dict(path=str(fig_article / f'{ARTICLE_FIG_NAME}.pdf'), cmap=cmap,
                                  panels=[ARTICLE_ARCH_NAME[a] for a in archs])
+    res['figure_ref'] = dict(path=str(fig_article / f'{ARTICLE_REF_FIG_NAME}.pdf'), cmap=cmap,
+                             vmax_T=B_VMAX, field='|B| do FEMM suavizado, média por triângulo nos '
+                                                  'pontos de quadratura da malha')
     stem = f'sample_{sample_idx:06d}_{loss}' + (f'_P{pct:g}' if pct is not None else '')
     (data_dir / f'{stem}.json').write_text(json.dumps(res, indent=1, default=_json_default))
     np.savez_compressed(data_dir / f'{stem}.npz', xy=xy, elems=tri, iface_edges=iface,
-                        in_omega=in_omega, e_tri_floor_grade=E_floor,
+                        in_omega=in_omega, e_tri_floor_grade=E_floor, b_tri_ref=B_ref_tri,
                         **{f'e_tri_{a}': E[a] for a in E})
     save_fig(fig_surface_error_map(res, xy, tri, E, archs, iface, ('piso grade', E_floor, res['floor_grade']),
                                    vmax=vmax_used, in_omega=in_omega),
@@ -702,6 +712,11 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
                                         [ARTICLE_ARCH_NAME[a] for a in archs], in_omega, iface,
                                         vmax_used, cmap=cmap),
                  fig_article / ARTICLE_FIG_NAME, pdf=True, dpi=300)
+        # |B| de referência (FEMM suavizado, P1 descontínuo): média por triângulo nos mesmos
+        # pontos de quadratura dos mapas de erro; 1 painel, 1 coluna, escala 0..B_VMAX
+        save_fig(fig_surface_error_grid(xy, tri, [B_ref_tri], ['FEMM'], in_omega, iface, B_VMAX,
+                                        cmap=cmap, ncols=1, width_in=ARTICLE_WIDTH_IN, tick_step=0.5),
+                 fig_article / ARTICLE_REF_FIG_NAME, pdf=True, dpi=300)
 
     crit = (f"P{pct:g} do L1_A de superfície de {ref_run} em {selection['subset']}" if selection
             else 'índice dado')
@@ -713,7 +728,8 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
               f"{c['rel_diff_area']:.1e}, e_tri x sum_w: {c['rel_diff_sumw']:.1e}, regions: {c['rel_diff_regions_L1']:.1e}")
     print(f'dados: {data_dir / stem}.json/.npz; diagnóstico: {fig_dir / stem}.png')
     # [REMOVIDO] print('artigo: ' + ', '.join(str(fig_article / f'{n}.pdf') for n in names.values()))
-    print(f'artigo: {fig_article / ARTICLE_FIG_NAME}.pdf/.png (cmap {cmap})')
+    print(f'artigo: {fig_article / ARTICLE_FIG_NAME}.pdf/.png (cmap {cmap}); '
+          f'referência: {fig_article / ARTICLE_REF_FIG_NAME}.pdf/.png')
 
 
 SEAM_RAD = float(np.deg2rad(ANG_2 - ANG_1))                    # setor periódico (120°)

@@ -566,6 +566,7 @@ ARTICLE_ARCH_NAME = {'FNO2d': 'FNO2d', 'FNO_GNN': 'FNO_GNN', 'FNO_BipartiteGNN_E
 SURFACE_REF_RUN = 'FNO2d_mae'                  # surface --pct: run que escolhe a amostra (--ref-run)
 ARTICLE_FIG_NAME = 'erro_dominio'              # docs/figures/erro_dominio.{pdf,png} (4 archs, 2×2)
 ARTICLE_REF_FIG_NAME = 'campo_referencia'      # docs/figures/campo_referencia.{pdf,png} (|B| do FEMM)
+ARTICLE_FONT_PT = 10                           # fonte das figuras do surface (pedido: maior que 8 pt)
 SURFACE_CMAP = 'hot_r'                         # escala do mapa do artigo (0 = branco)
 
 
@@ -707,7 +708,7 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
     # [REMOVIDO] with plt.rc_context(ARTICLE_RC): -- cópia do _style do artigo_v1; trocado por
     # primitives.apply_article_style() (Times New Roman 8 pt, stix), só nesta figura
     with plt.rc_context():
-        apply_article_style()
+        apply_article_style(ARTICLE_FONT_PT)
         save_fig(fig_surface_error_grid(xy, tri, [E[a] for a in archs],
                                         [ARTICLE_ARCH_NAME[a] for a in archs], in_omega, iface,
                                         vmax_used, cmap=cmap, cb_label=r'Erro absoluto de $|\mathbf{B}|$ [T]'),

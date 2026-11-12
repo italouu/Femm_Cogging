@@ -26,8 +26,8 @@ def apply_style():
     })
 
 
-def apply_article_style():
-    """rcParams das figuras do artigo, por cima de apply_style(): Times New Roman 8 pt,
+def apply_article_style(size=8):
+    """rcParams das figuras do artigo, por cima de apply_style(): Times New Roman `size` pt (8),
     mathtext 'stix', pdf.fonttype 42 (TrueType embutida), raster a 300 dpi. Falha
     (ValueError) se a Times New Roman não estiver instalada, em vez de cair em outra fonte.
     Chamar dentro de plt.rc_context() para não vazar para as outras figuras."""
@@ -36,8 +36,9 @@ def apply_article_style():
     font_manager.findfont(font_manager.FontProperties(family='Times New Roman'),
                           fallback_to_default=False)
     plt.rcParams.update({
-        'font.family': 'Times New Roman', 'font.size': 8, 'axes.titlesize': 8,
-        'axes.labelsize': 8, 'legend.fontsize': 8, 'xtick.labelsize': 8, 'ytick.labelsize': 8,
+        'font.family': 'Times New Roman', 'font.size': size, 'axes.titlesize': size,
+        'axes.labelsize': size, 'legend.fontsize': size, 'xtick.labelsize': size,
+        'ytick.labelsize': size,
         'mathtext.fontset': 'stix', 'pdf.fonttype': 42, 'savefig.dpi': 300,
     })
 

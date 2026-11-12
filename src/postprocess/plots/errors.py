@@ -200,7 +200,8 @@ def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cma
     # h_cb = 0.42
     # H = nrows * ph + (nrows - 1) * gap + h_cb
     w_cb = 0.55                                   # faixa da colorbar vertical (pol.)
-    h_t = 0.16                                    # faixa do nome acima de cada painel (pol.)
+    # [REMOVIDO] h_t = 0.16 e pad=2 -- pouco espaço entre o painel e o nome da arch
+    h_t = 0.26                                    # faixa do nome acima de cada painel (pol.)
     pw = (width_in - w_cb - gap * (ncols - 1)) / ncols
     ph = pw * (y1 - y0) / (x1 - x0)
     H = nrows * (ph + h_t) + (nrows - 1) * gap
@@ -222,7 +223,7 @@ def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cma
         ax.axis('off')
         # [REMOVIDO] rótulo '(a) <arch>' no canto inferior esquerdo -- agora nome centralizado em cima
         # ax.text(0.02, 0.03, f'({chr(97 + i)}) {lab}', transform=ax.transAxes, ha='left', va='bottom')
-        ax.set_title(lab, pad=2)
+        ax.set_title(lab, pad=7)
     # [REMOVIDO] colorbar horizontal embaixo com seta (extend='max')
     # cax = fig.add_axes([0.25, 0.24 / H, 0.50, 0.06 / H])
     # cb = fig.colorbar(m, cax=cax, orientation='horizontal', extend='max')

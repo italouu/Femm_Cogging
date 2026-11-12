@@ -172,6 +172,58 @@ def fig_surface_error_single(xy, elems, e_tri, in_omega, iface, vmax, cmap='Blue
     return fig
 
 
+ARTICLE_WIDE_IN = 18.0 / 2.54    # largura de 2 colunas (figure*)
+
+
+def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cmap='hot_r',
+                           ncols=2, width_in=ARTICLE_WIDE_IN):
+    """Erro no domínio de várias archs numa figura só (artigo): painéis e_tri [M] em grade
+    ncols × ceil(n/ncols), MESMA escala (vmin = 0, vmax dado) e UMA colorbar horizontal embaixo
+    (extend='max', só a unidade); fora de Ω em cinza claro; fronteiras entre materiais em linha
+    fina preta; rótulo '(a) <arch>' no canto inferior esquerdo de cada painel (furo do setor).
+    Sem título. Usar dentro de plt.rc_context(ARTICLE_RC)."""
+    import matplotlib.pyplot as plt
+    import matplotlib.tri as mtri
+    from matplotlib.collections import LineCollection
+    from matplotlib.ticker import FuncFormatter
+    keep = np.asarray(in_omega, bool)
+    t_in = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems, mask=~keep)
+    t_out = mtri.Triangulation(xy[:, 0], xy[:, 1], triangles=elems, mask=keep) if not keep.all() else None
+    x0, x1 = float(xy[:, 0].min()), float(xy[:, 0].max())
+    y0, y1 = float(xy[:, 1].min()), float(xy[:, 1].max())
+    n = len(E_list)
+    nrows = -(-n // ncols)
+    gap = 0.08                                    # espaço entre painéis (pol.)
+    pw = (width_in - gap * (ncols - 1)) / ncols
+    ph = pw * (y1 - y0) / (x1 - x0)
+    h_cb = 0.42                                   # faixa da colorbar (pol.)
+    H = nrows * ph + (nrows - 1) * gap + h_cb
+    fig = plt.figure(figsize=(width_in, H))
+    seg = xy[iface]
+    m = None
+    for i, (e, lab) in enumerate(zip(E_list, labels)):
+        r, c = divmod(i, ncols)
+        ax = fig.add_axes([c * (pw + gap) / width_in, (H - (r + 1) * ph - r * gap) / H,
+                           pw / width_in, ph / H])
+        m = ax.tripcolor(t_in, facecolors=e, cmap=cmap, vmin=0, vmax=vmax, rasterized=True)
+        if t_out is not None:
+            ax.tripcolor(t_out, facecolors=np.zeros(len(elems)), cmap=_OUT_CMAP(), vmin=0, vmax=1,
+                         rasterized=True)
+        ax.add_collection(LineCollection(seg, colors='k', linewidths=0.2))
+        ax.set_xlim(x0, x1)
+        ax.set_ylim(y0, y1)
+        ax.set_aspect('equal')
+        ax.axis('off')
+        ax.text(0.02, 0.03, f'({chr(97 + i)}) {lab}', transform=ax.transAxes, ha='left', va='bottom')
+    cax = fig.add_axes([0.25, 0.24 / H, 0.50, 0.06 / H])
+    cb = fig.colorbar(m, cax=cax, orientation='horizontal', extend='max')
+    cb.ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f'{v:.2f}'.replace('.', ',')))
+    cb.outline.set_linewidth(0.4)
+    cb.ax.tick_params(width=0.4, length=2)
+    cb.set_label('[T]')
+    return fig
+
+
 REGION_COLOR = ('#d62728', '#2ca02c', '#1f77b4', '#dddddd')   # quina, fronteira, interior, fora de Ω
 
 

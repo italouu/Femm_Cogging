@@ -32,8 +32,9 @@ Subcomandos:
       com o layout, o Split e Ω do regions (_regions_sample); L1_A/L2_A/B_ref só em Ω.
       Mapa e_tri = Σe·w/Σw por triângulo (surface_error_per_triangle); fora de Ω em cinza.
       Escala comum: vmax = p99 dos 4 mapas em Ω, para cima em 0,01 T (--vmax fixa à mão).
-      Saída: docs/figures/erro_dominio_<FNO2d|FNO_GNN|FNO_Bipartite|FNO_SplitGNN>.{pdf,png}
-      (1 por arch, mesmo tamanho e escala; --fig-article troca o destino) + diagnóstico em
+      Saída: docs/figures/erro_dominio.{pdf,png} (as 4 archs em 2×2, (a) FNO2d, (b) FNO_GNN,
+      (c) FNO_Bipartite, (d) FNO_SplitGNN; uma colorbar; --cmap, default hot_r; --fig-article
+      troca o destino) + diagnóstico em
       dados/surface_error/sample_XXXXXX_<loss>.{json,npz} e plots/surface_error/*.png (4 archs
       + piso grade; JSON com 'checks' contra o regions).
   surface --pct P [LOSS] [--eval-data DIR] [--ref-run FNO2d_mae] — a amostra do percentil P
@@ -140,7 +141,8 @@ from src.postprocess.inference import (ARCHS, INTERP_MODE, RUN_ORDER, find_runs,
 from src.postprocess.metrics import (R_EXT_MM, R_IN_MM, Accum, merge, pstats,
                                      surface_error_per_triangle, surface_values_p1)
 from src.postprocess.plots.errors import (ARTICLE_RC, fig_bars, fig_region_curves, fig_regions_map,
-                                          fig_surface_error_map, fig_surface_error_single)
+                                          fig_surface_error_grid, fig_surface_error_map,
+                                          fig_surface_error_single)
 from src.postprocess.plots.fields import fig_field
 from src.postprocess.plots.primitives import MODEL_COLOR, apply_style, save_fig
 from src.postprocess.plots.training import fig_training
@@ -559,6 +561,8 @@ ARTICLE_FIG_DIR = Path('docs/figures')        # figuras versionadas do artigo
 ARTICLE_ARCH_NAME = {'FNO2d': 'FNO2d', 'FNO_GNN': 'FNO_GNN', 'FNO_BipartiteGNN_Elem': 'FNO_Bipartite',
                      'FNO_SplitGNN': 'FNO_SplitGNN'}     # nomes das archs no texto do artigo
 SURFACE_REF_RUN = 'FNO2d_mae'                  # surface --pct: run que escolhe a amostra (--ref-run)
+ARTICLE_FIG_NAME = 'erro_dominio'              # docs/figures/erro_dominio.{pdf,png} (4 archs, 2×2)
+SURFACE_CMAP = 'hot_r'                         # escala do mapa do artigo (0 = branco)
 
 
 def _json_default(o):
@@ -566,7 +570,8 @@ def _json_default(o):
 
 
 def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_dir=None,
-                ref_run=SURFACE_REF_RUN, vmax=None, fig_article: Path = ARTICLE_FIG_DIR):
+                ref_run=SURFACE_REF_RUN, vmax=None, fig_article: Path = ARTICLE_FIG_DIR,
+                cmap=SURFACE_CMAP):
     """Erro no domínio em 1 amostra (artigo, "Pisos de representação e erro no domínio"):
     archs do artigo (REGIONS_ARCHS, só a loss dada), cada uma na sua superfície nativa
     (grade, P1_nos, P0_elem, P1_mat do N_base do Split), e o piso da grade.
@@ -579,7 +584,7 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
         em Ω × o caminho do regions (BandAccum, regions_add_run).
     pct: amostra do percentil pct do L1_A de superfície de ref_run no .npz do eval (eval_dir).
     Saída: data_dir/<stem>.{json,npz}, fig_dir/<stem>.png (diagnóstico, 4 archs + piso grade) e
-    fig_article/erro_dominio_<arch>.{pdf,png} (1 arquivo por arch, mesma escala e tamanho)."""
+    fig_article/erro_dominio.{pdf,png} (4 archs em 2×2, uma colorbar, cmap)."""
     import matplotlib.pyplot as plt
     apply_style()
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -672,7 +677,9 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
 
     iface = interface_edges(tri, lay['elem_mat'])
     names = {a: f'erro_dominio_{ARTICLE_ARCH_NAME[a]}' for a in archs}
-    res['figures_article'] = {a: str(fig_article / f'{n}.pdf') for a, n in names.items()}
+    # [REMOVIDO] res['figures_article'] = {a: str(fig_article / f'{n}.pdf') for a, n in names.items()}
+    res['figure_article'] = dict(path=str(fig_article / f'{ARTICLE_FIG_NAME}.pdf'), cmap=cmap,
+                                 panels=[ARTICLE_ARCH_NAME[a] for a in archs])
     stem = f'sample_{sample_idx:06d}_{loss}' + (f'_P{pct:g}' if pct is not None else '')
     (data_dir / f'{stem}.json').write_text(json.dumps(res, indent=1, default=_json_default))
     np.savez_compressed(data_dir / f'{stem}.npz', xy=xy, elems=tri, iface_edges=iface,
@@ -681,10 +688,17 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
     save_fig(fig_surface_error_map(res, xy, tri, E, archs, iface, ('piso grade', E_floor, res['floor_grade']),
                                    vmax=vmax_used, in_omega=in_omega),
              fig_dir / stem, pdf=False, dpi=150)
+    # [REMOVIDO] 1 arquivo por arch (erro_dominio_<arch>) -- trocado por 1 figura 2×2 com uma
+    # só colorbar, sem a definição do erro e escala hot (pedido do usuário)
+    # with plt.rc_context(ARTICLE_RC):
+    #     for a in archs:
+    #         save_fig(fig_surface_error_single(xy, tri, E[a], in_omega, iface, vmax_used),
+    #                  fig_article / names[a], pdf=True, dpi=300)
     with plt.rc_context(ARTICLE_RC):
-        for a in archs:
-            save_fig(fig_surface_error_single(xy, tri, E[a], in_omega, iface, vmax_used),
-                     fig_article / names[a], pdf=True, dpi=300)
+        save_fig(fig_surface_error_grid(xy, tri, [E[a] for a in archs],
+                                        [ARTICLE_ARCH_NAME[a] for a in archs], in_omega, iface,
+                                        vmax_used, cmap=cmap),
+                 fig_article / ARTICLE_FIG_NAME, pdf=True, dpi=300)
 
     crit = (f"P{pct:g} do L1_A de superfície de {ref_run} em {selection['subset']}" if selection
             else 'índice dado')
@@ -695,7 +709,8 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
               f"({100 * above[a]['area_frac']:.2f}% da área) | e_tri x area vs L1_A: "
               f"{c['rel_diff_area']:.1e}, e_tri x sum_w: {c['rel_diff_sumw']:.1e}, regions: {c['rel_diff_regions_L1']:.1e}")
     print(f'dados: {data_dir / stem}.json/.npz; diagnóstico: {fig_dir / stem}.png')
-    print('artigo: ' + ', '.join(str(fig_article / f'{n}.pdf') for n in names.values()))
+    # [REMOVIDO] print('artigo: ' + ', '.join(str(fig_article / f'{n}.pdf') for n in names.values()))
+    print(f'artigo: {fig_article / ARTICLE_FIG_NAME}.pdf/.png (cmap {cmap})')
 
 
 SEAM_RAD = float(np.deg2rad(ANG_2 - ANG_1))                    # setor periódico (120°)
@@ -2145,7 +2160,9 @@ if __name__ == '__main__':
     p_sur.add_argument('--vmax', type=float, default=None,
                        help='topo da escala de cor em T (default: p99 dos 4 mapas em Omega, para cima em 0,01 T)')
     p_sur.add_argument('--fig-article', type=Path, default=ARTICLE_FIG_DIR,
-                       help=f'destino das figuras por arch do artigo (default {ARTICLE_FIG_DIR})')
+                       help=f'destino da figura do artigo (default {ARTICLE_FIG_DIR})')
+    p_sur.add_argument('--cmap', default=SURFACE_CMAP,
+                       help=f'escala de cor da figura do artigo (default {SURFACE_CMAP})')
     p_sur.add_argument('--eval-data', type=Path, default=OUT_ROOT / 'dados',
                        help='diretório com eval_smooth_per_sample.npz (para --pct)')
     p_sur.add_argument('--data', type=Path, default=OUT_ROOT / 'dados' / 'surface_error')
@@ -2286,7 +2303,7 @@ if __name__ == '__main__':
             ap.error('surface: informe IDX ou --pct P')
         run_surface(None if a.idx is None else int(a.idx), a.loss or 'mae', a.data, a.out,
                     pct=a.pct, eval_dir=a.eval_data, ref_run=a.ref_run, vmax=a.vmax,
-                    fig_article=a.fig_article)
+                    fig_article=a.fig_article, cmap=a.cmap)
     elif a.cmd == 'regions':
         run_regions(a.out, a.fig, a.n, a.d, a.d_max, a.n_bins, a.bin_scale, a.ang_canto, a.subset)
     elif a.cmd == 'torque' and a.mode == 'freq':

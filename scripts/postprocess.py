@@ -710,12 +710,13 @@ def run_surface(sample_idx, loss, data_dir: Path, fig_dir: Path, pct=None, eval_
         apply_article_style()
         save_fig(fig_surface_error_grid(xy, tri, [E[a] for a in archs],
                                         [ARTICLE_ARCH_NAME[a] for a in archs], in_omega, iface,
-                                        vmax_used, cmap=cmap),
+                                        vmax_used, cmap=cmap, cb_label=r'Erro absoluto de $|\mathbf{B}|$ [T]'),
                  fig_article / ARTICLE_FIG_NAME, pdf=True, dpi=300)
         # |B| de referência (FEMM suavizado, P1 descontínuo): média por triângulo nos mesmos
         # pontos de quadratura dos mapas de erro; 1 painel, 1 coluna, escala 0..B_VMAX
         save_fig(fig_surface_error_grid(xy, tri, [B_ref_tri], ['FEMM'], in_omega, iface, B_VMAX,
-                                        cmap=cmap, ncols=1, width_in=ARTICLE_WIDTH_IN, tick_step=0.5),
+                                        cmap=cmap, ncols=1, width_in=ARTICLE_WIDTH_IN, tick_step=0.5,
+                                        cb_label=r'Densidade de fluxo $|\mathbf{B}|$ [T]'),
                  fig_article / ARTICLE_REF_FIG_NAME, pdf=True, dpi=300)
 
     crit = (f"P{pct:g} do L1_A de superfície de {ref_run} em {selection['subset']}" if selection

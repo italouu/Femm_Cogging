@@ -179,8 +179,8 @@ def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cma
                            ncols=2, width_in=ARTICLE_WIDE_IN):
     """Erro no domínio de várias archs numa figura só (artigo): painéis e_tri [M] em grade
     ncols × ceil(n/ncols), MESMA escala (vmin = 0, vmax dado) e UMA colorbar horizontal embaixo
-    (extend='max', só a unidade); fora de Ω em cinza claro; fronteiras entre materiais em linha
-    fina preta; rótulo '(a) <arch>' no canto inferior esquerdo de cada painel (furo do setor).
+    vertical à direita (sem seta, só a unidade); fora de Ω em cinza claro; fronteiras entre
+    materiais em linha fina preta; nome da arch centralizado acima de cada painel.
     Sem título. Usar dentro de plt.rc_context(ARTICLE_RC)."""
     import matplotlib.pyplot as plt
     import matplotlib.tri as mtri
@@ -194,16 +194,21 @@ def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cma
     n = len(E_list)
     nrows = -(-n // ncols)
     gap = 0.08                                    # espaço entre painéis (pol.)
-    pw = (width_in - gap * (ncols - 1)) / ncols
+    # [REMOVIDO] colorbar horizontal embaixo (h_cb) -- trocada por vertical à direita (w_cb)
+    # pw = (width_in - gap * (ncols - 1)) / ncols
+    # h_cb = 0.42
+    # H = nrows * ph + (nrows - 1) * gap + h_cb
+    w_cb = 0.55                                   # faixa da colorbar vertical (pol.)
+    h_t = 0.16                                    # faixa do nome acima de cada painel (pol.)
+    pw = (width_in - w_cb - gap * (ncols - 1)) / ncols
     ph = pw * (y1 - y0) / (x1 - x0)
-    h_cb = 0.42                                   # faixa da colorbar (pol.)
-    H = nrows * ph + (nrows - 1) * gap + h_cb
+    H = nrows * (ph + h_t) + (nrows - 1) * gap
     fig = plt.figure(figsize=(width_in, H))
     seg = xy[iface]
     m = None
     for i, (e, lab) in enumerate(zip(E_list, labels)):
         r, c = divmod(i, ncols)
-        ax = fig.add_axes([c * (pw + gap) / width_in, (H - (r + 1) * ph - r * gap) / H,
+        ax = fig.add_axes([c * (pw + gap) / width_in, (H - (r + 1) * (ph + h_t) - r * gap) / H,
                            pw / width_in, ph / H])
         m = ax.tripcolor(t_in, facecolors=e, cmap=cmap, vmin=0, vmax=vmax, rasterized=True)
         if t_out is not None:
@@ -214,10 +219,18 @@ def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cma
         ax.set_ylim(y0, y1)
         ax.set_aspect('equal')
         ax.axis('off')
-        ax.text(0.02, 0.03, f'({chr(97 + i)}) {lab}', transform=ax.transAxes, ha='left', va='bottom')
-    cax = fig.add_axes([0.25, 0.24 / H, 0.50, 0.06 / H])
-    cb = fig.colorbar(m, cax=cax, orientation='horizontal', extend='max')
-    cb.ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f'{v:.2f}'.replace('.', ',')))
+        # [REMOVIDO] rótulo '(a) <arch>' no canto inferior esquerdo -- agora nome centralizado em cima
+        # ax.text(0.02, 0.03, f'({chr(97 + i)}) {lab}', transform=ax.transAxes, ha='left', va='bottom')
+        ax.set_title(lab, pad=2)
+    # [REMOVIDO] colorbar horizontal embaixo com seta (extend='max')
+    # cax = fig.add_axes([0.25, 0.24 / H, 0.50, 0.06 / H])
+    # cb = fig.colorbar(m, cax=cax, orientation='horizontal', extend='max')
+    # cb.ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: f'{v:.2f}'.replace('.', ',')))
+    x_cb = (ncols * pw + (ncols - 1) * gap + 0.12) / width_in
+    cax = fig.add_axes([x_cb, 0.0, 0.08 / width_in, (H - h_t) / H])
+    cb = fig.colorbar(m, cax=cax, orientation='vertical')
+    cb.ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f'{v:.2f}'.replace('.', ',')))
+    cb.ax.grid(False)                             # o apply_style liga a grade nos eixos
     cb.outline.set_linewidth(0.4)
     cb.ax.tick_params(width=0.4, length=2)
     cb.set_label('[T]')

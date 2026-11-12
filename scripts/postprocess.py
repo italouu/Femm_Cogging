@@ -32,9 +32,9 @@ Subcomandos:
       com o layout, o Split e Ω do regions (_regions_sample); L1_A/L2_A/B_ref só em Ω.
       Mapa e_tri = Σe·w/Σw por triângulo (surface_error_per_triangle); fora de Ω em cinza.
       Escala comum: vmax = p99 dos 4 mapas em Ω, para cima em 0,01 T (--vmax fixa à mão).
-      Saída: docs/figures/erro_dominio.{pdf,png} (as 4 archs em 2×2, (a) FNO2d, (b) FNO_GNN,
-      (c) FNO_Bipartite, (d) FNO_SplitGNN; uma colorbar; --cmap, default hot_r; --fig-article
-      troca o destino) + diagnóstico em
+      Saída: docs/figures/erro_dominio.{pdf,png} (as 4 archs em 2×2 com o nome em cima; uma
+      colorbar vertical, sem seta; --cmap, default hot_r; --fig-article troca o destino) +
+      diagnóstico em
       dados/surface_error/sample_XXXXXX_<loss>.{json,npz} e plots/surface_error/*.png (4 archs
       + piso grade; JSON com 'checks' contra o regions).
   surface --pct P [LOSS] [--eval-data DIR] [--ref-run FNO2d_mae] — a amostra do percentil P

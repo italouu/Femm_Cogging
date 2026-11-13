@@ -61,10 +61,19 @@ FONT_PT = 8
 # DEFAULT_SIDE_MM = 2.2
 # Meia abertura: ponta do dente esquerdo (θ = 90,84°, x ≈ −0,56 mm) com a quina da sapata
 # (r = 38,614), o ponto triplo ferro/ar/cobre (r = 37,514), a abertura, o cobre e o entreferro.
-DEFAULT_CENTER = (-0.45, 37.95)
-DEFAULT_SIDE_MM = 1.6
-# diâmetro do marcador = MARK_FRAC × tamanho local da malha, limitado a [MARK_MIN, MARK_MAX] mm
-MARK_FRAC, MARK_MIN_MM, MARK_MAX_MM = 0.40, 0.006, 0.045
+# [REMOVIDO] meia abertura com 1,6 mm -- zoom aumentado na quina a pedido:
+# DEFAULT_CENTER = (-0.45, 37.95)
+# DEFAULT_SIDE_MM = 1.6
+# Zoom no ponto triplo ferro/ar/cobre da ponta do dente esquerdo (vértice 24668 da #2184 em
+# (−0,552; 37,510) mm, r = 37,514, θ = 90,84°): quina da interface (canto da abertura com a
+# diagonal da cunha) e o único tipo de vértice com 3 cópias no Split.
+DEFAULT_CENTER = (-0.52, 37.54)
+DEFAULT_SIDE_MM = 0.5
+# [REMOVIDO] limites absolutos (bons só para ~1,6 mm):
+# MARK_FRAC, MARK_MIN_MM, MARK_MAX_MM = 0.40, 0.006, 0.045
+# diâmetro do marcador = MARK_FRAC × tamanho local da malha, limitado a
+# [MARK_MIN_FRAC, MARK_MAX_FRAC] × lado da janela
+MARK_FRAC, MARK_MIN_FRAC, MARK_MAX_FRAC = 0.40, 0.0038, 0.028
 COPY_SHIFT = 0.20                 # (d): fração da distância vértice → centróide médio do material
 
 # classes de material desenhadas (código, rótulo, cor) -- Okabe–Ito; cinza ≈ 87/218/162/106/188
@@ -150,7 +159,9 @@ def build(L, box):
     xh = L['vertex']['x_hw']
     cells = _cell_corners(L['r_in'], L['r_ext'], np.deg2rad(ANG_1), np.deg2rad(ANG_2), N_R, N_A)
     cc = cells.mean(1)
-    sel_c = np.flatnonzero(inside(cc, mg))
+    # [REMOVIDO] margem só da janela -- em janelas pequenas faltavam células na borda:
+    # sel_c = np.flatnonzero(inside(cc, mg))
+    sel_c = np.flatnonzero(inside(cc, mg + 0.4))               # + ~1 célula (Δθ·r ≈ 0,29 mm)
     c_cls = cls_from_features(xh[0].ravel()[sel_c], xh[1].ravel()[sel_c])
     # conferência: elemento que contém o centro do pixel (centro polar, como _grid_polar_xy)
     H, W = N_R, N_A
@@ -310,8 +321,8 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
     # [REMOVIDO] tamanho fixo -- embolava nas quinas refinadas:
     # s_v = (0.055 * pt_mm) ** 2
     # s_e = (0.050 * pt_mm) ** 2
-    size = lambda h: (np.clip(MARK_FRAC * h, MARK_MIN_MM, MARK_MAX_MM) * pt_mm) ** 2
-    s_v = (MARK_MAX_MM * 0.8 * pt_mm) ** 2                     # só para a legenda
+    size = lambda h: (np.clip(MARK_FRAC * h, MARK_MIN_FRAC * side, MARK_MAX_FRAC * side) * pt_mm) ** 2
+    s_v = (MARK_MAX_FRAC * side * 0.8 * pt_mm) ** 2                    # só para a legenda
     s_e = s_v
     lw_m = 0.3
     with plt.rc_context():
@@ -366,7 +377,8 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
             ax.add_collection(LineCollection(F['iface_seg'], colors=IFACE_COLOR, linewidths=IFACE_LW,
                                              zorder=3))
         # barra de escala na (a)
-        L = 0.5 if side > 1.2 else 0.2
+        # [REMOVIDO] L = 0.5 if side > 1.2 else 0.2
+        L = max(v for v in (0.02, 0.05, 0.1, 0.2, 0.5, 1.0) if v <= side / 3.5)
         x0, y0 = box[0] + 0.06 * side, box[2] + 0.06 * side
         a.plot([x0, x0 + L], [y0, y0], color='k', lw=1.4, solid_capstyle='butt', zorder=6)
         a.text(x0 + L / 2, y0 + 0.025 * side, f'{L:g} mm'.replace('.', ','), ha='center',

@@ -23,8 +23,9 @@ Modos (o que é desenhado):
       Bipartite -> igual ao padrão.
 
 Escala por linha: vmin = 0; vmax = percentil P (99) dos valores efetivamente desenhados na
-janela (polígonos que tocam a janela, em Ω), juntando as 4 archs. Fora de Ω em cinza.
-extend='max' se houver valor acima de vmax.
+janela (polígonos que tocam a janela, em Ω), juntando as 4 archs; colorbar só retângulo (sem
+seta), valores acima de vmax com a cor do topo. Fora de Ω em cinza. Coluna da esquerda: o
+domínio completo com o retângulo da janela da linha.
 
 Saída: docs/figures/erro_zoom_regioes{,_fino}.{pdf,png} (7,16 in, 8 pt) e
 docs/figures/erro_zoom_regioes_localizacao.{pdf,png} (geometria + as 3 janelas).
@@ -166,9 +167,39 @@ def _comma(v, _=None):
     return f'{v:g}'.replace('.', ',')
 
 
+def _draw_domain(ax, D, win=None, color='#c0392b'):
+    """Setor completo (materiais em tons claros, interfaces finas) com o retângulo da
+    janela win = (cx, cy, lado) -- coluna de localização da figura."""
+    import matplotlib.pyplot as plt
+    from matplotlib.collections import LineCollection
+    from matplotlib.colors import ListedColormap
+    from matplotlib.patches import Rectangle
+    from matplotlib.tri import Triangulation
+    from src.data_gen.motor_constants import MATERIAL_ID
+    xy, tri = D['xy'], D['tri']
+    col = {MATERIAL_ID['iron_1008']: '#c9ced6', MATERIAL_ID['vacuum']: '#ffffff',
+           MATERIAL_ID['N35p']: '#f3c9a8', MATERIAL_ID['copper']: '#e8d9a0'}
+    ids = sorted(col)
+    code = np.searchsorted(ids, D['elem_mat'])
+    ax.tripcolor(Triangulation(xy[:, 0], xy[:, 1], tri), facecolors=code.astype(float),
+                 cmap=ListedColormap([col[k] for k in ids]), vmin=-0.5, vmax=len(ids) - 0.5,
+                 rasterized=True)
+    ax.add_collection(LineCollection(xy[D['iface']], colors='k', linewidths=0.15))
+    if win is not None:
+        x0, x1, y0, y1 = _box(win)
+        ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, ec=color, lw=0.9))
+    ax.autoscale()
+    ax.set_aspect('equal', adjustable='datalim')    # painel no tamanho cheio (título alinhado)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+
+
 def render(D, windows=None, fine=False, percentile=99.0, d=None, show_band=False, cmap=CMAP,
            out_dir=ARTICLE_FIG_DIR, name=None):
-    """Grade 3 × 4 (linhas = janelas, colunas = archs), uma colorbar por linha."""
+    """Grade 3 × 5 (linhas = janelas; colunas = domínio com o retângulo da janela + 4 archs),
+    uma colorbar por linha (retângulo, sem seta; acima de vmax = cor do topo)."""
     import matplotlib.pyplot as plt
     from matplotlib.collections import LineCollection, PolyCollection
     from matplotlib.colors import Normalize
@@ -182,7 +213,9 @@ def render(D, windows=None, fine=False, percentile=99.0, d=None, show_band=False
 
     # layout absoluto (polegadas)
     w_lab, w_cb, w_cbl, gap, gap_cb, h_t, gap_r, h_b = 0.16, 0.07, 0.50, 0.05, 0.06, 0.17, 0.07, 0.05
-    pw = (FIG_WIDTH_IN - w_lab - 3 * gap - gap_cb - w_cb - w_cbl) / 4
+    # [REMOVIDO] 4 colunas (só as archs) -- agora + coluna do domínio à esquerda
+    # pw = (FIG_WIDTH_IN - w_lab - 3 * gap - gap_cb - w_cb - w_cbl) / 4
+    pw = (FIG_WIDTH_IN - w_lab - 4 * gap - gap_cb - w_cb - w_cbl) / 5
     ph = pw
     H = h_t + 3 * ph + 2 * gap_r + h_b
     with plt.rc_context():
@@ -202,9 +235,13 @@ def render(D, windows=None, fine=False, percentile=99.0, d=None, show_band=False
             ed = np.sort(np.concatenate([tri[tw][:, [0, 1]], tri[tw][:, [1, 2]], tri[tw][:, [2, 0]]]), axis=1)
             mesh_seg = xy[np.unique(ed, axis=0)]
             band = _band_boundary(D, box, d) if show_band else None
+            axd = fig.add_axes([w_lab / FIG_WIDTH_IN, yb / H, pw / FIG_WIDTH_IN, ph / H])
+            _draw_domain(axd, D, windows[rname])
+            if i == 0:
+                axd.set_title('Domínio', pad=4)
             for j, a in enumerate(archs):
                 polys, v, om = P[a]
-                ax = fig.add_axes([(w_lab + j * (pw + gap)) / FIG_WIDTH_IN, yb / H,
+                ax = fig.add_axes([(w_lab + (j + 1) * (pw + gap)) / FIG_WIDTH_IN, yb / H,
                                    pw / FIG_WIDTH_IN, ph / H])
                 cols = plt.get_cmap(cmap)(norm(v))
                 cols[~om] = plt.matplotlib.colors.to_rgba(OUT_OMEGA_COLOR)
@@ -229,10 +266,12 @@ def render(D, windows=None, fine=False, percentile=99.0, d=None, show_band=False
                     ax.set_title(ARTICLE_ARCH_NAME[a], pad=4)
             fig.text(0.5 * w_lab / FIG_WIDTH_IN, (yb + ph / 2) / H, rname, rotation=90,
                      ha='center', va='center')
-            cax = fig.add_axes([(w_lab + 4 * pw + 3 * gap + gap_cb) / FIG_WIDTH_IN, yb / H,
+            cax = fig.add_axes([(w_lab + 5 * pw + 4 * gap + gap_cb) / FIG_WIDTH_IN, yb / H,
                                 w_cb / FIG_WIDTH_IN, ph / H])
             sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
-            cb = fig.colorbar(sm, cax=cax, extend='max' if any(over.values()) else 'neither')
+            # [REMOVIDO] seta extend='max' quando havia valor acima de vmax -- escala só retângulo
+            # cb = fig.colorbar(sm, cax=cax, extend='max' if any(over.values()) else 'neither')
+            cb = fig.colorbar(sm, cax=cax)
             cb.ax.yaxis.set_major_locator(MaxNLocator(5))
             cb.ax.yaxis.set_major_formatter(FuncFormatter(_comma))
             cb.ax.grid(False)

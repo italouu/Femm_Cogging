@@ -440,13 +440,12 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
         for ax in axs:
             ax.add_collection(LineCollection(F['iface_seg'], colors=IFACE_COLOR, linewidths=IFACE_LW,
                                              zorder=3))
-        # barra de escala na (a)
-        # [REMOVIDO] L = 0.5 if side > 1.2 else 0.2
-        L = max(v for v in (0.02, 0.05, 0.1, 0.2, 0.5, 1.0) if v <= side / 3.5)
-        x0, y0 = box[0] + 0.06 * side, box[2] + 0.06 * side
-        a.plot([x0, x0 + L], [y0, y0], color='k', lw=1.4, solid_capstyle='butt', zorder=6)
-        a.text(x0 + L / 2, y0 + 0.025 * side, f'{L:g} mm'.replace('.', ','), ha='center',
-               va='bottom', zorder=6, bbox=dict(fc='white', ec='none', pad=0.6, alpha=0.85))
+        # [REMOVIDO] barra de escala em mm na (a) -- retirada a pedido (figura só de representação)
+        # L = max(v for v in (0.02, 0.05, 0.1, 0.2, 0.5, 1.0) if v <= side / 3.5)
+        # x0, y0 = box[0] + 0.06 * side, box[2] + 0.06 * side
+        # a.plot([x0, x0 + L], [y0, y0], color='k', lw=1.4, solid_capstyle='butt', zorder=6)
+        # a.text(x0 + L / 2, y0 + 0.025 * side, f'{L:g} mm'.replace('.', ','), ha='center',
+        #        va='bottom', zorder=6, bbox=dict(fc='white', ec='none', pad=0.6, alpha=0.85))
         # legenda única
         present = [k for k in CLS_ORDER if CLASSES[k][0] in F['materiais']]
         # [REMOVIDO] h1 = [Patch(fc=CLASSES[k][1], ec='k', lw=0.4, label=CLASSES[k][0]) for k in present]

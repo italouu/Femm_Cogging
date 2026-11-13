@@ -26,7 +26,7 @@ seu material, só nos vértices com mais de uma cópia (as cópias únicas ficam
 Malha do FEMM ao fundo (cinza claro) e interfaces entre classes de material (preto) em todos
 os painéis. Cores: Okabe–Ito, distinguíveis em tons de cinza.
 
-Saída: docs/figures/representacoes_entrada{,_sem_titulo}.{pdf,png} (18 cm, 8 pt) e
+Saída: docs/figures/representacoes_entrada.{pdf,png} (18 cm, 8 pt, rótulos (a)–(d) = títulos) e
 resultados/BLDC_138x276/dados/fig_representacoes/sample_XXXXXX.json (janela, materiais,
 contagens, deslocamento, conferência).
 
@@ -120,6 +120,7 @@ D_ELEM_FRAC, D_VERT_FRAC = 0.040, 0.046
 RING_LW, RING_LW_NEUTRAL, DISC_EDGE_LW = 1.8, 0.9, 0.4
 # [REMOVIDO] TITLES = ('Grade', 'Grafo de vértices', 'Elementos + vértices', 'Elementos + vértices por material')
 TITLES = ('Grade', 'Grafo de vértices', 'Elementos e vértices', 'Elementos e vértices por material')
+CAPTION_PT = 9                    # rótulo (a)–(d) abaixo de cada painel
 TITLE_PT = 10.5                   # títulos dos painéis maiores que os rótulos (a)–(d) (8 pt)
 ARCH_OF_PANEL = ('FNO2d', 'FNO_GNN', 'FNO_Bipartite', 'FNO_SplitGNN')
 
@@ -336,7 +337,8 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
     from matplotlib.collections import LineCollection, PolyCollection
     from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
-    name = name or (FIG_NAME + ('' if titles else '_sem_titulo'))
+    # [REMOVIDO] duas versões (com e sem título): name = name or (FIG_NAME + ('' if titles else '_sem_titulo'))
+    name = name or FIG_NAME
     col = np.array([plt.matplotlib.colors.to_rgba(CLASSES[k][1]) for k in CLS_ORDER])
     box = F['box']
     side = box[1] - box[0]
@@ -347,7 +349,7 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
     gap, h_t, h_leg = 0.08, (0.30 if titles else 0.02), 0.60
     pw = (FIG_WIDTH_IN - (nc - 1) * gap - 0.04) / nc
     ph = pw * (box[3] - box[2]) / side
-    h_lab = 0.16                                               # rótulo (a)–(d) abaixo
+    h_lab = 0.19                                               # rótulo (a)–(d) abaixo
     H = nr * (h_t + ph + h_lab) + h_leg
     # tamanho dos marcadores proporcional à malha local (pt por mm)
     pt_mm = pw * 72 / side
@@ -381,7 +383,8 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
             if titles:
                 # [REMOVIDO] ax.set_title(TITLES[k], pad=3)
                 ax.set_title(TITLES[k], pad=5, fontsize=TITLE_PT, fontweight='bold')
-            ax.text(0.5, -0.02, f'({"abcd"[k]}) {ARCH_OF_PANEL[k]}',
+            # [REMOVIDO] rótulo com o nome da arch: f'({"abcd"[k]}) {ARCH_OF_PANEL[k]}'
+            ax.text(0.5, -0.02, f'({"abcd"[k]}) {TITLES[k]}', fontsize=CAPTION_PT,
                     transform=ax.transAxes, ha='center', va='top')
             axs.append(ax)
         a, b, c, d = axs
@@ -508,7 +511,8 @@ def make_figure(sample_idx=2184, center=DEFAULT_CENTER, side=DEFAULT_SIDE_MM, la
     cx, cy = center
     box = (cx - side / 2, cx + side / 2, cy - side / 2, cy + side / 2)
     F = build(L, box)
-    reps = [render(F, layout, titles=t) for t in (True, False)]
+    # [REMOVIDO] reps = [render(F, layout, titles=t) for t in (True, False)]
+    reps = [render(F, layout, titles=False)]                  # título vira o rótulo (a)–(d)
     return L, F, reps
 
 

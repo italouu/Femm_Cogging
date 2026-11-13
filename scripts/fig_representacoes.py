@@ -121,7 +121,9 @@ RING_LW, RING_LW_NEUTRAL, DISC_EDGE_LW = 1.8, 0.9, 0.4
 # [REMOVIDO] TITLES = ('Grade', 'Grafo de vértices', 'Elementos + vértices', 'Elementos + vértices por material')
 # [REMOVIDO] TITLES = ('Grade', 'Grafo de vértices', 'Elementos e vértices', 'Elementos e vértices por material')
 TITLES = ('Grade polar', 'Malha como grafo', 'Grafo bipartido', 'Grafo por material')
-CAPTION_PT = 9                    # rótulo (a)–(d) abaixo de cada painel
+# [REMOVIDO] CAPTION_PT = 9  -- a figura entra no artigo escalada por 0,6 (9 pt -> 5,4 pt)
+CAPTION_PT = 12                   # rótulo (a)–(d) abaixo de cada painel (×0,6 ≈ 7,2 pt)
+LEGEND_PT = 11                    # legenda (×0,6 ≈ 6,6 pt)
 TITLE_PT = 10.5                   # títulos dos painéis maiores que os rótulos (a)–(d) (8 pt)
 ARCH_OF_PANEL = ('FNO2d', 'FNO_GNN', 'FNO_Bipartite', 'FNO_SplitGNN')
 
@@ -347,10 +349,11 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
     # [REMOVIDO] gap, h_t, h_leg = 0.08, (0.16 if titles else 0.02), 0.62  (legenda com 3 linhas)
     # [REMOVIDO] h_leg = 0.80 (legenda de 4 linhas)
     # [REMOVIDO] gap, h_t, h_leg = 0.08, (0.16 if titles else 0.02), 0.60  (título 8 pt)
-    gap, h_t, h_leg = 0.08, (0.30 if titles else 0.02), 0.60
+    # [REMOVIDO] h_leg = 0.60 (legenda em 8 pt)
+    gap, h_t, h_leg = 0.08, (0.30 if titles else 0.02), 0.82
     pw = (FIG_WIDTH_IN - (nc - 1) * gap - 0.04) / nc
     ph = pw * (box[3] - box[2]) / side
-    h_lab = 0.19                                               # rótulo (a)–(d) abaixo
+    h_lab = 0.25                                               # rótulo (a)–(d) abaixo
     H = nr * (h_t + ph + h_lab) + h_leg
     # tamanho dos marcadores proporcional à malha local (pt por mm)
     pt_mm = pw * 72 / side
@@ -484,7 +487,7 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
         present = [k for k in CLS_ORDER if CLASSES[k][0] in F['materiais']]
         blank = Patch(fc='none', ec='none', label=' ')
         c1 = [Patch(fc=CLASSES[k][1], ec='none', label=CLASSES[k][0]) for k in present]
-        ms_l = 7.0
+        ms_l = 9.5
         c2 = [Patch(fc='none', ec='0.45', lw=1.0, label='Célula da grade'),
               Line2D([], [], ls='', marker='o', ms=ms_l, mfc='white', mec='0.45', mew=RING_LW,
                      label='Nó de vértice'),
@@ -497,7 +500,7 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
         n = max(len(c1), len(c2), len(c3))
         pad = lambda c: c + [blank] * (n - len(c))
         fig.legend(handles=pad(c1) + pad(c2) + pad(c3), loc='lower center', ncol=3, frameon=False,
-                   bbox_to_anchor=(0.5, 0.0), handlelength=1.8, columnspacing=2.5,
+                   bbox_to_anchor=(0.5, 0.0), handlelength=2.2, columnspacing=3.0, fontsize=LEGEND_PT,
                    borderaxespad=0.2)
         out_dir.mkdir(parents=True, exist_ok=True)
         fig.savefig(out_dir / f'{name}.pdf')

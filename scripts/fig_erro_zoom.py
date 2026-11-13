@@ -571,6 +571,67 @@ def zoom_data(D, windows=None, fine=False, percentile=99.0):
     return out
 
 
+def zoom_summary(D, zd, n_bins=6, n_hot=5):
+    """Resumo mínimo para um agente interpretar as figuras, a partir de zoom_data (zd =
+    {modo: zoom_data(...)}): por região, janela, vmax por modo e materiais da zona; por arch
+    e modo, estatísticas, frações de área acima de vmax e vmax/2, os n_hot pedaços de maior
+    erro (x, y, r, θ, valor, material) e um mapa n_bins × n_bins da janela (média ponderada
+    pela área por célula, linha 0 = topo da imagem; None = cinza, fora da região)."""
+    from matplotlib.tri import Triangulation
+    from src.data_gen.motor_constants import MATERIAL_ID
+    mat_name = {v: k for k, v in MATERIAL_ID.items()}
+    finder = Triangulation(D['xy'][:, 0], D['xy'][:, 1], D['tri']).get_trifinder()
+
+    def material(x, y):
+        t = finder(x, y)
+        return np.where(t >= 0, D['elem_mat'][np.clip(t, 0, None)], -1)
+
+    m0 = next(iter(zd))
+    out = {}
+    for rname, R in zd[m0].items():
+        x0, x1, y0, y1 = R['window']['box']
+        cx, cy = R['window']['cx'], R['window']['cy']
+        ref = next(iter(R['archs'].values()))                  # zona igual nas 4 archs
+        mt = material(np.asarray(ref['cx']), np.asarray(ref['cy']))
+        ar = np.asarray(ref['area'])
+        mats = {mat_name.get(int(k), 'fora'): round(float(ar[mt == k].sum() / ar.sum()), 3)
+                for k in np.unique(mt) if ar[mt == k].sum() / ar.sum() >= 5e-4}
+        A = {}
+        for a in R['archs']:
+            A[a] = {}
+            for m in zd:
+                z, vmax = zd[m][rname]['archs'][a], zd[m][rname]['vmax_T']
+                v, w = np.asarray(z['val']), np.asarray(z['area'])
+                px, py = np.asarray(z['cx']), np.asarray(z['cy'])
+                hot = np.argsort(v)[::-1][:n_hot]
+                hm = material(px[hot], py[hot])
+                ix = np.clip(((px - x0) / (x1 - x0) * n_bins).astype(int), 0, n_bins - 1)
+                iy = np.clip(((y1 - py) / (y1 - y0) * n_bins).astype(int), 0, n_bins - 1)
+                k = iy * n_bins + ix
+                num = np.bincount(k, v * w, minlength=n_bins ** 2)
+                den = np.bincount(k, w, minlength=n_bins ** 2)
+                grid = np.where(den > 0, num / np.where(den > 0, den, 1), np.nan).reshape(n_bins, n_bins)
+                A[a][m] = dict(
+                    media=round(z['media_area_T'], 4), p50=round(z['p50_T'], 4),
+                    p95=round(z['p95_T'], 4), p99=round(z['p99_T'], 4), max=round(z['max_T'], 4),
+                    frac_area_acima_vmax=round(float(w[v > vmax].sum() / w.sum()), 4),
+                    frac_area_acima_meio_vmax=round(float(w[v > vmax / 2].sum() / w.sum()), 4),
+                    pontos_quentes=[dict(x=round(float(px[i]), 3), y=round(float(py[i]), 3),
+                                         r=round(float(np.hypot(px[i], py[i])), 3),
+                                         theta_deg=round(float(np.degrees(np.arctan2(py[i], px[i]))), 2),
+                                         val=round(float(v[i]), 4), material=mat_name.get(int(mm), 'fora'))
+                                    for i, mm in zip(hot, hm)],
+                    mapa=[[None if np.isnan(g) else round(float(g), 3) for g in row] for row in grid])
+        out[rname] = dict(
+            janela=dict(cx=cx, cy=cy, lado=R['window']['side'], r=round(float(np.hypot(cx, cy)), 3),
+                        theta_deg=round(float(np.degrees(np.arctan2(cy, cx))), 2),
+                        x=[round(x0, 3), round(x1, 3)], y=[round(y0, 3), round(y1, 3)]),
+            regiao=R['region'], area_zona_mm2=round(R['zone_area_mm2'], 4),
+            frac_area_material=mats,
+            vmax_T={m: round(zd[m][rname]['vmax_T'], 4) for m in zd}, archs=A)
+    return out
+
+
 def make_figure(sample_idx=2184, windows=None, d=None, percentile=99.0, fine=False,
                 show_band=False, loss='mae', D=None):
     """Figura (1 modo) + painel de localização; D: saída de compute_errors (reaproveitada)."""
@@ -623,6 +684,22 @@ if __name__ == '__main__':
     p_dados = jd / f'sample_{args.sample:06d}_{args.loss}_dados.json'
     p_dados.write_text(json.dumps(dados, ensure_ascii=False), encoding='utf-8')
     print(f'dados do zoom: {p_dados} ({p_dados.stat().st_size / 1e6:.1f} MB)')
+    resumo = dict(
+        sample_idx=args.sample, loss=args.loss, d_mm=round(args.d, 4),
+        leitura=('Δ|B| = | |B|_modelo − |B|_FEMM | (T) na amostra; cada linha da figura pinta só '
+                 'a sua região (Quina = discos de raio d nas quinas, Interface = faixa de largura d '
+                 'nas interfaces sem as quinas, Entreferro = anel de ar entre estator e rotor); o '
+                 'resto da janela é cinza. Escala por linha 0..vmax (p' + f'{args.percentile:g}' +
+                 ' dos 4 archs), viridis. normal = 1 valor por triângulo; fino = pedaços na '
+                 'resolução dos pontos de avaliação. mapa: grade 6×6 da janela, linha 0 = topo '
+                 '(y máx), coluna 0 = esquerda (x mín), média ponderada pela área; null = cinza. '
+                 'x, y em mm, origem no eixo do motor; θ em graus. media = ponderada pela área; p50/p95/p99 '
+                 '= percentis dos pedaços (sem peso; pedaços pequenos junto às interfaces pesam mais). Valores de uma janela de uma '
+                 'amostra, não são métricas do teste.'),
+        regioes=zoom_summary(D, zd))
+    p_res = jd / f'sample_{args.sample:06d}_{args.loss}_resumo.json'
+    p_res.write_text(json.dumps(resumo, indent=1, ensure_ascii=False), encoding='utf-8')
+    print(f'resumo do zoom: {p_res} ({p_res.stat().st_size / 1e3:.0f} kB)')
     for r, x in dados['regioes'].items():
         for a, y in x['archs'].items():
             print(f'  {r:10s} {a:14s} ' + '  '.join(

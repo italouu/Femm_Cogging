@@ -179,8 +179,8 @@ def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cma
                            ncols=2, width_in=ARTICLE_WIDE_IN, tick_step=0.1, cb_label='[T]'):
     """Erro no domínio de várias archs numa figura só (artigo): painéis e_tri [M] em grade
     ncols × ceil(n/ncols), MESMA escala (vmin = 0, vmax dado) e UMA colorbar vertical à direita
-    (sem seta, só a unidade); serve também para 1 painel (ex.: |B| de referência, ncols=1); fora de Ω em cinza claro; fronteiras entre
-    materiais em linha fina preta; nome da arch centralizado acima de cada painel.
+    (sem seta, só a unidade); serve também para 1 painel (ex.: |B| de referência, ncols=1); fora de Ω em cinza claro; sem
+    contorno dos materiais (iface não é desenhado; mantido na assinatura); nome da arch centralizado acima de cada painel.
     Ticks da colorbar a cada tick_step (T). Sem título. Usar com primitives.apply_article_style()
     dentro de plt.rc_context()."""
     import matplotlib.pyplot as plt
@@ -206,7 +206,8 @@ def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cma
     ph = pw * (y1 - y0) / (x1 - x0)
     H = nrows * (ph + h_t) + (nrows - 1) * gap
     fig = plt.figure(figsize=(width_in, H))
-    seg = xy[iface]
+    # [REMOVIDO] contorno das fronteiras entre materiais tirado das figuras do artigo (pedido 2026-11-12)
+    # seg = xy[iface]
     m = None
     for i, (e, lab) in enumerate(zip(E_list, labels)):
         r, c = divmod(i, ncols)
@@ -216,7 +217,8 @@ def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cma
         if t_out is not None:
             ax.tripcolor(t_out, facecolors=np.zeros(len(elems)), cmap=_OUT_CMAP(), vmin=0, vmax=1,
                          rasterized=True)
-        ax.add_collection(LineCollection(seg, colors='k', linewidths=0.2))
+        # [REMOVIDO] contorno das fronteiras entre materiais (some no viridis; pedido 2026-11-12)
+        # ax.add_collection(LineCollection(seg, colors='k', linewidths=0.2))
         ax.set_xlim(x0, x1)
         ax.set_ylim(y0, y1)
         ax.set_aspect('equal')

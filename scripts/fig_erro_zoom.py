@@ -1,0 +1,348 @@
+"""Figura do artigo, seção "Distribuição espacial do erro": erro de |B| em 3 janelas de zoom
+(Quina, Interface, Entreferro) × 4 archs (FNO2d, FNO_GNN, FNO_Bipartite, FNO_SplitGNN; loss
+mae), numa amostra do teste (padrão #2184, a do erro_dominio).
+
+Só visualização: processa uma amostra e não recalcula nem grava métricas.
+
+Grandeza: Δ|B| = | |B|_mod − |B|_FEMM | [T], nos pontos de avaliação das métricas de
+superfície, com as mesmas funções do regions/surface:
+  - FNO2d (grade): pedaços da interseção célula × triângulo (metrics.grid_mesh_overlay), com a
+    célula constante;
+  - FNO_GNN (P1_nos) e FNO_SplitGNN (P1_mat): 48 pontos por triângulo
+    (mesh_surface_quadrature, 16 subtriângulos × 3 pontos médios);
+  - FNO_Bipartite (P0_elem): constante no elemento.
+FEMM = B suavizado P1 descontínuo. Layout, Ω e Γ vêm de postprocess._regions_sample.
+
+Modos (o que é desenhado):
+  - fine=False (padrão): 1 valor por triângulo, a média ponderada Σ e·w / Σ w
+    (surface_error_per_triangle). A média por área desses valores é o L1_A.
+  - fine=True: resolução dos pontos de avaliação, sem interpolação adicional:
+      FNO2d    -> cada pedaço célula ∩ triângulo, com Σ e·w / Σ w dos pontos do pedaço;
+      P1       -> cada um dos 16 subtriângulos da quadratura, com a média dos seus 3 pontos
+                  (pesos iguais);
+      Bipartite -> igual ao padrão.
+
+Escala por linha: vmin = 0; vmax = percentil P (99) dos valores efetivamente desenhados na
+janela (polígonos que tocam a janela, em Ω), juntando as 4 archs. Fora de Ω em cinza.
+extend='max' se houver valor acima de vmax.
+
+Saída: docs/figures/erro_zoom_regioes{,_fino}.{pdf,png} (7,16 in, 8 pt) e
+docs/figures/erro_zoom_regioes_localizacao.{pdf,png} (geometria + as 3 janelas).
+Janelas, vmax e contagens são impressos no terminal e salvos em
+resultados/BLDC_138x276/dados/fig_erro_zoom/sample_XXXXXX_<loss>.json.
+
+    python -m scripts.fig_erro_zoom [--sample 2184] [--loss mae] [--mode both|coarse|fine]
+                                    [--band] [--d MM] [--percentile 99]
+"""
+import argparse
+import json
+from pathlib import Path
+
+import numpy as np
+
+from scripts.postprocess import (ARTICLE_ARCH_NAME, ARTICLE_FIG_DIR, OUT_ROOT, REGIONS_ARCHS,
+                                 REGIONS_D_MM, _regions_runs, _regions_sample, _split_points,
+                                 _surface_points, design_rows, predict, predict_split,
+                                 regions_setup, sample_path, to_torch_sample)
+from src.postprocess.metrics import _cell_corners, surface_error_per_triangle
+from src.postprocess.plots.errors import OUT_OMEGA_COLOR
+from src.postprocess.plots.primitives import apply_article_style, apply_style
+from src.postprocess.samples import ANG_1, ANG_2, N_A, N_R
+
+FIG_NAME = 'erro_zoom_regioes'
+FIG_WIDTH_IN = 7.16               # duas colunas IEEE
+FONT_PT = 8
+CMAP = 'viridis'
+CB_LABEL = r'$\Delta|\mathbf{B}|$ (T)'
+ROWS = ('Quina', 'Interface', 'Entreferro')
+# Janelas (centro x, y [mm], lado [mm]), escolhidas na geometria da #2184 (em polar):
+#   Quina      -> canto da sapata do dente na abertura da ranhura: r = 38,614 mm (raio externo
+#                 do estator), θ = 59,16°;
+#   Interface  -> meio da face ímã–coroa do rotor (ímã de 46,40° a 52,86°): r = 42,175 mm,
+#                 θ = 49,63°, a ~2,4 mm dos cantos do ímã;
+#   Entreferro -> meio do entreferro (38,614–39,925 mm), r = 39,27 mm, θ = 66,0°: sapata do
+#                 dente (60,84°–69,16°) embaixo e ímã (63,54°–70,01°) em cima.
+DEFAULT_WINDOWS = {
+    'Quina': (19.79, 33.16, 3.0),
+    'Interface': (27.33, 32.13, 3.0),
+    'Entreferro': (15.97, 35.88, 3.0),
+}
+
+
+# --------------------------------------------------------------------------------------------
+# dados (1 amostra)
+# --------------------------------------------------------------------------------------------
+def compute_errors(sample_idx, loss='mae'):
+    """Layout + Ω + Γ da amostra (_regions_sample) e, para cada arch do artigo, o erro
+    e = | |B|_mod − |B|_FEMM | nos pontos de avaliação das métricas (mesmas funções do
+    regions_add_run)."""
+    d_list, edges, _ = regions_setup()
+    row = design_rows()[sample_idx]
+    lay = _regions_sample(sample_path(sample_idx), row, 30.0, edges, d_list)
+    M, K = lay['mesh_quad']['mag'].shape
+    runs = {k: r for k, r in _regions_runs().items() if r['loss'] == loss}
+    ts = to_torch_sample(lay)
+    E = {}
+    for r in runs.values():
+        a = r['arch']
+        if a == 'FNO_SplitGNN':
+            _, y_base = predict_split(r['model'], r['normalizer'], lay['split'])
+            mm, mf, w, ps = _split_points(lay, y_base)
+            t_idx = np.repeat(np.arange(M), K)
+        else:
+            out_hw, yn = predict(a, r['model'], r['normalizer'], ts)
+            mm, mf, w, t_idx, ps = _surface_points(a, lay, out_hw, yn, with_set=True)
+        e = np.abs(np.asarray(mm, np.float64) - mf)
+        E[a] = dict(e=e, w=np.asarray(w, np.float64), t=np.asarray(t_idx), pset=ps,
+                    e_tri=surface_error_per_triangle(M, t_idx, mm, mf, w),
+                    run=r['run_dir'], epoch=r['epoch'])
+    r_in = float(row['inner_diameter [mm]']) / 2
+    r_ext = float(row['outer_diameter [mm]']) / 2
+    cells = _cell_corners(r_in, r_ext, np.deg2rad(ANG_1), np.deg2rad(ANG_2), N_R, N_A)
+    return dict(sample_idx=sample_idx, loss=loss, row=row, xy=lay['xy'], tri=lay['tri'],
+                in_omega=lay['in_omega'], iface=lay['iface'], corners=lay['corners'],
+                elem_mat=lay['elem_mat'], bary=lay['mesh_quad']['bary'].astype(np.float64),
+                K=K, cell=lay['overlay']['cell'], cells=cells, E=E)
+
+
+def _tris_in_window(xy, tri, box):
+    x0, x1, y0, y1 = box
+    P = xy[tri]
+    return np.flatnonzero((P[..., 0].min(1) <= x1) & (P[..., 0].max(1) >= x0)
+                          & (P[..., 1].min(1) <= y1) & (P[..., 1].max(1) >= y0))
+
+
+def panel_polys(D, arch, box, fine):
+    """Polígonos [lista de [n,2]], valores [T] e flag 'em Ω' do que é desenhado na janela."""
+    import shapely
+    xy, tri, in_om = D['xy'], D['tri'], D['in_omega']
+    ex = D['E'][arch]
+    tw = _tris_in_window(xy, tri, box)
+    if not fine or arch == 'FNO_BipartiteGNN_Elem':
+        return list(xy[tri[tw]]), ex['e_tri'][tw], in_om[tw]
+    if ex['pset'] == 'overlay':                    # FNO2d: pedaços célula ∩ triângulo
+        sel = np.isin(ex['t'], tw)
+        t, c = ex['t'][sel], D['cell'][sel]
+        key, inv = np.unique(t.astype(np.int64) * len(D['cells']) + c, return_inverse=True)
+        val = np.bincount(inv, ex['e'][sel] * ex['w'][sel]) / np.bincount(inv, ex['w'][sel])
+        wsum = np.bincount(inv, ex['w'][sel])
+        tu, cu = key // len(D['cells']), key % len(D['cells'])
+        pieces = shapely.intersection(shapely.polygons(xy[tri[tu]]), shapely.polygons(D['cells'][cu]))
+        area = shapely.area(pieces)
+        D.setdefault('_piece_check', []).append(float(np.max(np.abs(area - wsum) / area)))
+        polys = [np.asarray(p.exterior.coords)[:-1] for p in pieces]
+        return polys, val, in_om[tu]
+    # P1 (FNO_GNN, Split): 16 subtriângulos da quadratura, média dos 3 pontos médios
+    K, bary = D['K'], D['bary']
+    e = ex['e'].reshape(-1, K)[tw].reshape(len(tw), K // 3, 3)
+    m = np.einsum('kj,tjd->tkd', bary, xy[tri[tw]]).reshape(len(tw), K // 3, 3, 2)
+    m01, m12, m20 = m[:, :, 0], m[:, :, 1], m[:, :, 2]
+    V = np.stack([m01 + m20 - m12, m01 + m12 - m20, m12 + m20 - m01], axis=2)   # vértices
+    return list(V.reshape(-1, 3, 2)), e.mean(-1).ravel(), np.repeat(in_om[tw], K // 3)
+
+
+# --------------------------------------------------------------------------------------------
+# figura
+# --------------------------------------------------------------------------------------------
+def _box(win):
+    x, y, L = win
+    return (x - L / 2, x + L / 2, y - L / 2, y + L / 2)
+
+
+def _band_boundary(D, box, d):
+    """Contorno de {dist(x, Γ) ≤ d} perto da janela (Γ = arestas de interface)."""
+    import shapely
+    xy, iface = D['xy'], D['iface']
+    x0, x1, y0, y1 = box
+    S = xy[iface]
+    m = 2 * d
+    near = ((S[..., 0].min(1) <= x1 + m) & (S[..., 0].max(1) >= x0 - m)
+            & (S[..., 1].min(1) <= y1 + m) & (S[..., 1].max(1) >= y0 - m))
+    zone = shapely.union_all(shapely.buffer(shapely.linestrings(S[near]), d))
+    return shapely.boundary(zone)
+
+
+def _comma(v, _=None):
+    return f'{v:g}'.replace('.', ',')
+
+
+def render(D, windows=None, fine=False, percentile=99.0, d=None, show_band=False, cmap=CMAP,
+           out_dir=ARTICLE_FIG_DIR, name=None):
+    """Grade 3 × 4 (linhas = janelas, colunas = archs), uma colorbar por linha."""
+    import matplotlib.pyplot as plt
+    from matplotlib.collections import LineCollection, PolyCollection
+    from matplotlib.colors import Normalize
+    from matplotlib.ticker import FuncFormatter, MaxNLocator
+    windows = windows or DEFAULT_WINDOWS
+    d = REGIONS_D_MM[0] if d is None else d
+    name = name or (FIG_NAME + ('_fino' if fine else ''))
+    archs = [a for a in REGIONS_ARCHS if a in D['E']]
+    xy, tri, iface = D['xy'], D['tri'], D['iface']
+    report = dict(mode='fine' if fine else 'coarse', percentile=percentile, rows={})
+
+    # layout absoluto (polegadas)
+    w_lab, w_cb, w_cbl, gap, gap_cb, h_t, gap_r, h_b = 0.16, 0.07, 0.50, 0.05, 0.06, 0.17, 0.07, 0.05
+    pw = (FIG_WIDTH_IN - w_lab - 3 * gap - gap_cb - w_cb - w_cbl) / 4
+    ph = pw
+    H = h_t + 3 * ph + 2 * gap_r + h_b
+    with plt.rc_context():
+        apply_style()
+        apply_article_style(FONT_PT)
+        fig = plt.figure(figsize=(FIG_WIDTH_IN, H))
+        for i, rname in enumerate(windows):
+            box = _box(windows[rname])
+            x0, x1, y0, y1 = box
+            P = {a: panel_polys(D, a, box, fine) for a in archs}
+            vals = np.concatenate([v[om] for _, v, om in P.values()])
+            vmax = float(np.percentile(vals, percentile))
+            over = {a: int((v[om] > vmax).sum()) for a, (_, v, om) in P.items()}
+            norm = Normalize(0.0, vmax)
+            yb = H - h_t - (i + 1) * ph - i * gap_r
+            tw = _tris_in_window(xy, tri, box)
+            ed = np.sort(np.concatenate([tri[tw][:, [0, 1]], tri[tw][:, [1, 2]], tri[tw][:, [2, 0]]]), axis=1)
+            mesh_seg = xy[np.unique(ed, axis=0)]
+            band = _band_boundary(D, box, d) if show_band else None
+            for j, a in enumerate(archs):
+                polys, v, om = P[a]
+                ax = fig.add_axes([(w_lab + j * (pw + gap)) / FIG_WIDTH_IN, yb / H,
+                                   pw / FIG_WIDTH_IN, ph / H])
+                cols = plt.get_cmap(cmap)(norm(v))
+                cols[~om] = plt.matplotlib.colors.to_rgba(OUT_OMEGA_COLOR)
+                ax.add_collection(PolyCollection(polys, facecolors=cols, edgecolors=cols,
+                                                 linewidths=0.1))
+                ax.add_collection(LineCollection(mesh_seg, colors='0.5', linewidths=0.2, alpha=0.4))
+                ax.add_collection(LineCollection(xy[iface], colors='k', linewidths=0.6))
+                if band is not None:
+                    import shapely
+                    for g in getattr(band, 'geoms', [band]):
+                        c = np.asarray(g.coords) if not g.is_empty else None
+                        if c is not None:
+                            ax.plot(c[:, 0], c[:, 1], ls=(0, (2, 1.5)), color='w', lw=0.5)
+                ax.set_xlim(x0, x1)
+                ax.set_ylim(y0, y1)
+                ax.set_aspect('equal')
+                ax.set_xticks([])
+                ax.set_yticks([])
+                for s in ax.spines.values():
+                    s.set_linewidth(0.5)
+                if i == 0:
+                    ax.set_title(ARTICLE_ARCH_NAME[a], pad=4)
+            fig.text(0.5 * w_lab / FIG_WIDTH_IN, (yb + ph / 2) / H, rname, rotation=90,
+                     ha='center', va='center')
+            cax = fig.add_axes([(w_lab + 4 * pw + 3 * gap + gap_cb) / FIG_WIDTH_IN, yb / H,
+                                w_cb / FIG_WIDTH_IN, ph / H])
+            sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+            cb = fig.colorbar(sm, cax=cax, extend='max' if any(over.values()) else 'neither')
+            cb.ax.yaxis.set_major_locator(MaxNLocator(5))
+            cb.ax.yaxis.set_major_formatter(FuncFormatter(_comma))
+            cb.ax.grid(False)
+            cb.outline.set_linewidth(0.5)
+            cb.set_label(CB_LABEL)
+            report['rows'][rname] = dict(
+                window=dict(cx=windows[rname][0], cy=windows[rname][1], side=windows[rname][2]),
+                vmax_T=vmax, n_values=int(len(vals)),
+                above_vmax={ARTICLE_ARCH_NAME[a]: over[a] for a in archs},
+                n_polys={ARTICLE_ARCH_NAME[a]: int(len(P[a][1])) for a in archs},
+                max_T={ARTICLE_ARCH_NAME[a]: float(P[a][1][P[a][2]].max()) for a in archs})
+        out_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out_dir / f'{name}.pdf')
+        fig.savefig(out_dir / f'{name}.png', dpi=300)
+        plt.close(fig)
+    report['figure'] = str(out_dir / f'{name}.pdf')
+    report['size_in'] = [FIG_WIDTH_IN, H]
+    return report
+
+
+def render_locator(D, windows=None, out_dir=ARTICLE_FIG_DIR, name=FIG_NAME + '_localizacao'):
+    """Painel auxiliar: setor completo (materiais em tons claros, interfaces) com os 3
+    retângulos de zoom rotulados."""
+    import matplotlib.pyplot as plt
+    from matplotlib.collections import LineCollection
+    from matplotlib.colors import ListedColormap
+    from matplotlib.patches import Rectangle
+    from matplotlib.tri import Triangulation
+    from src.data_gen.motor_constants import MATERIAL_ID
+    windows = windows or DEFAULT_WINDOWS
+    xy, tri = D['xy'], D['tri']
+    col = {MATERIAL_ID['iron_1008']: '#c9ced6', MATERIAL_ID['vacuum']: '#ffffff',
+           MATERIAL_ID['N35p']: '#f3c9a8', MATERIAL_ID['copper']: '#e8d9a0'}
+    ids = sorted(col)
+    code = np.searchsorted(ids, D['elem_mat'])
+    with plt.rc_context():
+        apply_style()
+        apply_article_style(FONT_PT)
+        fig, ax = plt.subplots(figsize=(3.5, 3.0))
+        ax.tripcolor(Triangulation(xy[:, 0], xy[:, 1], tri), facecolors=code.astype(float),
+                     cmap=ListedColormap([col[k] for k in ids]), vmin=-0.5, vmax=len(ids) - 0.5,
+                     rasterized=True)
+        ax.add_collection(LineCollection(xy[D['iface']], colors='k', linewidths=0.2))
+        r_out = float(np.hypot(xy[:, 0], xy[:, 1]).max())
+        for k, (rname, win) in enumerate(windows.items()):
+            x0, x1, y0, y1 = _box(win)
+            ax.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, ec='#c0392b', lw=0.9))
+            # rótulo radial, para fora do rotor, com linha de chamada a partir da janela
+            th = np.arctan2(win[1], win[0])
+            u = np.array([np.cos(th), np.sin(th)])
+            r_c = float(np.hypot(win[0], win[1]))
+            p0, p1 = u * (r_c + win[2] / 2), u * (r_out + 2.0)
+            ax.plot([p0[0], p1[0]], [p0[1], p1[1]], color='#c0392b', lw=0.6)
+            ax.text(*(u * (r_out + 2.6)), rname, color='#c0392b', rotation=np.degrees(th),
+                    rotation_mode='anchor', ha='left', va='center')
+        ax.set_aspect('equal')
+        ax.autoscale()
+        ax.axis('off')
+        out_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out_dir / f'{name}.pdf', bbox_inches='tight')
+        fig.savefig(out_dir / f'{name}.png', dpi=300, bbox_inches='tight')
+        plt.close(fig)
+    return str(out_dir / f'{name}.pdf')
+
+
+def make_figure(sample_idx=2184, windows=None, d=None, percentile=99.0, fine=False,
+                show_band=False, loss='mae', D=None):
+    """Figura (1 modo) + painel de localização; D: saída de compute_errors (reaproveitada)."""
+    D = D if D is not None else compute_errors(sample_idx, loss)
+    rep = render(D, windows, fine=fine, percentile=percentile, d=d, show_band=show_band)
+    rep['locator'] = render_locator(D, windows)
+    return D, rep
+
+
+def _print_windows(windows):
+    print('janelas (centro x, y e lado em mm; polar do centro):')
+    for k, (x, y, L) in windows.items():
+        print(f'  {k:10s} cx = {x:7.3f}  cy = {y:7.3f}  lado = {L:.2f}   '
+              f'(r = {np.hypot(x, y):.3f} mm, θ = {np.degrees(np.arctan2(y, x)):.2f}°)')
+
+
+if __name__ == '__main__':
+    ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
+    ap.add_argument('--sample', type=int, default=2184)
+    ap.add_argument('--loss', default='mae')
+    ap.add_argument('--mode', choices=('both', 'coarse', 'fine'), default='both')
+    ap.add_argument('--band', action='store_true', help='contorno da faixa dist(Γ) <= d, tracejado')
+    ap.add_argument('--d', type=float, default=REGIONS_D_MM[0])
+    ap.add_argument('--percentile', type=float, default=99.0)
+    args = ap.parse_args()
+
+    print(f'amostra {args.sample} ({args.loss}); d = {args.d:.4f} mm; percentil {args.percentile:g}')
+    _print_windows(DEFAULT_WINDOWS)
+    D = compute_errors(args.sample, args.loss)
+    out = dict(sample_idx=args.sample, loss=args.loss, d_mm=args.d, band=args.band,
+               runs={ARTICLE_ARCH_NAME[a]: dict(run_dir=v['run'], epoch=v['epoch'])
+                     for a, v in D['E'].items()}, modes={})
+    modes = {'both': (False, True), 'coarse': (False,), 'fine': (True,)}[args.mode]
+    for fine in modes:
+        _, rep = make_figure(args.sample, DEFAULT_WINDOWS, args.d, args.percentile, fine,
+                             args.band, args.loss, D=D)
+        out['modes'][rep['mode']] = rep
+        print(f"\n[{rep['mode']}] {rep['figure']} ({rep['size_in'][0]:.2f} × {rep['size_in'][1]:.2f} in)")
+        for rname, x in rep['rows'].items():
+            print(f"  {rname:10s} vmax = {x['vmax_T']:.4f} T (p{args.percentile:g} de {x['n_values']} valores); "
+                  f"acima: {x['above_vmax']}; máx: " + ', '.join(f'{k} {v:.3f}' for k, v in x['max_T'].items()))
+    if D.get('_piece_check'):
+        print(f"\nconferência dos pedaços do FNO2d: max |área(pedaço) − Σw| / área = {max(D['_piece_check']):.1e}")
+    print(f"localização: {out['modes'][next(iter(out['modes']))]['locator']}")
+    jd = OUT_ROOT / 'dados' / 'fig_erro_zoom'
+    jd.mkdir(parents=True, exist_ok=True)
+    (jd / f'sample_{args.sample:06d}_{args.loss}.json').write_text(
+        json.dumps(out, indent=1, ensure_ascii=False, default=str), encoding='utf-8')

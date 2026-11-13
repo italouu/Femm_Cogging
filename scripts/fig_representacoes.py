@@ -106,7 +106,8 @@ CLS_ORDER = list(CLASSES)
 MESH_COLOR, MESH_LW = '0.62', 0.6                           # malha: cinza médio, fina
 IFACE_COLOR, IFACE_LW = 'k', 2.2                            # interface: preta, grossa
 GRAPH_EDGE_COLOR, GRAPH_EDGE_LW = '0.15', 1.2               # grafo: quase preto, sólida
-CROSS_EDGE_COLOR, CROSS_EDGE_LW = '#B0407F', 1.1            # cruzada / Edge_aux: rosa escuro, tracejada
+# [REMOVIDO] CROSS_EDGE_COLOR, CROSS_EDGE_LW = '#B0407F', 1.1   (rosa escuro)
+CROSS_EDGE_COLOR, CROSS_EDGE_LW = '0.45', 1.1               # vértice–elemento: cinza médio, tracejada
 # fundo dos painéis de grafo (b–d): material de cada elemento (classe das features da Elem)
 # em tons muito fracos das mesmas cores
 CELL_INSET, CELL_LW = 0.10, 0.7      # (a): recuo do contorno da célula (fração) e espessura
@@ -339,7 +340,8 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
     side = box[1] - box[0]
     nr, nc = (2, 2) if layout == '2x2' else (1, 4)
     # [REMOVIDO] gap, h_t, h_leg = 0.08, (0.16 if titles else 0.02), 0.62  (legenda com 3 linhas)
-    gap, h_t, h_leg = 0.08, (0.16 if titles else 0.02), 0.80
+    # [REMOVIDO] h_leg = 0.80 (legenda de 4 linhas)
+    gap, h_t, h_leg = 0.08, (0.16 if titles else 0.02), 0.60
     pw = (FIG_WIDTH_IN - (nc - 1) * gap - 0.04) / nc
     ph = pw * (box[3] - box[2]) / side
     h_lab = 0.16                                               # rótulo (a)–(d) abaixo
@@ -437,36 +439,57 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
         d.add_collection(LineCollection(F['d_seg'], **solid))
         d.scatter(*F['cp_xy'].T, edgecolors=col[F['cp_cls']], **ring)
         d.scatter(*F['n_aux_xy'].T, c=col[F['n_aux_cls']], **disc)
-        for ax in axs:
-            ax.add_collection(LineCollection(F['iface_seg'], colors=IFACE_COLOR, linewidths=IFACE_LW,
-                                             zorder=3))
+        # [REMOVIDO] linha grossa da interface -- o fundo de material já mostra a divisa:
+        # for ax in axs:
+        #     ax.add_collection(LineCollection(F['iface_seg'], colors=IFACE_COLOR, linewidths=IFACE_LW,
+        #                                      zorder=3))
         # [REMOVIDO] barra de escala em mm na (a) -- retirada a pedido (figura só de representação)
         # L = max(v for v in (0.02, 0.05, 0.1, 0.2, 0.5, 1.0) if v <= side / 3.5)
         # x0, y0 = box[0] + 0.06 * side, box[2] + 0.06 * side
         # a.plot([x0, x0 + L], [y0, y0], color='k', lw=1.4, solid_capstyle='butt', zorder=6)
         # a.text(x0 + L / 2, y0 + 0.025 * side, f'{L:g} mm'.replace('.', ','), ha='center',
         #        va='bottom', zorder=6, bbox=dict(fc='white', ec='none', pad=0.6, alpha=0.85))
-        # legenda única
+        # [REMOVIDO] legenda anterior (materiais com contorno, interface, vértice sem material):
+        # # legenda única
+        # present = [k for k in CLS_ORDER if CLASSES[k][0] in F['materiais']]
+        # # [REMOVIDO] h1 = [Patch(fc=CLASSES[k][1], ec='k', lw=0.4, label=CLASSES[k][0]) for k in present]
+        # h1 = [Patch(fc=FAINT[k], ec=CLASSES[k][1], lw=1.2, label=CLASSES[k][0]) for k in present]
+        # h1.append(Patch(fc='none', ec='0.35', lw=CELL_LW, label='Célula da grade (contorno, cor do material)'))
+        # # [REMOVIDO] legenda com quadrado para elemento e cinzas próximos nas arestas
+        # ms_l = 7.0
+        # h2 = [Line2D([], [], ls='', marker='o', ms=ms_l, mfc='white', mec='0.35', mew=RING_LW,
+        #              label='Nó de vértice / cópia (anel, cor do material)'),
+        #       Line2D([], [], ls='', marker='o', ms=ms_l * 0.9, mfc='0.6', mec='k', mew=DISC_EDGE_LW,
+        #              label='Nó de elemento (disco, cor do material)'),
+        #       Line2D([], [], ls='', marker='o', ms=ms_l, mfc=NEUTRAL_FACE, mec=NEUTRAL_EDGE,
+        #              mew=RING_LW_NEUTRAL, label='Vértice sem material (c)')]
+        # h3 = [Line2D([], [], color=MESH_COLOR, lw=1.0, label='Aresta da malha'),
+        #       Line2D([], [], color=GRAPH_EDGE_COLOR, lw=GRAPH_EDGE_LW,
+        #              label='Aresta do grafo (vértices, duais, Edge_dual)'),
+        #       Line2D([], [], color=CROSS_EDGE_COLOR, lw=CROSS_EDGE_LW, ls=CROSS_EDGE_LS,
+        #              label='Aresta cruzada / Edge_aux'),
+        #       Line2D([], [], color=IFACE_COLOR, lw=IFACE_LW, label='Interface')]
+        # fig.legend(handles=h1 + h2 + h3, loc='lower center', ncol=3, frameon=False,
+        #            bbox_to_anchor=(0.5, 0.0), handlelength=1.8, columnspacing=1.2,
+        #            borderaxespad=0.2)
+        # legenda única em 3 colunas: materiais | nós | arestas (preenchida por coluna)
         present = [k for k in CLS_ORDER if CLASSES[k][0] in F['materiais']]
-        # [REMOVIDO] h1 = [Patch(fc=CLASSES[k][1], ec='k', lw=0.4, label=CLASSES[k][0]) for k in present]
-        h1 = [Patch(fc=FAINT[k], ec=CLASSES[k][1], lw=1.2, label=CLASSES[k][0]) for k in present]
-        h1.append(Patch(fc='none', ec='0.35', lw=CELL_LW, label='Célula da grade (contorno, cor do material)'))
-        # [REMOVIDO] legenda com quadrado para elemento e cinzas próximos nas arestas
+        blank = Patch(fc='none', ec='none', label=' ')
+        c1 = [Patch(fc=CLASSES[k][1], ec='none', label=CLASSES[k][0]) for k in present]
         ms_l = 7.0
-        h2 = [Line2D([], [], ls='', marker='o', ms=ms_l, mfc='white', mec='0.35', mew=RING_LW,
-                     label='Nó de vértice / cópia (anel, cor do material)'),
-              Line2D([], [], ls='', marker='o', ms=ms_l * 0.9, mfc='0.6', mec='k', mew=DISC_EDGE_LW,
-                     label='Nó de elemento (disco, cor do material)'),
-              Line2D([], [], ls='', marker='o', ms=ms_l, mfc=NEUTRAL_FACE, mec=NEUTRAL_EDGE,
-                     mew=RING_LW_NEUTRAL, label='Vértice sem material (c)')]
-        h3 = [Line2D([], [], color=MESH_COLOR, lw=1.0, label='Aresta da malha'),
-              Line2D([], [], color=GRAPH_EDGE_COLOR, lw=GRAPH_EDGE_LW,
-                     label='Aresta do grafo (vértices, duais, Edge_dual)'),
+        c2 = [Patch(fc='none', ec='0.45', lw=1.0, label='Célula da grade'),
+              Line2D([], [], ls='', marker='o', ms=ms_l, mfc='white', mec='0.45', mew=RING_LW,
+                     label='Nó de vértice'),
+              Line2D([], [], ls='', marker='o', ms=ms_l * 0.9, mfc='0.55', mec='0.3', mew=DISC_EDGE_LW,
+                     label='Nó de elemento')]
+        c3 = [Line2D([], [], color=MESH_COLOR, lw=1.0, label='Aresta da malha'),
+              Line2D([], [], color=GRAPH_EDGE_COLOR, lw=GRAPH_EDGE_LW, label='Aresta elemento–elemento'),
               Line2D([], [], color=CROSS_EDGE_COLOR, lw=CROSS_EDGE_LW, ls=CROSS_EDGE_LS,
-                     label='Aresta cruzada / Edge_aux'),
-              Line2D([], [], color=IFACE_COLOR, lw=IFACE_LW, label='Interface')]
-        fig.legend(handles=h1 + h2 + h3, loc='lower center', ncol=3, frameon=False,
-                   bbox_to_anchor=(0.5, 0.0), handlelength=1.8, columnspacing=1.2,
+                     label='Aresta vértice–elemento')]
+        n = max(len(c1), len(c2), len(c3))
+        pad = lambda c: c + [blank] * (n - len(c))
+        fig.legend(handles=pad(c1) + pad(c2) + pad(c3), loc='lower center', ncol=3, frameon=False,
+                   bbox_to_anchor=(0.5, 0.0), handlelength=1.8, columnspacing=2.5,
                    borderaxespad=0.2)
         out_dir.mkdir(parents=True, exist_ok=True)
         fig.savefig(out_dir / f'{name}.pdf')

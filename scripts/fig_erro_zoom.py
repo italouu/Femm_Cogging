@@ -22,8 +22,15 @@ Modos (o que é desenhado):
                   (pesos iguais);
       Bipartite -> igual ao padrão.
 
+Região por linha (ROW_REGION): só os pontos da região da linha são coloridos -- Quina =
+quinas (dist_q <= d), Interface = fronteira sem quinas (dist_f <= d < dist_q), com a
+classificação do regions por ponto de avaliação; Entreferro = ar entre o raio externo do
+estator e o interno do rotor. Um polígono desenhado é colorido se >= 50% do peso dos seus
+pontos está na região (valor = média só desses pontos); o resto da janela (outras regiões e
+fora de Ω) fica cinza.
+
 Escala por linha: vmin = 0; vmax = percentil P (99) dos valores efetivamente desenhados na
-janela (polígonos que tocam a janela, em Ω), juntando as 4 archs; colorbar só retângulo (sem
+janela (polígonos coloridos), juntando as 4 archs; colorbar só retângulo (sem
 seta), valores acima de vmax com a cor do topo. Fora de Ω em cinza. Coluna da esquerda: o
 domínio completo com o retângulo da janela da linha.
 
@@ -56,6 +63,9 @@ FONT_PT = 8
 CMAP = 'viridis'
 CB_LABEL = r'$\Delta|\mathbf{B}|$ (T)'
 ROWS = ('Quina', 'Interface', 'Entreferro')
+# região pintada em cada linha (o resto da janela fica cinza): código de regions.BANDS
+# (0 quinas, 1 fronteira sem quinas, 2 interior) ou 'entreferro' (ar entre estator e rotor)
+ROW_REGION = {'Quina': 0, 'Interface': 1, 'Entreferro': 'entreferro'}
 # Janelas (centro x, y [mm], lado [mm]), escolhidas na geometria da #2184 (em polar):
 #   Quina      -> canto da sapata do dente na abertura da ranhura: r = 38,614 mm (raio externo
 #                 do estator), θ = 59,16°;
@@ -80,11 +90,14 @@ DEFAULT_WINDOWS = {
 # --------------------------------------------------------------------------------------------
 # dados (1 amostra)
 # --------------------------------------------------------------------------------------------
-def compute_errors(sample_idx, loss='mae'):
+def compute_errors(sample_idx, loss='mae', d=None):
     """Layout + Ω + Γ da amostra (_regions_sample) e, para cada arch do artigo, o erro
     e = | |B|_mod − |B|_FEMM | nos pontos de avaliação das métricas (mesmas funções do
-    regions_add_run)."""
-    d_list, edges, _ = regions_setup()
+    regions_add_run); código da região (regions.BANDS, no d dado) de cada ponto e os
+    triângulos do entreferro."""
+    d = REGIONS_D_MM[0] if d is None else float(d)
+    d_list, edges, _ = regions_setup(d_list=[d])
+    di = d_list.index(d)
     row = design_rows()[sample_idx]
     lay = _regions_sample(sample_path(sample_idx), row, 30.0, edges, d_list)
     M, K = lay['mesh_quad']['mag'].shape
@@ -107,10 +120,21 @@ def compute_errors(sample_idx, loss='mae'):
     r_in = float(row['inner_diameter [mm]']) / 2
     r_ext = float(row['outer_diameter [mm]']) / 2
     cells = _cell_corners(r_in, r_ext, np.deg2rad(ANG_1), np.deg2rad(ANG_2), N_R, N_A)
-    return dict(sample_idx=sample_idx, loss=loss, row=row, xy=lay['xy'], tri=lay['tri'],
+    code = {}
+    for ps, bp in lay['bands'].items():                 # -1 = fora de Ω
+        c = np.full(len(bp['keep']), -1, np.int8)
+        c[bp['keep']] = bp['reg'][di]
+        code[ps] = c
+    from src.data_gen.motor_constants import MATERIAL_ID
+    xy, tri = lay['xy'], lay['tri']
+    rc = np.hypot(*xy[tri].mean(1).T)
+    r_so = float(row['stator_outer_diameter [mm]']) / 2
+    r_ri = float(row['rotor_inner_diameter [mm]']) / 2
+    gap_tri = (lay['elem_mat'] == MATERIAL_ID['vacuum']) & (rc > r_so) & (rc < r_ri)
+    return dict(sample_idx=sample_idx, loss=loss, row=row, xy=xy, tri=tri, d=d,
                 in_omega=lay['in_omega'], iface=lay['iface'], corners=lay['corners'],
                 elem_mat=lay['elem_mat'], bary=lay['mesh_quad']['bary'].astype(np.float64),
-                K=K, cell=lay['overlay']['cell'], cells=cells, E=E)
+                K=K, cell=lay['overlay']['cell'], cells=cells, E=E, code=code, gap_tri=gap_tri)
 
 
 def _tris_in_window(xy, tri, box):
@@ -120,33 +144,83 @@ def _tris_in_window(xy, tri, box):
                           & (P[..., 1].min(1) <= y1) & (P[..., 1].max(1) >= y0))
 
 
-def panel_polys(D, arch, box, fine):
-    """Polígonos [lista de [n,2]], valores [T] e flag 'em Ω' do que é desenhado na janela."""
+# [REMOVIDO] panel_polys sem máscara de região (pintava tudo que caía na janela) -- substituída
+# pela versão abaixo, que pinta só os pontos da região da linha e deixa o resto em cinza.
+# def panel_polys(D, arch, box, fine):
+#     """Polígonos [lista de [n,2]], valores [T] e flag 'em Ω' do que é desenhado na janela."""
+#     import shapely
+#     xy, tri, in_om = D['xy'], D['tri'], D['in_omega']
+#     ex = D['E'][arch]
+#     tw = _tris_in_window(xy, tri, box)
+#     if not fine or arch == 'FNO_BipartiteGNN_Elem':
+#         return list(xy[tri[tw]]), ex['e_tri'][tw], in_om[tw]
+#     if ex['pset'] == 'overlay':                    # FNO2d: pedaços célula ∩ triângulo
+#         sel = np.isin(ex['t'], tw)
+#         t, c = ex['t'][sel], D['cell'][sel]
+#         key, inv = np.unique(t.astype(np.int64) * len(D['cells']) + c, return_inverse=True)
+#         val = np.bincount(inv, ex['e'][sel] * ex['w'][sel]) / np.bincount(inv, ex['w'][sel])
+#         wsum = np.bincount(inv, ex['w'][sel])
+#         tu, cu = key // len(D['cells']), key % len(D['cells'])
+#         pieces = shapely.intersection(shapely.polygons(xy[tri[tu]]), shapely.polygons(D['cells'][cu]))
+#         area = shapely.area(pieces)
+#         D.setdefault('_piece_check', []).append(float(np.max(np.abs(area - wsum) / area)))
+#         polys = [np.asarray(p.exterior.coords)[:-1] for p in pieces]
+#         return polys, val, in_om[tu]
+#     # P1 (FNO_GNN, Split): 16 subtriângulos da quadratura, média dos 3 pontos médios
+#     K, bary = D['K'], D['bary']
+#     e = ex['e'].reshape(-1, K)[tw].reshape(len(tw), K // 3, 3)
+#     m = np.einsum('kj,tjd->tkd', bary, xy[tri[tw]]).reshape(len(tw), K // 3, 3, 2)
+#     m01, m12, m20 = m[:, :, 0], m[:, :, 1], m[:, :, 2]
+#     V = np.stack([m01 + m20 - m12, m01 + m12 - m20, m12 + m20 - m01], axis=2)   # vértices
+#     return list(V.reshape(-1, 3, 2)), e.mean(-1).ravel(), np.repeat(in_om[tw], K // 3)
+
+
+def panel_polys(D, arch, box, fine, m):
+    """O que é desenhado na janela: polígonos [lista de [n,2]], valor [G] e 'colorido' [G].
+    m [Q] bool: pontos de avaliação da arch que pertencem à região da linha (fora de Ω = False).
+    Polígono = triângulo (normal, e a Bipartite nos dois modos), pedaço célula ∩ triângulo
+    (FNO2d fino) ou subtriângulo da quadratura (P1 fino). Colorido se >= 50% do peso dos seus
+    pontos está na região; valor = Σ e·w / Σ w só dos pontos da região."""
     import shapely
-    xy, tri, in_om = D['xy'], D['tri'], D['in_omega']
+    xy, tri = D['xy'], D['tri']
     ex = D['E'][arch]
-    tw = _tris_in_window(xy, tri, box)
+    tw = _tris_in_window(xy, tri, box)                       # ordenado (flatnonzero)
+    sel = np.flatnonzero(np.isin(ex['t'], tw))
+    t, e, w, mr = ex['t'][sel], ex['e'][sel], ex['w'][sel], m[sel]
     if not fine or arch == 'FNO_BipartiteGNN_Elem':
-        return list(xy[tri[tw]]), ex['e_tri'][tw], in_om[tw]
-    if ex['pset'] == 'overlay':                    # FNO2d: pedaços célula ∩ triângulo
-        sel = np.isin(ex['t'], tw)
-        t, c = ex['t'][sel], D['cell'][sel]
-        key, inv = np.unique(t.astype(np.int64) * len(D['cells']) + c, return_inverse=True)
-        val = np.bincount(inv, ex['e'][sel] * ex['w'][sel]) / np.bincount(inv, ex['w'][sel])
-        wsum = np.bincount(inv, ex['w'][sel])
-        tu, cu = key // len(D['cells']), key % len(D['cells'])
+        grp, polys, G = np.searchsorted(tw, t), list(xy[tri[tw]]), len(tw)
+    elif ex['pset'] == 'overlay':                            # FNO2d: pedaços célula ∩ triângulo
+        nc = len(D['cells'])
+        key, grp = np.unique(t.astype(np.int64) * nc + D['cell'][sel], return_inverse=True)
+        tu, cu = key // nc, key % nc
         pieces = shapely.intersection(shapely.polygons(xy[tri[tu]]), shapely.polygons(D['cells'][cu]))
         area = shapely.area(pieces)
-        D.setdefault('_piece_check', []).append(float(np.max(np.abs(area - wsum) / area)))
-        polys = [np.asarray(p.exterior.coords)[:-1] for p in pieces]
-        return polys, val, in_om[tu]
-    # P1 (FNO_GNN, Split): 16 subtriângulos da quadratura, média dos 3 pontos médios
-    K, bary = D['K'], D['bary']
-    e = ex['e'].reshape(-1, K)[tw].reshape(len(tw), K // 3, 3)
-    m = np.einsum('kj,tjd->tkd', bary, xy[tri[tw]]).reshape(len(tw), K // 3, 3, 2)
-    m01, m12, m20 = m[:, :, 0], m[:, :, 1], m[:, :, 2]
-    V = np.stack([m01 + m20 - m12, m01 + m12 - m20, m12 + m20 - m01], axis=2)   # vértices
-    return list(V.reshape(-1, 3, 2)), e.mean(-1).ravel(), np.repeat(in_om[tw], K // 3)
+        D.setdefault('_piece_check', []).append(
+            float(np.max(np.abs(area - np.bincount(grp, w)) / area)))
+        polys, G = [np.asarray(p.exterior.coords)[:-1] for p in pieces], len(key)
+    else:                                                    # P1: 16 subtriângulos da quadratura
+        K, bary = D['K'], D['bary']
+        grp = np.searchsorted(tw, sel // K) * (K // 3) + (sel % K) // 3
+        mid = np.einsum('kj,tjd->tkd', bary, xy[tri[tw]]).reshape(len(tw), K // 3, 3, 2)
+        m01, m12, m20 = mid[:, :, 0], mid[:, :, 1], mid[:, :, 2]
+        V = np.stack([m01 + m20 - m12, m01 + m12 - m20, m12 + m20 - m01], axis=2)   # vértices
+        polys, G = list(V.reshape(-1, 3, 2)), len(tw) * (K // 3)
+    den = np.bincount(grp, w, minlength=G)
+    den_r = np.bincount(grp, w * mr, minlength=G)
+    num_r = np.bincount(grp, e * w * mr, minlength=G)
+    on = (den > 0) & (den_r >= 0.5 * den)
+    val = np.divide(num_r, den_r, out=np.zeros(G), where=den_r > 0)
+    return polys, val, on
+
+
+def row_mask(D, arch, region):
+    """Pontos de avaliação da arch na região: int = código de regions.BANDS para o d da
+    figura (0 quinas, 1 fronteira sem quinas, 2 interior); 'entreferro' = pontos dos
+    triângulos de ar com centróide entre o raio externo do estator e o interno do rotor."""
+    ex = D['E'][arch]
+    if region == 'entreferro':
+        return D['gap_tri'][ex['t']] & D['in_omega'][ex['t']]
+    return D['code'][ex['pset']] == region
 
 
 # --------------------------------------------------------------------------------------------
@@ -212,7 +286,7 @@ def render(D, windows=None, fine=False, percentile=99.0, d=None, show_band=False
     from matplotlib.colors import Normalize
     from matplotlib.ticker import FuncFormatter, MaxNLocator
     windows = windows or DEFAULT_WINDOWS
-    d = REGIONS_D_MM[0] if d is None else d
+    d = D['d'] if d is None else d
     name = name or (FIG_NAME + ('_fino' if fine else ''))
     archs = [a for a in REGIONS_ARCHS if a in D['E']]
     xy, tri, iface = D['xy'], D['tri'], D['iface']
@@ -232,7 +306,9 @@ def render(D, windows=None, fine=False, percentile=99.0, d=None, show_band=False
         for i, rname in enumerate(windows):
             box = _box(windows[rname])
             x0, x1, y0, y1 = box
-            P = {a: panel_polys(D, a, box, fine) for a in archs}
+            # [REMOVIDO] tudo colorido: P = {a: panel_polys(D, a, box, fine) for a in archs}
+            reg = ROW_REGION.get(rname, 'entreferro')
+            P = {a: panel_polys(D, a, box, fine, row_mask(D, a, reg)) for a in archs}
             vals = np.concatenate([v[om] for _, v, om in P.values()])
             vmax = float(np.percentile(vals, percentile))
             over = {a: int((v[om] > vmax).sum()) for a, (_, v, om) in P.items()}
@@ -372,7 +448,7 @@ if __name__ == '__main__':
 
     print(f'amostra {args.sample} ({args.loss}); d = {args.d:.4f} mm; percentil {args.percentile:g}')
     _print_windows(DEFAULT_WINDOWS)
-    D = compute_errors(args.sample, args.loss)
+    D = compute_errors(args.sample, args.loss, args.d)
     out = dict(sample_idx=args.sample, loss=args.loss, d_mm=args.d, band=args.band,
                runs={ARTICLE_ARCH_NAME[a]: dict(run_dir=v['run'], epoch=v['epoch'])
                      for a, v in D['E'].items()}, modes={})

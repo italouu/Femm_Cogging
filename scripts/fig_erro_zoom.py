@@ -537,6 +537,40 @@ def render_locator(D, windows=None, out_dir=ARTICLE_FIG_DIR, name=FIG_NAME + '_l
     return str(out_dir / f'{name}.pdf')
 
 
+def zoom_data(D, windows=None, fine=False, percentile=99.0):
+    """Dados do que é pintado nos painéis, por região (linha) e arch: os mesmos polígonos
+    recortados de panel_polys (sem cálculo novo de erro). Por arch: listas val [T], area
+    [mm²], cx, cy [mm] (centróide) de cada pedaço pintado e um resumo (média ponderada pela
+    área, máximo, p50/p95/p99 dos valores, área total). Só a amostra de D; não é métrica."""
+    import shapely
+    windows = windows or DEFAULT_WINDOWS
+    archs = [a for a in REGIONS_ARCHS if a in D['E']]
+    out = {}
+    for rname, win in windows.items():
+        box = _box(win)
+        x0, x1, y0, y1 = box
+        reg = ROW_REGION.get(rname, 'entreferro')
+        zone = shapely.intersection(region_zone(D, reg, box), shapely.box(x0, y0, x1, y1))
+        A = {}
+        for a in archs:
+            paths, v, _, a_tot = panel_polys(D, a, box, fine, row_mask(D, a, reg), zone)
+            g = [shapely.Polygon(r[0], r[1:]) for r in (p.to_polygons(closed_only=False) for p in paths)]
+            area = shapely.area(g)
+            c = shapely.get_coordinates(shapely.centroid(g))
+            A[ARTICLE_ARCH_NAME[a]] = dict(
+                n=int(len(v)), area_total_mm2=float(a_tot),
+                media_area_T=float(np.sum(v * area) / np.sum(area)), max_T=float(v.max()),
+                p50_T=float(np.percentile(v, 50)), p95_T=float(np.percentile(v, 95)),
+                p99_T=float(np.percentile(v, 99)),
+                val=np.round(v, 6).tolist(), area=np.round(area, 8).tolist(),
+                cx=np.round(c[:, 0], 5).tolist(), cy=np.round(c[:, 1], 5).tolist())
+        vals = np.concatenate([np.asarray(x['val']) for x in A.values()])
+        out[rname] = dict(window=dict(cx=win[0], cy=win[1], side=win[2], box=list(box)),
+                          region=str(reg), zone_area_mm2=float(zone.area),
+                          vmax_T=float(np.percentile(vals, percentile)), archs=A)
+    return out
+
+
 def make_figure(sample_idx=2184, windows=None, d=None, percentile=99.0, fine=False,
                 show_band=False, loss='mae', D=None):
     """Figura (1 modo) + painel de localização; D: saída de compute_errors (reaproveitada)."""
@@ -561,6 +595,8 @@ if __name__ == '__main__':
     ap.add_argument('--band', action='store_true', help='contorno da faixa dist(Γ) <= d, tracejado')
     ap.add_argument('--d', type=float, default=REGIONS_D_MM[0])
     ap.add_argument('--percentile', type=float, default=99.0)
+    ap.add_argument('--sem-figura', action='store_true',
+                    help='só grava os dados do zoom (dados/fig_erro_zoom/*_dados.json)')
     args = ap.parse_args()
 
     print(f'amostra {args.sample} ({args.loss}); d = {args.d:.4f} mm; percentil {args.percentile:g}')
@@ -570,6 +606,30 @@ if __name__ == '__main__':
                runs={ARTICLE_ARCH_NAME[a]: dict(run_dir=v['run'], epoch=v['epoch'])
                      for a, v in D['E'].items()}, modes={})
     modes = {'both': (False, True), 'coarse': (False,), 'fine': (True,)}[args.mode]
+    # dados do zoom por região × arch × modo (resultados/, fora do git)
+    jd = OUT_ROOT / 'dados' / 'fig_erro_zoom'
+    jd.mkdir(parents=True, exist_ok=True)
+    zd = {m: zoom_data(D, DEFAULT_WINDOWS, fine, args.percentile) for m, fine in
+          (('normal', False), ('fino', True)) if fine in modes}
+    dados = dict(sample_idx=args.sample, loss=args.loss, d_mm=args.d, percentile=args.percentile,
+                 unidades=dict(val='T (Δ|B|)', area='mm²', cx='mm', cy='mm'),
+                 runs=out['runs'],
+                 regioes={r: dict({k: v for k, v in zd[next(iter(zd))][r].items()
+                                   if k not in ('archs', 'vmax_T')},
+                                  vmax_T={m: zd[m][r]['vmax_T'] for m in zd},
+                                  archs={a: {m: zd[m][r]['archs'][a] for m in zd}
+                                         for a in zd[next(iter(zd))][r]['archs']})
+                          for r in DEFAULT_WINDOWS})
+    p_dados = jd / f'sample_{args.sample:06d}_{args.loss}_dados.json'
+    p_dados.write_text(json.dumps(dados, ensure_ascii=False), encoding='utf-8')
+    print(f'dados do zoom: {p_dados} ({p_dados.stat().st_size / 1e6:.1f} MB)')
+    for r, x in dados['regioes'].items():
+        for a, y in x['archs'].items():
+            print(f'  {r:10s} {a:14s} ' + '  '.join(
+                f"{m}: n={z['n']:5d} média={z['media_area_T']:.4f} p99={z['p99_T']:.4f} máx={z['max_T']:.3f}"
+                for m, z in y.items()))
+    if args.sem_figura:
+        raise SystemExit
     for fine in modes:
         _, rep = make_figure(args.sample, DEFAULT_WINDOWS, args.d, args.percentile, fine,
                              args.band, args.loss, D=D)

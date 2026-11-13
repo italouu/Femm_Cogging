@@ -109,6 +109,7 @@ GRAPH_EDGE_COLOR, GRAPH_EDGE_LW = '0.15', 1.2               # grafo: quase preto
 CROSS_EDGE_COLOR, CROSS_EDGE_LW = '#B0407F', 1.1            # cruzada / Edge_aux: rosa escuro, tracejada
 # fundo dos painéis de grafo (b–d): material de cada elemento (classe das features da Elem)
 # em tons muito fracos das mesmas cores
+CELL_INSET, CELL_LW = 0.10, 0.7      # (a): recuo do contorno da célula (fração) e espessura
 FAINT = {'ferro': '#E9F2F9', 'ar': '#F5FAFD', 'cobre': '#FFF8E3', 'ima+': '#E8F6F1', 'ima-': '#F2FAF7'}
 CROSS_EDGE_LS = (0, (3, 2))
 NEUTRAL_FACE, NEUTRAL_EDGE = 'white', '0.55'
@@ -337,7 +338,8 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
     box = F['box']
     side = box[1] - box[0]
     nr, nc = (2, 2) if layout == '2x2' else (1, 4)
-    gap, h_t, h_leg = 0.08, (0.16 if titles else 0.02), 0.62
+    # [REMOVIDO] gap, h_t, h_leg = 0.08, (0.16 if titles else 0.02), 0.62  (legenda com 3 linhas)
+    gap, h_t, h_leg = 0.08, (0.16 if titles else 0.02), 0.80
     pw = (FIG_WIDTH_IN - (nc - 1) * gap - 0.04) / nc
     ph = pw * (box[3] - box[2]) / side
     h_lab = 0.16                                               # rótulo (a)–(d) abaixo
@@ -377,12 +379,18 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
                     transform=ax.transAxes, ha='center', va='top')
             axs.append(ax)
         a, b, c, d = axs
-        # (a) células pintadas pela classe
-        a.add_collection(PolyCollection(F['cells'], facecolors=col[F['c_cls']], edgecolors='white',
-                                        linewidths=0.3, zorder=0))
-        # malha por cima na (a) também (mostra onde a grade erra)
-        a.add_collection(LineCollection(F['mesh_seg'], colors='0.35', linewidths=MESH_LW,
-                                        alpha=0.6, zorder=2))
+        # [REMOVIDO] células cheias na cor forte (confundia a discretização com a geometria):
+        # a.add_collection(PolyCollection(F['cells'], facecolors=col[F['c_cls']], edgecolors='white',
+        #                                 linewidths=0.3, zorder=0))
+        # a.add_collection(LineCollection(F['mesh_seg'], colors='0.35', linewidths=MESH_LW,
+        #                                 alpha=0.6, zorder=2))
+        # (a) fundo = material real (tom fraco, como b–d); cada célula só com o contorno fino na cor
+        # forte do SEU material (x_hw), recuado para dentro (CELL_INSET) para que células vizinhas
+        # não dividam a borda: a célula que atravessa a interface mostra a cor errada sobre o fundo
+        cc = F['cells'].mean(1, keepdims=True)
+        inset = cc + (1 - CELL_INSET) * (F['cells'] - cc)
+        a.add_collection(PolyCollection(inset, facecolors='none', edgecolors=col[F['c_cls']],
+                                        linewidths=CELL_LW, zorder=2))
         # [REMOVIDO] marcadores antigos (vértice = círculo cheio, elemento = quadrado):
         # # (b) grafo de vértices
         # b.add_collection(LineCollection(F['b_seg'], colors=GRAPH_EDGE_COLOR,
@@ -409,7 +417,7 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
         #           linewidths=lw_m, zorder=4)
         # fundo: região de cada material, em tom muito fraco (b, c, d)
         faint = np.array([plt.matplotlib.colors.to_rgba(FAINT[k]) for k in CLS_ORDER])
-        for ax in (b, c, d):
+        for ax in (a, b, c, d):
             fc = faint[F['tri_cls']]
             ax.add_collection(PolyCollection(F['tri_poly'], facecolors=fc, edgecolors=fc,
                                              linewidths=0.3, zorder=0))
@@ -441,7 +449,9 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
                va='bottom', zorder=6, bbox=dict(fc='white', ec='none', pad=0.6, alpha=0.85))
         # legenda única
         present = [k for k in CLS_ORDER if CLASSES[k][0] in F['materiais']]
-        h1 = [Patch(fc=CLASSES[k][1], ec='k', lw=0.4, label=CLASSES[k][0]) for k in present]
+        # [REMOVIDO] h1 = [Patch(fc=CLASSES[k][1], ec='k', lw=0.4, label=CLASSES[k][0]) for k in present]
+        h1 = [Patch(fc=FAINT[k], ec=CLASSES[k][1], lw=1.2, label=CLASSES[k][0]) for k in present]
+        h1.append(Patch(fc='none', ec='0.35', lw=CELL_LW, label='Célula da grade (contorno, cor do material)'))
         # [REMOVIDO] legenda com quadrado para elemento e cinzas próximos nas arestas
         ms_l = 7.0
         h2 = [Line2D([], [], ls='', marker='o', ms=ms_l, mfc='white', mec='0.35', mew=RING_LW,

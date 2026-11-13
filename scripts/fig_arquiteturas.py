@@ -9,9 +9,12 @@ Gramática comum:
   - cores por tipo de bloco: dados (branco, canto reto), FNO (azul), projeção (verde),
     GNN (laranja), gate (rosa).
 
-Saída: docs/figures/arq_{fno2d,fno_gnn,fno_bipartite,fno_splitgnn}.{pdf,png} (7,16 in, 8 pt).
+Padrão: quadrados de 3,5 in (7 pt), fluxo de cima para baixo à esquerda e a camada aberta à
+direita; FNO2d sem detalhe. --estilo largo: versões de 7,16 in (fluxo horizontal + detalhe embaixo).
+Saída: docs/figures/arq_{fno2d,fno_gnn,fno_bipartite,fno_splitgnn}.{pdf,png}.
 
     python -m scripts.fig_arquiteturas [--only fno2d fno_gnn fno_bipartite fno_splitgnn]
+                                       [--estilo quadrado|largo]
 """
 import argparse
 
@@ -47,12 +50,18 @@ class Node:
 
 
 class Diagram:
-    def __init__(self, H):
+    # [REMOVIDO] __init__(self, H): só figura própria de 7,16 in e 8 pt -- agora aceita um eixo
+    # já existente (painel da figura 2×2), outra largura e outra fonte
+    def __init__(self, H, width_in=FIG_WIDTH_IN, fs=FONT_PT, ax=None):
         import matplotlib.pyplot as plt
         self.plt = plt
         self.H = H
-        self.fig = plt.figure(figsize=(FIG_WIDTH_IN, FIG_WIDTH_IN * H / W_UNITS))
-        ax = self.fig.add_axes([0, 0, 1, 1])
+        self.fs = fs
+        if ax is None:
+            self.fig = plt.figure(figsize=(width_in, width_in * H / W_UNITS))
+            ax = self.fig.add_axes([0, 0, 1, 1])
+        else:
+            self.fig = ax.figure
         ax.set_xlim(0, W_UNITS)
         ax.set_ylim(0, H)
         ax.set_aspect('equal')
@@ -64,14 +73,14 @@ class Diagram:
         style = 'square,pad=0' if kind == 'data' else 'round,pad=0,rounding_size=1.0'
         self.ax.add_patch(FancyBboxPatch((x - w / 2, y - h / 2), w, h, boxstyle=style,
                                          fc=COLORS[kind], ec=EDGE, lw=lw, zorder=3))
-        self.ax.text(x, y, txt, ha='center', va='center', fontsize=fs or FONT_PT, zorder=4,
+        self.ax.text(x, y, txt, ha='center', va='center', fontsize=fs or self.fs, zorder=4,
                      linespacing=1.15)
         return Node(x, y, w, h)
 
     def op(self, x, y, sym, r=1.6):
         from matplotlib.patches import Circle
         self.ax.add_patch(Circle((x, y), r, fc='white', ec=EDGE, lw=0.8, zorder=3))
-        self.ax.text(x, y, sym, ha='center', va='center', fontsize=FONT_PT + 1, zorder=4)
+        self.ax.text(x, y, sym, ha='center', va='center', fontsize=self.fs + 1, zorder=4)
         return Node(x, y, 2 * r, 2 * r)
 
     def bar(self, x, y0, y1, w=2.2):
@@ -79,31 +88,51 @@ class Diagram:
         from matplotlib.patches import Rectangle
         self.ax.add_patch(Rectangle((x - w / 2, y0), w, y1 - y0, fc='0.85', ec=EDGE, lw=0.8,
                                     zorder=3))
-        self.ax.text(x, (y0 + y1) / 2, r'$\|$', ha='center', va='center', fontsize=FONT_PT,
+        self.ax.text(x, (y0 + y1) / 2, r'$\|$', ha='center', va='center', fontsize=self.fs,
                      zorder=4)
         return Node(x, (y0 + y1) / 2, w, y1 - y0)
+
+    def bar_h(self, x0, x1, y, h=2.6):
+        """Concatenação horizontal (entradas por cima, saída por baixo)."""
+        from matplotlib.patches import Rectangle
+        self.ax.add_patch(Rectangle((x0, y - h / 2), x1 - x0, h, fc='0.85', ec=EDGE, lw=0.8,
+                                    zorder=3))
+        self.ax.text((x0 + x1) / 2, y, 'concatenação', ha='center', va='center',
+                     fontsize=self.fs - 1.5, zorder=4)
+        return Node((x0 + x1) / 2, y, x1 - x0, h)
+
+    def stack(self, x, y, w, h, txt, kind, n=3, d=1.2):
+        """Bloco repetido: n-1 cópias deslocadas atrás do bloco principal."""
+        from matplotlib.patches import FancyBboxPatch
+        for k in range(n - 1, 0, -1):
+            self.ax.add_patch(FancyBboxPatch((x - w / 2 + k * d, y - h / 2 + k * d), w, h,
+                                             boxstyle='round,pad=0,rounding_size=1.0',
+                                             fc=COLORS[kind], ec=EDGE, lw=0.6, zorder=2.5))
+        return self.box(x, y, w, h, txt, kind)
 
     def arrow(self, *pts, ls='-', color=ARROW, lw=0.8, head=True):
         from matplotlib.patches import FancyArrowPatch
         P = np.asarray(pts, float)
         if len(P) > 2:
-            self.ax.plot(P[:-1, 0], P[:-1, 1], color=color, lw=lw, ls=ls, zorder=2,
+            # [REMOVIDO] zorder=2 (ficava atrás das cópias do bloco empilhado, zorder 2.5)
+            self.ax.plot(P[:-1, 0], P[:-1, 1], color=color, lw=lw, ls=ls, zorder=2.8,
                          solid_capstyle='butt')
         self.ax.add_patch(FancyArrowPatch(P[-2], P[-1], arrowstyle='-|>' if head else '-',
                                           mutation_scale=7, lw=lw, color=color, ls=ls,
-                                          shrinkA=0, shrinkB=0, zorder=2))
+                                          shrinkA=0, shrinkB=0, zorder=2.8))
 
     def text(self, x, y, s, fs=None, **kw):
         kw.setdefault('ha', 'center')
         kw.setdefault('va', 'center')
-        self.ax.text(x, y, s, fontsize=fs or FONT_PT - 1, zorder=5, **kw)
+        self.ax.text(x, y, s, fontsize=fs or self.fs - 1, zorder=5, **kw)
 
-    def frame(self, x0, y0, x1, y1, label):
+    def frame(self, x0, y0, x1, y1, label, bottom=False):
         from matplotlib.patches import FancyBboxPatch
         self.ax.add_patch(FancyBboxPatch((x0, y0), x1 - x0, y1 - y0,
                                          boxstyle='round,pad=0,rounding_size=1.5', fc='none',
                                          ec=FRAME, lw=0.8, ls=(0, (4, 2.5)), zorder=1))
-        self.ax.text(x0 + 1.2, y1 - 1.2, label, ha='left', va='top', fontsize=FONT_PT - 0.5,
+        self.ax.text(x0 + 1.2, (y0 + 1.2) if bottom else (y1 - 1.2), label, ha='left',
+                     va='bottom' if bottom else 'top', fontsize=self.fs - 0.5,
                      style='italic', color='0.25', zorder=5)
 
     def zoom(self, node, x0, x1, y1):
@@ -313,17 +342,234 @@ def fig_fno_splitgnn():
     return D.save('arq_fno_splitgnn')
 
 
-FIGS = dict(fno2d=fig_fno2d, fno_gnn=fig_fno_gnn, fno_bipartite=fig_fno_bipartite,
-            fno_splitgnn=fig_fno_splitgnn)
+# [REMOVIDO] bloco principal anterior (só as figuras largas) -- substituído pela versão quadrada abaixo:
+# [REMOVIDO] FIGS = dict(fno2d=fig_fno2d, fno_gnn=fig_fno_gnn, fno_bipartite=fig_fno_bipartite,
+# [REMOVIDO]             fno_splitgnn=fig_fno_splitgnn)
+#
+#
+# [REMOVIDO] if __name__ == '__main__':
+# [REMOVIDO]     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
+# [REMOVIDO]     ap.add_argument('--only', nargs='+', choices=list(FIGS), default=list(FIGS))
+# [REMOVIDO]     args = ap.parse_args()
+# [REMOVIDO]     import matplotlib.pyplot as plt
+# [REMOVIDO]     with plt.rc_context():
+# [REMOVIDO]         apply_style()
+# [REMOVIDO]         apply_article_style(FONT_PT)
+# [REMOVIDO]         for k in args.only:
+# [REMOVIDO]             print('figura:', FIGS[k]())
+
+
+# (versões largas mantidas acima; acessíveis por --estilo largo)
+FIGS_LARGO = dict(fno2d=fig_fno2d, fno_gnn=fig_fno_gnn, fno_bipartite=fig_fno_bipartite,
+                  fno_splitgnn=fig_fno_splitgnn)
+
+
+# --------------------------------------------------------------------------------------------
+# versão quadrada (padrão): fluxo de cima para baixo à esquerda, camada aberta à direita;
+# FNO2d sem detalhe (já é bem documentado)
+# --------------------------------------------------------------------------------------------
+SQ_IN = 3.5                       # lado do quadrado [in] (uma coluna; 2×2 em duas colunas)
+SQ_FONT = 7
+FX = 48                           # x da moldura do detalhe (esquerda)
+
+
+def _gate_txt():
+    return 'gate\nsig(MLP)'
+
+
+def sq_fno2d(D):
+    x = 50
+    xin = D.box(x, 89, 36, 11, r'$x_{hw}$' + '\n' + r'$(\mu_r, M, J)$')
+    P = D.box(x, 70, 44, 9, 'Lifting $P$ (MLP)', 'fno')
+    F = D.stack(x, 49.5, 44, 12, 'Camada de Fourier\n' + r'$\times 4$', 'fno')
+    Q = D.box(x, 29, 44, 9, 'Projeção $Q$ (MLP)', 'fno')
+    yo = D.box(x, 10, 36, 11, r'$\hat y_{hw}$' + '\n' + r'$(B_r, B_\theta)$')
+    for a, b in ((xin, P), (P, F), (F, Q), (Q, yo)):
+        D.arrow(a.b, b.t)
+
+
+def sq_left_single(D, proj_txt, x_txt, gnn_txt, y_txt, side_txt):
+    """Coluna esquerda das híbridas de 1 tipo de nó (fluxo de cima para baixo)."""
+    cx = 21
+    xin = D.box(cx, 92, 30, 7, r'$x_{hw}$ $(\mu_r, M, J)$')
+    fno = D.box(cx, 80.5, 30, 7, 'FNO', 'fno')
+    pr = D.box(cx, 67, 30, 10, proj_txt, 'proj')
+    u = D.box(cx, 54, 10, 6, r'$\tilde u$')
+    cat = D.op(cx, 44, r'$\|$', r=2.4)
+    xn = D.box(39, 44, 12, 6, x_txt)
+    g = D.box(cx, 31, 24, 10, gnn_txt, 'gnn')
+    side = D.box(40.5, 31, 13, 7, side_txt, fs=SQ_FONT - 1)
+    plus = D.op(cx, 17.5, r'$+$', r=2.4)
+    yo = D.box(cx, 6, 14, 7, y_txt)
+    D.arrow(xin.b, fno.t)
+    D.arrow(fno.b, pr.t)
+    D.text(cx + 1.5, 75.5, r'$\hat y_{hw}$', ha='left')
+    D.arrow(pr.b, u.t)
+    D.arrow(u.b, cat.t)
+    D.arrow(xn.l, cat.r)
+    D.arrow(cat.b, g.t)
+    D.arrow(side.l, g.r)
+    D.arrow(g.b, plus.t)
+    D.text(cx + 1.5, 23, r'$\Delta$', ha='left')
+    D.arrow(plus.b, yo.t)
+    D.arrow(u.l, (4, u.y), (4, plus.y), plus.l)                     # resíduo
+    D.text(2.6, (u.y + plus.y) / 2, 'resíduo', rotation=90)
+    return g
+
+
+def sq_edgeconv(D):
+    D.frame(FX, 2, 98, 98, r'Camada de mensagens ($\times 3$)', bottom=True)
+    e = D.box(57, 90, 12, 6, r'$e_{ij}$')
+    hi = D.box(76, 90, 10, 6, r'$h_i$')
+    hj = D.box(92, 90, 9, 6, r'$h_j$')
+    gt = D.box(57, 76, 14, 9, _gate_txt(), 'gate')
+    W = D.box(76, 76, 10, 7, r'$W$', 'gnn')
+    mul = D.op(76, 63, r'$\times$', r=2.4)
+    sm = D.op(76, 51, r'$\Sigma$', r=2.4)
+    cat = D.bar_h(70, 96, 40)
+    upd = D.box(83, 27, 24, 8, 'MLP do nó', 'gnn')
+    out = D.box(83, 13, 14, 7, r'$h_j^{\ell+1}$')
+    D.arrow(e.b, gt.t)
+    D.arrow(hi.b, W.t)
+    D.arrow(gt.b, (gt.x, mul.y), mul.l)
+    D.arrow(W.b, mul.t)
+    D.arrow(mul.b, sm.t)
+    D.text(78.6, 57, 'mensagem', ha='left', fs=SQ_FONT - 1.5)
+    D.arrow(sm.b, (sm.x, cat.t[1]))
+    D.arrow(hj.b, (hj.x, cat.t[1]))
+    D.arrow(cat.b, upd.t)
+    D.arrow(upd.b, out.t)
+
+
+def _msg_col(D, cx, e_txt, h_txt, W_txt, top=90, label=None, ew=8, hw=8, dx=5, gw=9,
+             wW=8, gate_txt=None):
+    """Mensagem em coluna: e e h no topo; gate e W; ×; Σ. Devolve o Σ."""
+    e = D.box(cx - dx, top, ew, 6, e_txt, fs=SQ_FONT - 0.5)
+    h = D.box(cx + dx, top, hw, 6, h_txt, fs=SQ_FONT - 0.5)
+    gt = D.box(cx - dx, top - 13, gw, 8, gate_txt or _gate_txt(), 'gate', fs=SQ_FONT - 1.5)
+    W = D.box(cx + dx, top - 13, wW, 7, W_txt, 'gnn')
+    mul = D.op(cx + dx, top - 25, r'$\times$', r=2.2)
+    sm = D.op(cx + dx, top - 35, r'$\Sigma$', r=2.2)
+    D.arrow(e.b, gt.t)
+    D.arrow(h.b, W.t)
+    D.arrow(gt.b, (gt.x, mul.y), mul.l)
+    D.arrow(W.b, mul.t)
+    D.arrow(mul.b, sm.t)
+    if label:
+        D.text(cx, top + 5.6, label, fs=SQ_FONT - 1.5)
+    return sm
+
+
+def sq_bipartite_detail(D):
+    D.frame(FX, 2, 98, 98, r'Camada bipartida ($\times 3$)', bottom=True)
+    s1 = _msg_col(D, 61, r'$e^{\mathrm{dual}}$', r'$h_i$', r'$W_1$', label='elem–elem', ew=9)
+    s2 = _msg_col(D, 85, r'$d_{aj}$', r'$x^{\mathrm{vert}}_a$', r'$W_2$',
+                  label='vért' + r'$\to$' + 'elem', hw=9)
+    hj = D.box(54, 55, 9, 6, r'$h_j$')
+    cat = D.bar_h(50, 96, 44)
+    upd = D.box(73, 30, 26, 8, 'MLP do nó', 'gnn')
+    out = D.box(73, 15, 14, 7, r'$h_j^{\ell+1}$')
+    for n in (s1, s2, hj):
+        D.arrow(n.b, (n.x, cat.t[1]))
+    D.arrow(cat.b, upd.t)
+    D.arrow(upd.b, out.t)
+
+
+def sq_split(D):
+    xin = D.box(24, 93, 34, 7, r'$x_{hw}$ $(\mu_r, M, J)$')
+    fno = D.box(24, 82, 30, 7, 'FNO', 'fno')
+    pr = D.box(24, 69.5, 30, 10, 'Projeção\ngrade ' + r'$\to$' + ' grafo', 'proj')
+    ua = D.box(14, 56, 12, 6, r'$\tilde u^{\mathrm{aux}}$')
+    ub = D.box(34, 56, 12, 6, r'$\tilde u^{\mathrm{base}}$')
+    ca = D.op(14, 45.5, r'$\|$', r=2.4)
+    cb = D.op(34, 45.5, r'$\|$', r=2.4)
+    xs = D.box(24, 45.5, 9, 9, r'$x^{\mathrm{aux}}$' + '\n' + r'$x^{\mathrm{base}}$', fs=SQ_FONT - 0.5)
+    g = D.box(24, 32, 34, 9, 'SplitGNN (3 camadas)', 'gnn')
+    pa = D.op(14, 19, r'$+$', r=2.4)
+    pb = D.op(34, 19, r'$+$', r=2.4)
+    oa = D.box(14, 7, 13, 7, r'$\hat y^{\mathrm{aux}}$')
+    ob = D.box(34, 7, 13, 7, r'$\hat y^{\mathrm{base}}$')
+    D.arrow(xin.b, fno.t)
+    D.arrow(fno.b, pr.t)
+    D.text(25.5, 77, r'$\hat y_{hw}$', ha='left')
+    D.arrow(pr.at('b', -10), ua.t)
+    D.arrow(pr.at('b', 10), ub.t)
+    D.arrow(ua.b, ca.t)
+    D.arrow(ub.b, cb.t)
+    D.arrow(xs.l, ca.r)
+    D.arrow(xs.r, cb.l)
+    D.arrow(ca.b, (ca.x, g.t[1]))
+    D.arrow(cb.b, (cb.x, g.t[1]))
+    D.arrow((pa.x, g.b[1]), pa.t)
+    D.arrow((pb.x, g.b[1]), pb.t)
+    D.arrow(pa.b, oa.t)
+    D.arrow(pb.b, ob.t)
+    D.arrow(ua.l, (3, ua.y), (3, pa.y), pa.l)
+    D.arrow(ub.r, (45, ub.y), (45, pb.y), pb.r)
+    D.text(1.8, 38, 'resíduo', rotation=90, fs=SQ_FONT - 1.5)
+    D.text(46.4, 38, 'resíduo', rotation=90, fs=SQ_FONT - 1.5)
+    # detalhe: 3 mensagens + 2 atualizações
+    D.frame(FX, 2, 98, 99, r'Camada SplitGNN ($\times 3$)', bottom=True)
+    kw = dict(top=89, ew=7, hw=7, dx=4, gw=7.5, wW=7, gate_txt='gate')
+    s1 = _msg_col(D, 57, r'$e^{\mathrm{dual}}$', r'$h^{\mathrm{aux}}_j$', r'$W_1$',
+                  label='aux' + r'$\to$' + 'aux', **kw)
+    s2 = _msg_col(D, 73, r'$e^{\mathrm{aux}}$', r'$h^{\mathrm{base}}_c$', r'$W_2$',
+                  label='base' + r'$\to$' + 'aux', **kw)
+    s3 = _msg_col(D, 89, r'$e^{\mathrm{aux}}$', r'$h^{\mathrm{aux}}_i$', r'$W_3$',
+                  label='aux' + r'$\to$' + 'base', **kw)
+    ha = D.box(53, 54, 8, 6, r'$h^{\mathrm{aux}}_i$', fs=SQ_FONT - 0.5)
+    hb = D.box(85, 54, 8, 6, r'$h^{\mathrm{base}}_c$', fs=SQ_FONT - 0.5)
+    cat_a = D.bar_h(50, 81, 44)
+    cat_b = D.bar_h(83, 97, 44)
+    for n in (ha, s1, s2):
+        D.arrow(n.b, (n.x, cat_a.t[1]))
+    for n in (hb, s3):
+        D.arrow(n.b, (n.x, cat_b.t[1]))
+    ma = D.box(65.5, 30, 22, 8, r'MLP$^{\mathrm{aux}}$', 'gnn')
+    mb = D.box(90, 30, 13, 8, r'MLP$^{\mathrm{base}}$', 'gnn', fs=SQ_FONT - 0.5)
+    oa_ = D.box(65.5, 15, 14, 7, r'$h_i^{\mathrm{aux},\,\ell+1}$')
+    ob_ = D.box(90, 15, 13, 7, r'$h_c^{\mathrm{base},\,\ell+1}$', fs=SQ_FONT - 0.5)
+    D.arrow((ma.x, cat_a.b[1]), ma.t)
+    D.arrow((mb.x, cat_b.b[1]), mb.t)
+    D.arrow(ma.b, oa_.t)
+    D.arrow(mb.b, ob_.t)
+
+
+def sq_fno_gnn(D):
+    sq_left_single(D, 'Projeção\ngrade ' + r'$\to$' + ' nós', r'$x^{\mathrm{nó}}$',
+                   'GNN\n3 camadas', r'$\hat y^{\mathrm{nó}}$', 'arestas\n' + r'$e_{ij}$')
+    sq_edgeconv(D)
+
+
+def sq_fno_bipartite(D):
+    sq_left_single(D, 'Projeção\ngrade ' + r'$\to$' + ' centr.', r'$x^{\mathrm{elem}}$',
+                   'GNN bipartida\n3 camadas', r'$\hat y^{\mathrm{elem}}$',
+                   r'$e^{\mathrm{dual}}$, $d$' + '\n' + r'$x^{\mathrm{vert}}$')
+    sq_bipartite_detail(D)
+
+
+SQ = dict(fno2d=sq_fno2d, fno_gnn=sq_fno_gnn, fno_bipartite=sq_fno_bipartite,
+          fno_splitgnn=sq_split)
+
+
+def render_square(key):
+    D = Diagram(100, width_in=SQ_IN, fs=SQ_FONT)
+    SQ[key](D)
+    return D.save(f'arq_{key}')
+
+
+FIGS = {k: (lambda k=k: render_square(k)) for k in SQ}
 
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    ap.add_argument('--only', nargs='+', choices=list(FIGS), default=list(FIGS))
+    ap.add_argument('--only', nargs='+', choices=list(SQ), default=list(SQ))
+    ap.add_argument('--estilo', choices=('quadrado', 'largo'), default='quadrado')
     args = ap.parse_args()
     import matplotlib.pyplot as plt
+    figs = FIGS if args.estilo == 'quadrado' else FIGS_LARGO
     with plt.rc_context():
         apply_style()
         apply_article_style(FONT_PT)
         for k in args.only:
-            print('figura:', FIGS[k]())
+            print('figura:', figs[k]())

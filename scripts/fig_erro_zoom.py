@@ -18,16 +18,16 @@ Modos (o que é desenhado):
     (surface_error_per_triangle). A média por área desses valores é o L1_A.
   - fine=True: resolução dos pontos de avaliação, sem interpolação adicional:
       FNO2d    -> cada pedaço célula ∩ triângulo, com Σ e·w / Σ w dos pontos do pedaço;
-      P1       -> cada um dos 16 subtriângulos da quadratura, com a média dos seus 3 pontos
-                  (pesos iguais);
-      Bipartite -> igual ao padrão.
+      P1 e Bipartite -> cada um dos 16 subtriângulos da quadratura, com a média dos seus 3
+                  pontos (pesos iguais; a Bipartite é constante no elemento, o FEMM não).
 
 Região por linha (ROW_REGION): só os pontos da região da linha são coloridos -- Quina =
 quinas (dist_q <= d), Interface = fronteira sem quinas (dist_f <= d < dist_q), com a
 classificação do regions por ponto de avaliação; Entreferro = ar entre o raio externo do
-estator e o interno do rotor. Um polígono desenhado é colorido se >= 50% do peso dos seus
-pontos está na região (valor = média só desses pontos); o resto da janela (outras regiões e
-fora de Ω) fica cinza.
+estator e o interno do rotor. Cada polígono desenhado é recortado pela forma exata da região
+(region_zone: discos de raio d nas quinas, faixa de largura d em Γ menos os discos, ou os
+triângulos do entreferro; tudo ∩ Ω) e só a parte de dentro é pintada, com a média dos pontos
+da região no polígono; o resto da janela fica cinza. A borda da região é a mesma nas 4 archs.
 
 Escala por linha: vmin = 0; vmax = percentil P (99) dos valores efetivamente desenhados na
 janela (polígonos coloridos), juntando as 4 archs; colorbar só retângulo (sem
@@ -136,7 +136,8 @@ def compute_errors(sample_idx, loss='mae', d=None):
     return dict(sample_idx=sample_idx, loss=loss, row=row, xy=xy, tri=tri, d=d,
                 in_omega=lay['in_omega'], iface=lay['iface'], corners=lay['corners'],
                 elem_mat=lay['elem_mat'], bary=lay['mesh_quad']['bary'].astype(np.float64),
-                K=K, cell=lay['overlay']['cell'], cells=cells, E=E, code=code, gap_tri=gap_tri)
+                K=K, cell=lay['overlay']['cell'], cells=cells, E=E, code=code, gap_tri=gap_tri,
+                vac_tri=lay['elem_mat'] == MATERIAL_ID['vacuum'], r_so=r_so, r_ri=r_ri)
 
 
 def _tris_in_window(xy, tri, box):
@@ -177,42 +178,140 @@ def _tris_in_window(xy, tri, box):
 #     return list(V.reshape(-1, 3, 2)), e.mean(-1).ravel(), np.repeat(in_om[tw], K // 3)
 
 
-def panel_polys(D, arch, box, fine, m):
-    """O que é desenhado na janela: polígonos [lista de [n,2]], valor [G] e 'colorido' [G].
-    m [Q] bool: pontos de avaliação da arch que pertencem à região da linha (fora de Ω = False).
-    Polígono = triângulo (normal, e a Bipartite nos dois modos), pedaço célula ∩ triângulo
-    (FNO2d fino) ou subtriângulo da quadratura (P1 fino). Colorido se >= 50% do peso dos seus
-    pontos está na região; valor = Σ e·w / Σ w só dos pontos da região."""
+# [REMOVIDO] panel_polys com a regra dos 50% (polígono inteiro colorido ou cinza: borda da
+# região em escada, diferente por arch) e a Bipartite sem subdivisão no fino -- substituída
+# pela versão abaixo, que recorta cada polígono pela forma exata da região (region_zone).
+# def panel_polys(D, arch, box, fine, m):
+#     """O que é desenhado na janela: polígonos [lista de [n,2]], valor [G] e 'colorido' [G].
+#     m [Q] bool: pontos de avaliação da arch que pertencem à região da linha (fora de Ω = False).
+#     Polígono = triângulo (normal, e a Bipartite nos dois modos), pedaço célula ∩ triângulo
+#     (FNO2d fino) ou subtriângulo da quadratura (P1 fino). Colorido se >= 50% do peso dos seus
+#     pontos está na região; valor = Σ e·w / Σ w só dos pontos da região."""
+#     import shapely
+#     xy, tri = D['xy'], D['tri']
+#     ex = D['E'][arch]
+#     tw = _tris_in_window(xy, tri, box)                       # ordenado (flatnonzero)
+#     sel = np.flatnonzero(np.isin(ex['t'], tw))
+#     t, e, w, mr = ex['t'][sel], ex['e'][sel], ex['w'][sel], m[sel]
+#     if not fine or arch == 'FNO_BipartiteGNN_Elem':
+#         grp, polys, G = np.searchsorted(tw, t), list(xy[tri[tw]]), len(tw)
+#     elif ex['pset'] == 'overlay':                            # FNO2d: pedaços célula ∩ triângulo
+#         nc = len(D['cells'])
+#         key, grp = np.unique(t.astype(np.int64) * nc + D['cell'][sel], return_inverse=True)
+#         tu, cu = key // nc, key % nc
+#         pieces = shapely.intersection(shapely.polygons(xy[tri[tu]]), shapely.polygons(D['cells'][cu]))
+#         area = shapely.area(pieces)
+#         D.setdefault('_piece_check', []).append(
+#             float(np.max(np.abs(area - np.bincount(grp, w)) / area)))
+#         polys, G = [np.asarray(p.exterior.coords)[:-1] for p in pieces], len(key)
+#     else:                                                    # P1: 16 subtriângulos da quadratura
+#         K, bary = D['K'], D['bary']
+#         grp = np.searchsorted(tw, sel // K) * (K // 3) + (sel % K) // 3
+#         mid = np.einsum('kj,tjd->tkd', bary, xy[tri[tw]]).reshape(len(tw), K // 3, 3, 2)
+#         m01, m12, m20 = mid[:, :, 0], mid[:, :, 1], mid[:, :, 2]
+#         V = np.stack([m01 + m20 - m12, m01 + m12 - m20, m12 + m20 - m01], axis=2)   # vértices
+#         polys, G = list(V.reshape(-1, 3, 2)), len(tw) * (K // 3)
+#     den = np.bincount(grp, w, minlength=G)
+#     den_r = np.bincount(grp, w * mr, minlength=G)
+#     num_r = np.bincount(grp, e * w * mr, minlength=G)
+#     on = (den > 0) & (den_r >= 0.5 * den)
+#     val = np.divide(num_r, den_r, out=np.zeros(G), where=den_r > 0)
+#     return polys, val, on
+
+
+def region_zone(D, region, box):
+    """Forma exata da região na janela (shapely), recortada por Ω: os mesmos conjuntos que o
+    regions usa para classificar cada ponto (distância euclidiana exata, d = D['d']):
+      0 quinas               = {dist(x, 𝒱_c) <= d}           (discos nas quinas)
+      1 fronteira sem quinas = {dist(x, Γ) <= d} − quinas      (faixa nas interfaces)
+      2 interior             = resto
+      'entreferro'           = anel r_so <= r <= r_ri (raio externo do estator, interno do
+                               rotor) ∩ ar."""
+    import shapely
+    xy, tri, d = D['xy'], D['tri'], D['d']
+    x0, x1, y0, y1 = box
+    m = 2 * d
+    win = shapely.box(x0 - m, y0 - m, x1 + m, y1 + m)
+    tw = _tris_in_window(xy, tri, (x0 - m, x1 + m, y0 - m, y1 + m))
+    omega = shapely.union_all(shapely.polygons(xy[tri[tw[D['in_omega'][tw]]]]))
+    if region == 'entreferro':
+        # [REMOVIDO] união dos triângulos de ar pelo centróide (degrau na abertura da ranhura):
+        # g = tw[D['gap_tri'][tw]]
+        # return shapely.intersection(shapely.union_all(shapely.polygons(xy[tri[g]])), omega)
+        o = shapely.Point(0.0, 0.0)
+        ring = shapely.difference(o.buffer(D['r_ri'], quad_segs=512), o.buffer(D['r_so'], quad_segs=512))
+        air = shapely.union_all(shapely.polygons(xy[tri[tw[D['vac_tri'][tw]]]]))
+        return shapely.intersection(shapely.intersection(ring, air), omega)
+    C = xy[D['corners']]
+    C = C[(C[:, 0] >= x0 - 2 * m) & (C[:, 0] <= x1 + 2 * m) & (C[:, 1] >= y0 - 2 * m) & (C[:, 1] <= y1 + 2 * m)]
+    Q = shapely.union_all(shapely.buffer(shapely.points(C), d, quad_segs=32)) if len(C) else shapely.Polygon()
+    S = xy[D['iface']]
+    near = ((S[..., 0].min(1) <= x1 + 2 * m) & (S[..., 0].max(1) >= x0 - 2 * m)
+            & (S[..., 1].min(1) <= y1 + 2 * m) & (S[..., 1].max(1) >= y0 - 2 * m))
+    F = shapely.union_all(shapely.buffer(shapely.linestrings(S[near]), d, quad_segs=32))
+    z = {0: Q, 1: shapely.difference(F, Q), 2: shapely.difference(win, F)}[region]
+    return shapely.intersection(shapely.intersection(z, omega), win)
+
+
+def _poly_path(g):
+    """Path do matplotlib de um Polygon do shapely (com furos)."""
+    from matplotlib.path import Path
+    verts, codes = [], []
+    for ring in (g.exterior, *g.interiors):
+        c = np.asarray(ring.coords)
+        verts.append(c)
+        codes.append([Path.MOVETO] + [Path.LINETO] * (len(c) - 2) + [Path.CLOSEPOLY])
+    return Path(np.concatenate(verts), np.concatenate(codes))
+
+
+def panel_polys(D, arch, box, fine, m, zone):
+    """O que é pintado na janela: (paths [lista de Path], valor [G], True [G], área recortada).
+    Polígonos: triângulo (normal), pedaço célula ∩ triângulo (FNO2d fino) ou subtriângulo da
+    quadratura (P1 e Bipartite no fino: 16 por triângulo, 3 pontos médios cada). Cada polígono
+    é recortado pela forma exata da região (zone, region_zone) e só a parte de dentro é
+    pintada. Valor = Σ e·w / Σ w dos pontos da região no polígono (m [Q] bool); se nenhum
+    ponto do polígono cai na região (lasca na borda), a média de todos os seus pontos."""
     import shapely
     xy, tri = D['xy'], D['tri']
     ex = D['E'][arch]
     tw = _tris_in_window(xy, tri, box)                       # ordenado (flatnonzero)
     sel = np.flatnonzero(np.isin(ex['t'], tw))
     t, e, w, mr = ex['t'][sel], ex['e'][sel], ex['w'][sel], m[sel]
-    if not fine or arch == 'FNO_BipartiteGNN_Elem':
-        grp, polys, G = np.searchsorted(tw, t), list(xy[tri[tw]]), len(tw)
+    if not fine:
+        grp, geoms, G = np.searchsorted(tw, t), shapely.polygons(xy[tri[tw]]), len(tw)
     elif ex['pset'] == 'overlay':                            # FNO2d: pedaços célula ∩ triângulo
         nc = len(D['cells'])
         key, grp = np.unique(t.astype(np.int64) * nc + D['cell'][sel], return_inverse=True)
         tu, cu = key // nc, key % nc
-        pieces = shapely.intersection(shapely.polygons(xy[tri[tu]]), shapely.polygons(D['cells'][cu]))
-        area = shapely.area(pieces)
+        geoms = shapely.intersection(shapely.polygons(xy[tri[tu]]), shapely.polygons(D['cells'][cu]))
+        area = shapely.area(geoms)
         D.setdefault('_piece_check', []).append(
             float(np.max(np.abs(area - np.bincount(grp, w)) / area)))
-        polys, G = [np.asarray(p.exterior.coords)[:-1] for p in pieces], len(key)
-    else:                                                    # P1: 16 subtriângulos da quadratura
+        G = len(key)
+    else:                                                    # P1 e Bipartite: 16 subtriângulos
         K, bary = D['K'], D['bary']
         grp = np.searchsorted(tw, sel // K) * (K // 3) + (sel % K) // 3
         mid = np.einsum('kj,tjd->tkd', bary, xy[tri[tw]]).reshape(len(tw), K // 3, 3, 2)
         m01, m12, m20 = mid[:, :, 0], mid[:, :, 1], mid[:, :, 2]
         V = np.stack([m01 + m20 - m12, m01 + m12 - m20, m12 + m20 - m01], axis=2)   # vértices
-        polys, G = list(V.reshape(-1, 3, 2)), len(tw) * (K // 3)
+        geoms, G = shapely.polygons(V.reshape(-1, 3, 2)), len(tw) * (K // 3)
     den = np.bincount(grp, w, minlength=G)
+    num = np.bincount(grp, e * w, minlength=G)
     den_r = np.bincount(grp, w * mr, minlength=G)
     num_r = np.bincount(grp, e * w * mr, minlength=G)
-    on = (den > 0) & (den_r >= 0.5 * den)
-    val = np.divide(num_r, den_r, out=np.zeros(G), where=den_r > 0)
-    return polys, val, on
+    val = np.where(den_r > 0, num_r / np.where(den_r > 0, den_r, 1), num / np.where(den > 0, den, 1))
+    shapely.prepare(zone)
+    hit = np.flatnonzero(shapely.intersects(geoms, zone) & (den > 0))
+    clip = shapely.intersection(geoms[hit], zone)
+    paths, vals, a_tot = [], [], 0.0
+    for g, v in zip(clip, val[hit]):
+        for part in shapely.get_parts(g):
+            if shapely.get_type_id(part) == 3 and part.area > 0:
+                paths.append(_poly_path(part))
+                vals.append(v)
+                a_tot += part.area
+    vals = np.asarray(vals)
+    return paths, vals, np.ones(len(vals), bool), a_tot
 
 
 def row_mask(D, arch, region):
@@ -221,7 +320,9 @@ def row_mask(D, arch, region):
     triângulos de ar com centróide entre o raio externo do estator e o interno do rotor."""
     ex = D['E'][arch]
     if region == 'entreferro':
-        return D['gap_tri'][ex['t']] & D['in_omega'][ex['t']]
+        # [REMOVIDO] return D['gap_tri'][ex['t']] & D['in_omega'][ex['t']]
+        # pontos dos triângulos de ar (o recorte pelo anel é feito em region_zone)
+        return D['vac_tri'][ex['t']] & D['in_omega'][ex['t']]
     return D['code'][ex['pset']] == region
 
 
@@ -284,7 +385,7 @@ def render(D, windows=None, fine=False, percentile=99.0, d=None, show_band=False
     """Grade 3 × 5 (linhas = janelas; colunas = domínio com o retângulo da janela + 4 archs),
     uma colorbar por linha (retângulo, sem seta; acima de vmax = cor do topo)."""
     import matplotlib.pyplot as plt
-    from matplotlib.collections import LineCollection, PolyCollection
+    from matplotlib.collections import LineCollection, PathCollection, PolyCollection
     from matplotlib.colors import Normalize
     from matplotlib.ticker import FuncFormatter, MaxNLocator
     windows = windows or DEFAULT_WINDOWS
@@ -310,7 +411,12 @@ def render(D, windows=None, fine=False, percentile=99.0, d=None, show_band=False
             x0, x1, y0, y1 = box
             # [REMOVIDO] tudo colorido: P = {a: panel_polys(D, a, box, fine) for a in archs}
             reg = ROW_REGION.get(rname, 'entreferro')
-            P = {a: panel_polys(D, a, box, fine, row_mask(D, a, reg)) for a in archs}
+            # [REMOVIDO] sem recorte: P = {a: panel_polys(D, a, box, fine, row_mask(D, a, reg)) for a in archs}
+            import shapely
+            zone = shapely.intersection(region_zone(D, reg, box), shapely.box(x0, y0, x1, y1))
+            Pz = {a: panel_polys(D, a, box, fine, row_mask(D, a, reg), zone) for a in archs}
+            P = {a: v[:3] for a, v in Pz.items()}
+            zone_check = {ARTICLE_ARCH_NAME[a]: float(abs(v[3] / zone.area - 1)) for a, v in Pz.items()}
             vals = np.concatenate([v[om] for _, v, om in P.values()])
             vmax = float(np.percentile(vals, percentile))
             over = {a: int((v[om] > vmax).sum()) for a, (_, v, om) in P.items()}
@@ -329,8 +435,12 @@ def render(D, windows=None, fine=False, percentile=99.0, d=None, show_band=False
                 ax = fig.add_axes([(w_lab + (j + 1) * (pw + gap)) / FIG_WIDTH_IN, yb / H,
                                    pw / FIG_WIDTH_IN, ph / H])
                 cols = plt.get_cmap(cmap)(norm(v))
-                cols[~om] = plt.matplotlib.colors.to_rgba(OUT_OMEGA_COLOR)
-                ax.add_collection(PolyCollection(polys, facecolors=cols, edgecolors=cols,
+                # [REMOVIDO] polígonos inteiros, cinza fora da região/Ω:
+                # cols[~om] = plt.matplotlib.colors.to_rgba(OUT_OMEGA_COLOR)
+                # ax.add_collection(PolyCollection(polys, facecolors=cols, edgecolors=cols,
+                #                                  linewidths=0.1))
+                ax.set_facecolor(OUT_OMEGA_COLOR)            # fora da região (e de Ω): cinza
+                ax.add_collection(PathCollection(polys, facecolors=cols, edgecolors=cols,
                                                  linewidths=0.1))
                 ax.add_collection(LineCollection(mesh_seg, colors='0.5', linewidths=0.2, alpha=0.4))
                 ax.add_collection(LineCollection(xy[iface], colors='k', linewidths=0.6))
@@ -367,7 +477,9 @@ def render(D, windows=None, fine=False, percentile=99.0, d=None, show_band=False
                 vmax_T=vmax, n_values=int(len(vals)),
                 above_vmax={ARTICLE_ARCH_NAME[a]: over[a] for a in archs},
                 n_polys={ARTICLE_ARCH_NAME[a]: int(len(P[a][1])) for a in archs},
-                max_T={ARTICLE_ARCH_NAME[a]: float(P[a][1][P[a][2]].max()) for a in archs})
+                max_T={ARTICLE_ARCH_NAME[a]: float(P[a][1][P[a][2]].max()) for a in archs},
+                region=str(reg), zone_area_mm2=float(zone.area),
+                zone_area_rel_diff=zone_check)
         out_dir.mkdir(parents=True, exist_ok=True)
         fig.savefig(out_dir / f'{name}.pdf')
         fig.savefig(out_dir / f'{name}.png', dpi=300)

@@ -94,12 +94,16 @@ class Diagram:
                      zorder=4)
         return Node(x, (y0 + y1) / 2, w, y1 - y0)
 
-    def bar_h(self, x0, x1, y, h=2.6):
+    # [REMOVIDO] def bar_h(self, x0, x1, y, h=2.6): -- rótulo configurável (a quadrada usa ‖)
+    # [REMOVIDO] def bar_h(self, x0, x1, y, h=2.6, label='concatenação'): -- posição do rótulo configurável
+    def bar_h(self, x0, x1, y, h=2.6, label='concatenação', label_x=None):
         """Concatenação horizontal (entradas por cima, saída por baixo)."""
         from matplotlib.patches import Rectangle
         self.ax.add_patch(Rectangle((x0, y - h / 2), x1 - x0, h, fc='0.85', ec=EDGE, lw=0.8,
                                     zorder=3))
-        self.ax.text((x0 + x1) / 2, y, 'concatenação', ha='center', va='center',
+        # [REMOVIDO] self.ax.text((x0 + x1) / 2, y, 'concatenação', ha='center', va='center', -- rótulo configurável
+        # [REMOVIDO] self.ax.text((x0 + x1) / 2, y, label, ...) -- posição do rótulo configurável
+        self.ax.text((x0 + x1) / 2 if label_x is None else label_x, y, label, ha='center', va='center',
                      fontsize=self.fs - 1.5, zorder=4)
         return Node((x0 + x1) / 2, y, x1 - x0, h)
 
@@ -128,13 +132,15 @@ class Diagram:
         kw.setdefault('va', 'center')
         self.ax.text(x, y, s, fontsize=fs or self.fs - 1, zorder=5, **kw)
 
-    def frame(self, x0, y0, x1, y1, label, bottom=False):
+    # [REMOVIDO] def frame(self, x0, y0, x1, y1, label, bottom=False): -- fonte configurável
+    def frame(self, x0, y0, x1, y1, label, bottom=False, fs=None):
         from matplotlib.patches import FancyBboxPatch
         self.ax.add_patch(FancyBboxPatch((x0, y0), x1 - x0, y1 - y0,
                                          boxstyle='round,pad=0,rounding_size=1.5', fc='none',
                                          ec=FRAME, lw=0.8, ls=(0, (4, 2.5)), zorder=1))
         self.ax.text(x0 + 1.2, (y0 + 1.2) if bottom else (y1 - 1.2), label, ha='left',
-                     va='bottom' if bottom else 'top', fontsize=self.fs - 0.5,
+                     # [REMOVIDO] va='bottom' if bottom else 'top', fontsize=self.fs - 0.5, -- fonte configurável
+                     va='bottom' if bottom else 'top', fontsize=fs or self.fs - 0.5,
                      style='italic', color='0.25', zorder=5)
 
     def zoom(self, node, x0, x1, y1):
@@ -371,7 +377,10 @@ FIGS_LARGO = dict(fno2d=fig_fno2d, fno_gnn=fig_fno_gnn, fno_bipartite=fig_fno_bi
 # FNO2d sem detalhe (já é bem documentado)
 # --------------------------------------------------------------------------------------------
 SQ_IN = 3.5                       # lado do quadrado [in] (uma coluna; 2×2 em duas colunas)
-SQ_FONT = 7
+# [REMOVIDO] SQ_FONT = 7 -- figura passou de 0,48 para 0,32 no artigo; fonte ×1,5 para manter
+# o tamanho efetivo (~3,4 pt → 3,2–3,4 pt)
+# SQ_FONT = 7
+SQ_FONT = 10.5
 FX = 48                           # x da moldura do detalhe (esquerda)
 
 
@@ -744,6 +753,7 @@ FX = 48                           # x da moldura do detalhe (esquerda)
 #   aresta i → j (i = origem, j = destino); g_ij = sig(MLP_{g,r}(e_ij)); m_ij = g_ij W_r h_i;
 #   F_{j,r} = Σ_i m_ij; h_j^{(l+1)} = MLP_{u,τ(j)}([h_j ‖ F_{j,r1} ‖ ...]);
 #   x^τ, ũ^τ, Δ^τ, ŷ^τ: entrada, FNO interpolado e reescalado, correção e saída nos nós do tipo τ.
+CAT = r'$\|$'                                                   # concatenação (barra)
 GATE = r'$g_{ij}$'
 XG, YG = r'$x^{\mathrm{grade}}$', r'$\hat y^{\mathrm{grade}}$'
 PROJ = 'Interpolação e\nreescala\ngrade ' + r'$\to$' + ' grafo'
@@ -772,9 +782,12 @@ def sq_left_single(D, t):
     """Coluna esquerda das híbridas de 1 tipo de nó t (V ou E), de cima para baixo."""
     cx = 21
     xin = D.box(cx, 92, 22, 7, XG)
-    fno = D.box(cx, 80.5, 30, 7, 'FNO', 'fno')
-    pr = D.box(cx, 67, 30, 12, PROJ, 'proj')
-    u = D.box(cx, 54, 10, 6, r'$\tilde u^{%s}$' % t)
+    # [REMOVIDO] fno = D.box(cx, 80.5, 30, 7, 'FNO', 'fno') -- fonte 10,5 pt (figura a 0,32 no artigo)
+    fno = D.box(cx, 81.5, 30, 7, 'FNO', 'fno')
+    # [REMOVIDO] pr = D.box(cx, 67, 30, 12, PROJ, 'proj') -- fonte 10,5 pt (figura a 0,32 no artigo)
+    pr = D.box(cx, 66, 38, 14, PROJ, 'proj', fs=SQ_FONT - 1)
+    # [REMOVIDO] u = D.box(cx, 54, 10, 6, r'$\tilde u^{%s}$' % t) -- fonte 10,5 pt (figura a 0,32 no artigo)
+    u = D.box(cx, 53, 10, 6, r'$\tilde u^{%s}$' % t)
     cat = D.op(cx, 44, r'$\|$', r=2.4)
     xn = D.box(38, 44, 10, 6, r'$x^{%s}$' % t)
     g = D.box(cx, 31, 24, 9, 'GNN', 'gnn')
@@ -795,7 +808,8 @@ def sq_left_single(D, t):
     return g
 
 
-def _msg_col(D, cx, e_txt, h_txt, W_txt, top=90, label=None, F_txt=None, cat_y=44, ew=8, hw=8,
+# [REMOVIDO] def _msg_col(D, cx, e_txt, h_txt, W_txt, top=90, label=None, F_txt=None, cat_y=44, ew=8, hw=8, -- fonte 10,5 pt (figura a 0,32 no artigo)
+def _msg_col(D, cx, e_txt, h_txt, W_txt, top=90, label=None, F_txt=None, cat_y=41, ew=8, hw=8,
              dx=5, gw=8.5, wW=8):
     """Mensagem em coluna: e_ij e h_i no topo; g_ij e W_r; ×; Σ (→ F_{j,r}). Devolve o Σ."""
     e = D.box(cx - dx, top, ew, 6, e_txt, fs=SQ_FONT - 0.5)
@@ -812,7 +826,9 @@ def _msg_col(D, cx, e_txt, h_txt, W_txt, top=90, label=None, F_txt=None, cat_y=4
     if label:
         D.text(cx, top + 5.6, label, fs=SQ_FONT - 1)
     if F_txt:
-        D.text(sm.x - 1.0, (sm.y - 2.2 + cat_y + 1.3) / 2, F_txt, ha='right', fs=SQ_FONT - 1)
+        # [REMOVIDO] D.text(sm.x - 1.0, (sm.y - 2.2 + cat_y + 1.3) / 2, F_txt, ha='right', fs=SQ_FONT - 1) -- F_j,r batia nas setas com a fonte maior; agora sobre a própria seta
+        D.text(sm.x, (sm.y - 2.2 + cat_y + 1.3) / 2, F_txt, fs=SQ_FONT - 1.5,
+               bbox=dict(fc='white', ec='none', pad=0.5))
     return sm
 
 
@@ -826,13 +842,16 @@ def _F(r):
 
 def sq_gnn_detail(D):
     """FNO_GNN: grafo de vértices, 1 mensagem V→V (EdgeConvLayer)."""
-    D.frame(FX, 2, 98, 98, 'Camada da GNN', bottom=True)
+    D.frame(FX, 2, 98, 98, 'Camada da GNN', bottom=True, fs=SQ_FONT - 1.5)
     s1 = _msg_col(D, 66, r'$e^{VV}_{ij}$', r'$h^V_i$', r'$W_{VV}$', label=_arrow_lbl('V', 'V'),
                   F_txt=_F('VV'), ew=10, hw=9, dx=6, wW=10)
     hv = D.box(90, 90, 9, 6, r'$h^V_j$', fs=SQ_FONT - 0.5)
-    cat = D.bar_h(62, 96, 44)
-    upd = D.box(79, 30, 24, 8, _mlp('V'), 'gnn')
-    out = D.box(79, 15, 16, 7, _h_next('V'))
+    # [REMOVIDO] cat = D.bar_h(62, 96, 44) -- fonte 10,5 pt (figura a 0,32 no artigo)
+    cat = D.bar_h(62, 96, 41, label=CAT, label_x=93.5)
+    # [REMOVIDO] upd = D.box(79, 30, 24, 8, _mlp('V'), 'gnn') -- fonte 10,5 pt (figura a 0,32 no artigo)
+    upd = D.box(79, 28, 24, 8, _mlp('V'), 'gnn')
+    # [REMOVIDO] out = D.box(79, 15, 16, 7, _h_next('V')) -- fonte 10,5 pt (figura a 0,32 no artigo)
+    out = D.box(79, 14, 16, 7, _h_next('V'))
     D.arrow(s1.b, (s1.x, cat.t[1]))
     D.arrow(hv.b, (hv.x, cat.t[1]))
     D.arrow(cat.b, (upd.x, upd.t[1]))
@@ -841,15 +860,18 @@ def sq_gnn_detail(D):
 
 def sq_bipartite_detail(D):
     """Bipartite (Elem): nós E atualizados; E→E sobre h^E e V→E sobre x^V (BipartiteEdgeConvLayer)."""
-    D.frame(FX, 2, 98, 98, 'Camada da GNN bipartida', bottom=True)
+    D.frame(FX, 2, 98, 98, 'Camada da GNN bipartida', bottom=True, fs=SQ_FONT - 1.5)
     s1 = _msg_col(D, 61, r'$e^{EE}_{ij}$', r'$h^E_i$', r'$W_{EE}$', label=_arrow_lbl('E', 'E'),
                   F_txt=_F('EE'), ew=9, hw=8, wW=9)
     s2 = _msg_col(D, 85, r'$e^{VE}_{ij}$', r'$x^V_i$', r'$W_{VE}$', label=_arrow_lbl('V', 'E'),
                   F_txt=_F('VE'), ew=9, hw=8, wW=9)
     hv = D.box(54, 55, 9, 6, r'$h^E_j$', fs=SQ_FONT - 0.5)
-    cat = D.bar_h(50, 96, 44)
-    upd = D.box(73, 30, 24, 8, _mlp('E'), 'gnn')
-    out = D.box(73, 15, 16, 7, _h_next('E'))
+    # [REMOVIDO] cat = D.bar_h(50, 96, 44) -- fonte 10,5 pt (figura a 0,32 no artigo)
+    cat = D.bar_h(50, 96, 41, label=CAT, label_x=93.5)
+    # [REMOVIDO] upd = D.box(73, 30, 24, 8, _mlp('E'), 'gnn') -- fonte 10,5 pt (figura a 0,32 no artigo)
+    upd = D.box(73, 28, 24, 8, _mlp('E'), 'gnn')
+    # [REMOVIDO] out = D.box(73, 15, 16, 7, _h_next('E')) -- fonte 10,5 pt (figura a 0,32 no artigo)
+    out = D.box(73, 14, 16, 7, _h_next('E'))
     for n in (s1, s2, hv):
         D.arrow(n.b, (n.x, cat.t[1]))
     D.arrow(cat.b, upd.t)
@@ -859,8 +881,10 @@ def sq_bipartite_detail(D):
 def sq_split(D):
     cE, cC = 11, 37                                                 # colunas dos ramos E e C
     xin = D.box(24, 93, 22, 7, XG)
-    fno = D.box(24, 82, 30, 7, 'FNO', 'fno')
-    pr = D.box(24, 69, 30, 12, PROJ, 'proj')
+    # [REMOVIDO] fno = D.box(24, 82, 30, 7, 'FNO', 'fno') -- fonte 10,5 pt (figura a 0,32 no artigo)
+    fno = D.box(24, 83, 30, 7, 'FNO', 'fno')
+    # [REMOVIDO] pr = D.box(24, 69, 30, 12, PROJ, 'proj') -- fonte 10,5 pt (figura a 0,32 no artigo)
+    pr = D.box(24, 68, 38, 14, PROJ, 'proj', fs=SQ_FONT - 1)
     ue = D.box(cE, 55, 10, 6, r'$\tilde u^{E}$')
     uc = D.box(cC, 55, 10, 6, r'$\tilde u^{C}$')
     ce = D.op(cE, 45.5, r'$\|$', r=2.4)
@@ -874,7 +898,8 @@ def sq_split(D):
     oc = D.box(cC, 7, 11, 7, r'$\hat y^{C}$')
     D.arrow(xin.b, fno.t)
     D.arrow(fno.b, pr.t)
-    D.text(25.5, 77, YG, ha='left')
+    # [REMOVIDO] D.text(25.5, 77, YG, ha='left') -- fonte 10,5 pt (figura a 0,32 no artigo)
+    D.text(25.5, 77.3, YG, ha='left')
     D.arrow(pr.at('b', cE - 24), ue.t)
     D.arrow(pr.at('b', cC - 24), uc.t)
     D.arrow(ue.b, ce.t)
@@ -895,7 +920,7 @@ def sq_split(D):
     D.text(46.4, 38, 'resíduo', rotation=90, fs=SQ_FONT - 1.5)
     # detalhe: 3 mensagens + 2 atualizações (SplitGNNLayer); C→E e E→C leem o mesmo
     # cross_edge_attr (índice invertido): e^{CE}_{ij} e e^{CE}_{ji}
-    D.frame(FX, 2, 98, 99, 'Camada da GNN por material', bottom=True)
+    D.frame(FX, 2, 98, 99, 'Camada da GNN por material', bottom=True, fs=SQ_FONT - 1.5)
     kw = dict(top=89, ew=7, hw=7, dx=4, gw=7.5, wW=7.5)
     s1 = _msg_col(D, 57, r'$e^{EE}_{ij}$', r'$h^E_i$', r'$W_{EE}$', label=_arrow_lbl('E', 'E'),
                   F_txt=_F('EE'), **kw)
@@ -905,16 +930,22 @@ def sq_split(D):
                   F_txt=_F('EC'), **kw)
     he = D.box(53, 54, 8, 6, r'$h^E_j$', fs=SQ_FONT - 0.5)
     hc = D.box(85, 54, 8, 6, r'$h^C_j$', fs=SQ_FONT - 0.5)
-    cat_e = D.bar_h(50, 81, 44)
-    cat_c = D.bar_h(83, 97, 44)
+    # [REMOVIDO] cat_e = D.bar_h(50, 81, 44) -- fonte 10,5 pt (figura a 0,32 no artigo)
+    cat_e = D.bar_h(50, 81, 41, label=CAT, label_x=78.5)
+    # [REMOVIDO] cat_c = D.bar_h(83, 97, 44) -- fonte 10,5 pt (figura a 0,32 no artigo)
+    cat_c = D.bar_h(83, 97, 41, label=CAT, label_x=94.5)
     for n in (he, s1, s2):
         D.arrow(n.b, (n.x, cat_e.t[1]))
     for n in (hc, s3):
         D.arrow(n.b, (n.x, cat_c.t[1]))
-    me = D.box(65.5, 30, 22, 8, _mlp('E'), 'gnn')
-    mc = D.box(90, 30, 13, 8, _mlp('C'), 'gnn')
-    oe_ = D.box(65.5, 15, 15, 7, _h_next('E'))
-    oc_ = D.box(90, 15, 15, 7, _h_next('C'))
+    # [REMOVIDO] me = D.box(65.5, 30, 22, 8, _mlp('E'), 'gnn') -- fonte 10,5 pt (figura a 0,32 no artigo)
+    me = D.box(65.5, 28, 22, 8, _mlp('E'), 'gnn')
+    # [REMOVIDO] mc = D.box(90, 30, 13, 8, _mlp('C'), 'gnn') -- fonte 10,5 pt (figura a 0,32 no artigo)
+    mc = D.box(90, 28, 13, 8, _mlp('C'), 'gnn')
+    # [REMOVIDO] oe_ = D.box(65.5, 15, 15, 7, _h_next('E')) -- fonte 10,5 pt (figura a 0,32 no artigo)
+    oe_ = D.box(65.5, 14, 15, 7, _h_next('E'))
+    # [REMOVIDO] oc_ = D.box(90, 15, 15, 7, _h_next('C')) -- fonte 10,5 pt (figura a 0,32 no artigo)
+    oc_ = D.box(90, 14, 15, 7, _h_next('C'))
     D.arrow((me.x, cat_e.b[1]), me.t)
     D.arrow((mc.x, cat_c.b[1]), mc.t)
     D.arrow(me.b, oe_.t)

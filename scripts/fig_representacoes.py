@@ -98,10 +98,18 @@ CLS_ORDER = list(CLASSES)
 # GRAPH_EDGE_COLOR, GRAPH_EDGE_LW = '0.45', 0.45
 # CROSS_EDGE_COLOR, CROSS_EDGE_LW = '0.55', 0.4
 # NEUTRAL_FACE, NEUTRAL_EDGE = 'white', '0.45'
-MESH_COLOR, MESH_LW = '0.80', 0.5                           # malha: cinza claro, fina
+# [REMOVIDO] arestas mais claras (sem o fundo de material):
+# MESH_COLOR, MESH_LW = '0.80', 0.5
+# IFACE_COLOR, IFACE_LW = 'k', 2.2
+# GRAPH_EDGE_COLOR, GRAPH_EDGE_LW = '0.30', 1.0
+# CROSS_EDGE_COLOR, CROSS_EDGE_LW = '#CC79A7', 1.0
+MESH_COLOR, MESH_LW = '0.62', 0.6                           # malha: cinza médio, fina
 IFACE_COLOR, IFACE_LW = 'k', 2.2                            # interface: preta, grossa
-GRAPH_EDGE_COLOR, GRAPH_EDGE_LW = '0.30', 1.0               # grafo: cinza escuro, sólida
-CROSS_EDGE_COLOR, CROSS_EDGE_LW = '#CC79A7', 1.0            # cruzada / Edge_aux: rosa, tracejada
+GRAPH_EDGE_COLOR, GRAPH_EDGE_LW = '0.15', 1.2               # grafo: quase preto, sólida
+CROSS_EDGE_COLOR, CROSS_EDGE_LW = '#B0407F', 1.1            # cruzada / Edge_aux: rosa escuro, tracejada
+# fundo dos painéis de grafo (b–d): material de cada elemento (classe das features da Elem)
+# em tons muito fracos das mesmas cores
+FAINT = {'ferro': '#E9F2F9', 'ar': '#F5FAFD', 'cobre': '#FFF8E3', 'ima+': '#E8F6F1', 'ima-': '#F2FAF7'}
 CROSS_EDGE_LS = (0, (3, 2))
 NEUTRAL_FACE, NEUTRAL_EDGE = 'white', '0.55'
 # todos os nós circulares: elemento = disco cheio; vértice / cópia = anel na cor do material;
@@ -295,7 +303,7 @@ def build(L, box):
     area = 0.5 * np.abs((P[:, 1, 0] - P[:, 0, 0]) * (P[:, 2, 1] - P[:, 0, 1])
                         - (P[:, 2, 0] - P[:, 0, 0]) * (P[:, 1, 1] - P[:, 0, 1]))
     h_e = np.sqrt(2 * area)
-    return dict(box=box, cells=cells[sel_c], v_h=h_v[vin], e_h=h_e[ein], cp_h=h_v[copy_v[cps]], c_cls=c_cls, mesh_seg=xy[mesh_e], iface_seg=xy[iface],
+    return dict(box=box, cells=cells[sel_c], tri_poly=xy[tri[ein]], tri_cls=e_cls_all[ein], v_h=h_v[vin], e_h=h_e[ein], cp_h=h_v[copy_v[cps]], c_cls=c_cls, mesh_seg=xy[mesh_e], iface_seg=xy[iface],
                 v_xy=xy[vin], v_cls=v_cls_all[vin], b_seg=xy[eb],
                 e_xy=cent[ein], e_cls=e_cls_all[ein], d_seg=cent[dd],
                 c_seg=np.stack([xy[crc[:, 0]], cent[crc[:, 1]]], 1),
@@ -399,6 +407,12 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
         #           linewidths=lw_m, zorder=4)
         # d.scatter(*F['n_aux_xy'].T, s=size(F['e_h']), c=col[F['n_aux_cls']], marker='s', edgecolors='k',
         #           linewidths=lw_m, zorder=4)
+        # fundo: região de cada material, em tom muito fraco (b, c, d)
+        faint = np.array([plt.matplotlib.colors.to_rgba(FAINT[k]) for k in CLS_ORDER])
+        for ax in (b, c, d):
+            fc = faint[F['tri_cls']]
+            ax.add_collection(PolyCollection(F['tri_poly'], facecolors=fc, edgecolors=fc,
+                                             linewidths=0.3, zorder=0))
         dash = dict(colors=CROSS_EDGE_COLOR, linewidths=CROSS_EDGE_LW, linestyles=CROSS_EDGE_LS, zorder=2)
         solid = dict(colors=GRAPH_EDGE_COLOR, linewidths=GRAPH_EDGE_LW, zorder=2)
         # (b) grafo de vértices: arestas da malha = arestas do grafo; nós = anéis do material

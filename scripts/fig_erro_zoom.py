@@ -69,8 +69,9 @@ ROW_REGION = {'Quina': 0, 'Interface': 1, 'Entreferro': 'entreferro'}
 # Janelas (centro x, y [mm], lado [mm]), escolhidas na geometria da #2184 (em polar):
 #   Quina      -> canto da sapata do dente na abertura da ranhura: r = 38,614 mm (raio externo
 #                 do estator), θ = 59,16°;
-#   Interface  -> meio da face ímã–coroa do rotor (ímã de 46,40° a 52,86°): r = 42,175 mm,
-#                 θ = 49,63°, a ~2,4 mm dos cantos do ímã;
+#   Interface  -> abertura da ranhura entre dois dentes (pontas em 49,16° e 50,84°, de
+#                 r = 37,514 a 38,614 mm) e um pouco das pontas dos dentes: r = 38,0 mm, θ = 50,0°
+#                 [antes: face ímã–coroa do rotor, r = 42,175 mm, θ = 49,63° -- (27.33, 32.13)];
 #   Entreferro -> meio do entreferro (38,614–39,925 mm), r = 39,27 mm, θ = 66,0°: sapata do
 #                 dente (60,84°–69,16°) embaixo e ímã (63,54°–70,01°) em cima.
 # [REMOVIDO] janelas de 3,0 mm -- aumentadas para 4,5 mm a pedido (mais área no zoom)
@@ -82,7 +83,8 @@ ROW_REGION = {'Quina': 0, 'Interface': 1, 'Entreferro': 'entreferro'}
 WINDOW_SIDE_MM = 4.5
 DEFAULT_WINDOWS = {
     'Quina': (19.79, 33.16, WINDOW_SIDE_MM),
-    'Interface': (27.33, 32.13, WINDOW_SIDE_MM),
+    # [REMOVIDO] face ímã–coroa do rotor: 'Interface': (27.33, 32.13, WINDOW_SIDE_MM),
+    'Interface': (24.43, 29.11, WINDOW_SIDE_MM),
     'Entreferro': (15.97, 35.88, WINDOW_SIDE_MM),
 }
 

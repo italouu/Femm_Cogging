@@ -63,10 +63,17 @@ ROWS = ('Quina', 'Interface', 'Entreferro')
 #                 θ = 49,63°, a ~2,4 mm dos cantos do ímã;
 #   Entreferro -> meio do entreferro (38,614–39,925 mm), r = 39,27 mm, θ = 66,0°: sapata do
 #                 dente (60,84°–69,16°) embaixo e ímã (63,54°–70,01°) em cima.
+# [REMOVIDO] janelas de 3,0 mm -- aumentadas para 4,5 mm a pedido (mais área no zoom)
+# DEFAULT_WINDOWS = {
+#     'Quina': (19.79, 33.16, 3.0),
+#     'Interface': (27.33, 32.13, 3.0),
+#     'Entreferro': (15.97, 35.88, 3.0),
+# }
+WINDOW_SIDE_MM = 4.5
 DEFAULT_WINDOWS = {
-    'Quina': (19.79, 33.16, 3.0),
-    'Interface': (27.33, 32.13, 3.0),
-    'Entreferro': (15.97, 35.88, 3.0),
+    'Quina': (19.79, 33.16, WINDOW_SIDE_MM),
+    'Interface': (27.33, 32.13, WINDOW_SIDE_MM),
+    'Entreferro': (15.97, 35.88, WINDOW_SIDE_MM),
 }
 
 

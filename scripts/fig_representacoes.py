@@ -67,8 +67,15 @@ FONT_PT = 8
 # Zoom no ponto triplo ferro/ar/cobre da ponta do dente esquerdo (vértice 24668 da #2184 em
 # (−0,552; 37,510) mm, r = 37,514, θ = 90,84°): quina da interface (canto da abertura com a
 # diagonal da cunha) e o único tipo de vértice com 3 cópias no Split.
-DEFAULT_CENTER = (-0.52, 37.54)
-DEFAULT_SIDE_MM = 0.5
+# [REMOVIDO] zoom no ponto triplo (0,5 mm): malha refinada demais (centenas de nós) para uma
+# figura que é só representação -- trocado por um trecho reto de interface com malha grossa.
+# DEFAULT_CENTER = (-0.52, 37.54)
+# DEFAULT_SIDE_MM = 0.5
+# Flanco do dente dentro da ranhura (interface ferro/cobre, longe das quinas), r = 34,1 mm,
+# θ = 58,0°: malha grossa (14 vértices, 29 elementos na janela, menor aresta local ~0,24 mm)
+# e ~180 células da grade. [antes: (18.42, 29.54), com um trecho refinado no canto]
+DEFAULT_CENTER = (18.07, 28.94)
+DEFAULT_SIDE_MM = 2.5
 # [REMOVIDO] limites absolutos (bons só para ~1,6 mm):
 # MARK_FRAC, MARK_MIN_MM, MARK_MAX_MM = 0.40, 0.006, 0.045
 # diâmetro do marcador = MARK_FRAC × tamanho local da malha, limitado a
@@ -85,11 +92,22 @@ CLASSES = {
     'ima-': (r'Ímã ($M<0$)', '#8FD3BC'),
 }
 CLS_ORDER = list(CLASSES)
-MESH_COLOR, MESH_LW = '0.80', 0.25
-IFACE_COLOR, IFACE_LW = 'k', 0.8
-GRAPH_EDGE_COLOR, GRAPH_EDGE_LW = '0.45', 0.45
-CROSS_EDGE_COLOR, CROSS_EDGE_LW = '0.55', 0.4
-NEUTRAL_FACE, NEUTRAL_EDGE = 'white', '0.45'
+# [REMOVIDO] arestas em tons de cinza próximos (difíceis de distinguir):
+# MESH_COLOR, MESH_LW = '0.80', 0.25
+# IFACE_COLOR, IFACE_LW = 'k', 0.8
+# GRAPH_EDGE_COLOR, GRAPH_EDGE_LW = '0.45', 0.45
+# CROSS_EDGE_COLOR, CROSS_EDGE_LW = '0.55', 0.4
+# NEUTRAL_FACE, NEUTRAL_EDGE = 'white', '0.45'
+MESH_COLOR, MESH_LW = '0.80', 0.5                           # malha: cinza claro, fina
+IFACE_COLOR, IFACE_LW = 'k', 2.2                            # interface: preta, grossa
+GRAPH_EDGE_COLOR, GRAPH_EDGE_LW = '0.30', 1.0               # grafo: cinza escuro, sólida
+CROSS_EDGE_COLOR, CROSS_EDGE_LW = '#CC79A7', 1.0            # cruzada / Edge_aux: rosa, tracejada
+CROSS_EDGE_LS = (0, (3, 2))
+NEUTRAL_FACE, NEUTRAL_EDGE = 'white', '0.55'
+# todos os nós circulares: elemento = disco cheio; vértice / cópia = anel na cor do material;
+# vértice sem material (c) = anel cinza fino. Diâmetros em fração do lado da janela.
+D_ELEM_FRAC, D_VERT_FRAC = 0.040, 0.046
+RING_LW, RING_LW_NEUTRAL, DISC_EDGE_LW = 1.8, 0.9, 0.4
 TITLES = ('Grade', 'Grafo de vértices', 'Elementos + vértices', 'Elementos + vértices por material')
 ARCH_OF_PANEL = ('FNO2d', 'FNO_GNN', 'FNO_Bipartite', 'FNO_SplitGNN')
 
@@ -321,10 +339,17 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
     # [REMOVIDO] tamanho fixo -- embolava nas quinas refinadas:
     # s_v = (0.055 * pt_mm) ** 2
     # s_e = (0.050 * pt_mm) ** 2
-    size = lambda h: (np.clip(MARK_FRAC * h, MARK_MIN_FRAC * side, MARK_MAX_FRAC * side) * pt_mm) ** 2
-    s_v = (MARK_MAX_FRAC * side * 0.8 * pt_mm) ** 2                    # só para a legenda
-    s_e = s_v
-    lw_m = 0.3
+    # [REMOVIDO] diâmetro ∝ malha local (para janelas com malha muito refinada):
+    # size = lambda h: (np.clip(MARK_FRAC * h, MARK_MIN_FRAC * side, MARK_MAX_FRAC * side) * pt_mm) ** 2
+    # s_v = (MARK_MAX_FRAC * side * 0.8 * pt_mm) ** 2
+    # s_e = s_v
+    # lw_m = 0.3
+    s_v = (D_VERT_FRAC * side * pt_mm) ** 2                    # anel (vértice / cópia)
+    s_e = (D_ELEM_FRAC * side * pt_mm) ** 2                    # disco (elemento)
+    size = lambda h: None
+    lw_m = DISC_EDGE_LW
+    ring = dict(s=s_v, marker='o', facecolors='white', linewidths=RING_LW, zorder=5)
+    disc = dict(s=s_e, marker='o', edgecolors='k', linewidths=DISC_EDGE_LW, zorder=4)
     with plt.rc_context():
         apply_style()
         apply_article_style(FONT_PT)
@@ -350,29 +375,46 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
         # malha por cima na (a) também (mostra onde a grade erra)
         a.add_collection(LineCollection(F['mesh_seg'], colors='0.35', linewidths=MESH_LW,
                                         alpha=0.6, zorder=2))
-        # (b) grafo de vértices
-        b.add_collection(LineCollection(F['b_seg'], colors=GRAPH_EDGE_COLOR,
-                                        linewidths=GRAPH_EDGE_LW, zorder=2))
-        b.scatter(*F['v_xy'].T, s=size(F['v_h']), c=col[F['v_cls']], marker='o', edgecolors='k',
-                  linewidths=lw_m, zorder=4)
-        # (c) Elem: duais + cruzadas + vértices neutros + elementos
-        c.add_collection(LineCollection(F['c_seg'], colors=CROSS_EDGE_COLOR, linewidths=CROSS_EDGE_LW,
-                                        linestyles=(0, (2, 1.5)), zorder=2))
-        c.add_collection(LineCollection(F['d_seg'], colors=GRAPH_EDGE_COLOR, linewidths=GRAPH_EDGE_LW,
-                                        zorder=2))
-        c.scatter(*F['v_xy'].T, s=size(F['v_h']), c=NEUTRAL_FACE, marker='o', edgecolors=NEUTRAL_EDGE,
-                  linewidths=lw_m, zorder=4)
-        c.scatter(*F['e_xy'].T, s=size(F['e_h']), c=col[F['e_cls']], marker='s', edgecolors='k',
-                  linewidths=lw_m, zorder=4)
-        # (d) Split: Edge_dual + Edge_aux + cópias + N_aux
-        d.add_collection(LineCollection(F['ea_seg'], colors=CROSS_EDGE_COLOR, linewidths=CROSS_EDGE_LW,
-                                        linestyles=(0, (2, 1.5)), zorder=2))
-        d.add_collection(LineCollection(F['d_seg'], colors=GRAPH_EDGE_COLOR, linewidths=GRAPH_EDGE_LW,
-                                        zorder=2))
-        d.scatter(*F['cp_xy'].T, s=size(F['cp_h']), c=col[F['cp_cls']], marker='o', edgecolors='k',
-                  linewidths=lw_m, zorder=4)
-        d.scatter(*F['n_aux_xy'].T, s=size(F['e_h']), c=col[F['n_aux_cls']], marker='s', edgecolors='k',
-                  linewidths=lw_m, zorder=4)
+        # [REMOVIDO] marcadores antigos (vértice = círculo cheio, elemento = quadrado):
+        # # (b) grafo de vértices
+        # b.add_collection(LineCollection(F['b_seg'], colors=GRAPH_EDGE_COLOR,
+        #                                 linewidths=GRAPH_EDGE_LW, zorder=2))
+        # b.scatter(*F['v_xy'].T, s=size(F['v_h']), c=col[F['v_cls']], marker='o', edgecolors='k',
+        #           linewidths=lw_m, zorder=4)
+        # # (c) Elem: duais + cruzadas + vértices neutros + elementos
+        # c.add_collection(LineCollection(F['c_seg'], colors=CROSS_EDGE_COLOR, linewidths=CROSS_EDGE_LW,
+        #                                 linestyles=(0, (2, 1.5)), zorder=2))
+        # c.add_collection(LineCollection(F['d_seg'], colors=GRAPH_EDGE_COLOR, linewidths=GRAPH_EDGE_LW,
+        #                                 zorder=2))
+        # c.scatter(*F['v_xy'].T, s=size(F['v_h']), c=NEUTRAL_FACE, marker='o', edgecolors=NEUTRAL_EDGE,
+        #           linewidths=lw_m, zorder=4)
+        # c.scatter(*F['e_xy'].T, s=size(F['e_h']), c=col[F['e_cls']], marker='s', edgecolors='k',
+        #           linewidths=lw_m, zorder=4)
+        # # (d) Split: Edge_dual + Edge_aux + cópias + N_aux
+        # d.add_collection(LineCollection(F['ea_seg'], colors=CROSS_EDGE_COLOR, linewidths=CROSS_EDGE_LW,
+        #                                 linestyles=(0, (2, 1.5)), zorder=2))
+        # d.add_collection(LineCollection(F['d_seg'], colors=GRAPH_EDGE_COLOR, linewidths=GRAPH_EDGE_LW,
+        #                                 zorder=2))
+        # d.scatter(*F['cp_xy'].T, s=size(F['cp_h']), c=col[F['cp_cls']], marker='o', edgecolors='k',
+        #           linewidths=lw_m, zorder=4)
+        # d.scatter(*F['n_aux_xy'].T, s=size(F['e_h']), c=col[F['n_aux_cls']], marker='s', edgecolors='k',
+        #           linewidths=lw_m, zorder=4)
+        dash = dict(colors=CROSS_EDGE_COLOR, linewidths=CROSS_EDGE_LW, linestyles=CROSS_EDGE_LS, zorder=2)
+        solid = dict(colors=GRAPH_EDGE_COLOR, linewidths=GRAPH_EDGE_LW, zorder=2)
+        # (b) grafo de vértices: arestas da malha = arestas do grafo; nós = anéis do material
+        b.add_collection(LineCollection(F['b_seg'], **solid))
+        b.scatter(*F['v_xy'].T, edgecolors=col[F['v_cls']], **ring)
+        # (c) Elem: duais (sólidas) + cruzadas (tracejadas) + vértices sem material + elementos
+        c.add_collection(LineCollection(F['c_seg'], **dash))
+        c.add_collection(LineCollection(F['d_seg'], **solid))
+        c.scatter(*F['v_xy'].T, s=s_v, marker='o', facecolors=NEUTRAL_FACE, edgecolors=NEUTRAL_EDGE,
+                  linewidths=RING_LW_NEUTRAL, zorder=5)
+        c.scatter(*F['e_xy'].T, c=col[F['e_cls']], **disc)
+        # (d) Split: Edge_dual (sólidas) + Edge_aux (tracejadas) + cópias (anéis) + N_aux (discos)
+        d.add_collection(LineCollection(F['ea_seg'], **dash))
+        d.add_collection(LineCollection(F['d_seg'], **solid))
+        d.scatter(*F['cp_xy'].T, edgecolors=col[F['cp_cls']], **ring)
+        d.scatter(*F['n_aux_xy'].T, c=col[F['n_aux_cls']], **disc)
         for ax in axs:
             ax.add_collection(LineCollection(F['iface_seg'], colors=IFACE_COLOR, linewidths=IFACE_LW,
                                              zorder=3))
@@ -386,20 +428,21 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
         # legenda única
         present = [k for k in CLS_ORDER if CLASSES[k][0] in F['materiais']]
         h1 = [Patch(fc=CLASSES[k][1], ec='k', lw=0.4, label=CLASSES[k][0]) for k in present]
-        ms = np.sqrt(s_v)
-        h2 = [Line2D([], [], ls='', marker='o', ms=ms, mfc='0.7', mec='k', mew=lw_m, label='Nó de vértice'),
-              Line2D([], [], ls='', marker='s', ms=np.sqrt(s_e), mfc='0.7', mec='k', mew=lw_m,
-                     label='Nó de elemento'),
-              Line2D([], [], ls='', marker='o', ms=ms, mfc=NEUTRAL_FACE, mec=NEUTRAL_EDGE, mew=lw_m,
-                     label='Vértice sem material (c)'),
-              Line2D([], [], ls='', marker='o', ms=ms, mfc='0.7', mec='k', mew=lw_m,
-                     label='Cópia de vértice por material (d)')]
-        h3 = [Line2D([], [], color=MESH_COLOR, lw=0.8, label='Aresta da malha'),
-              Line2D([], [], color=GRAPH_EDGE_COLOR, lw=0.8, label='Aresta do grafo'),
-              Line2D([], [], color=CROSS_EDGE_COLOR, lw=0.8, ls=(0, (2, 1.5)),
+        # [REMOVIDO] legenda com quadrado para elemento e cinzas próximos nas arestas
+        ms_l = 7.0
+        h2 = [Line2D([], [], ls='', marker='o', ms=ms_l, mfc='white', mec='0.35', mew=RING_LW,
+                     label='Nó de vértice / cópia (anel, cor do material)'),
+              Line2D([], [], ls='', marker='o', ms=ms_l * 0.9, mfc='0.6', mec='k', mew=DISC_EDGE_LW,
+                     label='Nó de elemento (disco, cor do material)'),
+              Line2D([], [], ls='', marker='o', ms=ms_l, mfc=NEUTRAL_FACE, mec=NEUTRAL_EDGE,
+                     mew=RING_LW_NEUTRAL, label='Vértice sem material (c)')]
+        h3 = [Line2D([], [], color=MESH_COLOR, lw=1.0, label='Aresta da malha'),
+              Line2D([], [], color=GRAPH_EDGE_COLOR, lw=GRAPH_EDGE_LW,
+                     label='Aresta do grafo (vértices, duais, Edge_dual)'),
+              Line2D([], [], color=CROSS_EDGE_COLOR, lw=CROSS_EDGE_LW, ls=CROSS_EDGE_LS,
                      label='Aresta cruzada / Edge_aux'),
               Line2D([], [], color=IFACE_COLOR, lw=IFACE_LW, label='Interface')]
-        fig.legend(handles=h1 + h2 + h3, loc='lower center', ncol=4, frameon=False,
+        fig.legend(handles=h1 + h2 + h3, loc='lower center', ncol=3, frameon=False,
                    bbox_to_anchor=(0.5, 0.0), handlelength=1.8, columnspacing=1.2,
                    borderaxespad=0.2)
         out_dir.mkdir(parents=True, exist_ok=True)

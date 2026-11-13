@@ -2,11 +2,13 @@
 FNO_SplitGNN), sem detalhar hiperparâmetros (o texto explica), mostrando as conexões.
 
 Gramática comum:
-  - linha principal: entrada → FNO → projeção grade → grafo (bilinear + recodificação) →
-    concatenação com as features do grafo → GNN → soma residual com o FNO projetado → saída;
-  - moldura tracejada abaixo: a camada repetida aberta (Fourier no FNO2d; gate e mensagem
-    nas GNNs: gate = sigmoide(MLP(e)), mensagem = gate × W h, Σ nos vizinhos, MLP do nó);
-  - cores por tipo de bloco: dados (branco, canto reto), FNO (azul), projeção (verde),
+  - linha principal: entrada → FNO → interpolação e reescala grade → grafo (bilinear +
+    recodificação das estatísticas da grade para as do grafo) → concatenação com as features
+    do grafo → GNN → soma residual com o FNO interpolado → saída;
+  - camada da GNN aberta (notação do artigo, aresta i → j, relação r): g_ij = sig(MLP_g,r(e_ij)),
+    m_ij = g_ij W_r h_i, F_j,r = Σ_i m_ij, h_j^(l+1) = MLP_u,τ([h_j ‖ F_j,r1 ‖ ...]);
+    tipos de nó V (vértice), E (elemento), C (cópia de vértice por material, só no Split);
+  - cores por tipo de bloco: dados (branco, canto reto), FNO (azul), interpolação (verde),
     GNN (laranja), gate (rosa).
 
 Padrão: quadrados de 3,5 in (7 pt), fluxo de cima para baixo à esquerda e a camada aberta à
@@ -555,20 +557,210 @@ FX = 48                           # x da moldura do detalhe (esquerda)
 #           fno_splitgnn=sq_split)
 
 
-# Notação padronizada (todas as figuras):
-#   domínios: grade e grafo; tipos de nó do grafo: V (vértice) e E (elemento);
-#   x^grade, ŷ^grade: entrada e saída na grade; x^V, x^E, ũ^V, ũ^E, ŷ^V, ŷ^E: entrada, FNO
-#   projetado e saída nos nós de cada tipo; e^{VV}, e^{EE}, e^{VE}, e^{EV}: arestas entre tipos;
-#   h_u (origem), h_v (destino), h' = estado atualizado; gate = sig(MLP(e)).
-GATE = 'gate'
+# [REMOVIDO] versão quadrada com notação u→v, gate/W_k/MLP^τ, V no Split e 'Projeção grade → grafo'
+# -- substituída pela versão alinhada à notação do artigo (i→j, g_ij, W_r, MLP_u^τ, cópias C,
+# 'Interpolação e reescala').
+# # Notação padronizada (todas as figuras):
+# #   domínios: grade e grafo; tipos de nó do grafo: V (vértice) e E (elemento);
+# #   x^grade, ŷ^grade: entrada e saída na grade; x^V, x^E, ũ^V, ũ^E, ŷ^V, ŷ^E: entrada, FNO
+# #   projetado e saída nos nós de cada tipo; e^{VV}, e^{EE}, e^{VE}, e^{EV}: arestas entre tipos;
+# #   h_u (origem), h_v (destino), h' = estado atualizado; gate = sig(MLP(e)).
+# GATE = 'gate'
+# XG, YG = r'$x^{\mathrm{grade}}$', r'$\hat y^{\mathrm{grade}}$'
+# PROJ = 'Projeção\ngrade ' + r'$\to$' + ' grafo'
+#
+#
+# def sq_fno2d(D):
+#     x = 50
+#     xin = D.box(x, 89, 30, 9, XG)
+#     P = D.box(x, 70, 40, 9, 'Lifting $P$', 'fno')
+#     F = D.stack(x, 49.5, 40, 11, 'Camadas de Fourier', 'fno')
+#     Q = D.box(x, 29, 40, 9, 'Projeção $Q$', 'fno')
+#     yo = D.box(x, 10, 30, 9, YG)
+#     for a, b in ((xin, P), (P, F), (F, Q), (Q, yo)):
+#         D.arrow(a.b, b.t)
+#
+#
+# def sq_left_single(D, t):
+#     """Coluna esquerda das híbridas de 1 tipo de nó t (V ou E), de cima para baixo."""
+#     cx = 21
+#     xin = D.box(cx, 92, 22, 7, XG)
+#     fno = D.box(cx, 80.5, 30, 7, 'FNO', 'fno')
+#     pr = D.box(cx, 67, 30, 10, PROJ, 'proj')
+#     u = D.box(cx, 54, 10, 6, r'$\tilde u^{%s}$' % t)
+#     cat = D.op(cx, 44, r'$\|$', r=2.4)
+#     xn = D.box(38, 44, 10, 6, r'$x^{%s}$' % t)
+#     g = D.box(cx, 31, 24, 9, 'GNN', 'gnn')
+#     plus = D.op(cx, 17.5, r'$+$', r=2.4)
+#     yo = D.box(cx, 6, 12, 7, r'$\hat y^{%s}$' % t)
+#     D.arrow(xin.b, fno.t)
+#     D.arrow(fno.b, pr.t)
+#     D.text(cx + 1.5, 75.5, YG, ha='left')
+#     D.arrow(pr.b, u.t)
+#     D.arrow(u.b, cat.t)
+#     D.arrow(xn.l, cat.r)
+#     D.arrow(cat.b, g.t)
+#     D.arrow(g.b, plus.t)
+#     D.text(cx + 1.5, 23, r'$\Delta^{%s}$' % t, ha='left')
+#     D.arrow(plus.b, yo.t)
+#     D.arrow(u.l, (4, u.y), (4, plus.y), plus.l)                     # resíduo
+#     D.text(2.6, (u.y + plus.y) / 2, 'resíduo', rotation=90)
+#     return g
+#
+#
+# def _msg_col(D, cx, e_txt, h_txt, W_txt, top=90, label=None, ew=8, hw=8, dx=5, gw=8.5,
+#              wW=8):
+#     """Mensagem em coluna: e e h_u no topo; gate e W; ×; Σ. Devolve o Σ."""
+#     e = D.box(cx - dx, top, ew, 6, e_txt, fs=SQ_FONT - 0.5)
+#     h = D.box(cx + dx, top, hw, 6, h_txt, fs=SQ_FONT - 0.5)
+#     gt = D.box(cx - dx, top - 13, gw, 7, GATE, 'gate', fs=SQ_FONT - 1)
+#     W = D.box(cx + dx, top - 13, wW, 7, W_txt, 'gnn')
+#     mul = D.op(cx + dx, top - 25, r'$\times$', r=2.2)
+#     sm = D.op(cx + dx, top - 35, r'$\Sigma$', r=2.2)
+#     D.arrow(e.b, gt.t)
+#     D.arrow(h.b, W.t)
+#     D.arrow(gt.b, (gt.x, mul.y), mul.l)
+#     D.arrow(W.b, mul.t)
+#     D.arrow(mul.b, sm.t)
+#     if label:
+#         D.text(cx, top + 5.6, label, fs=SQ_FONT - 1)
+#     return sm
+#
+#
+# def _arrow_lbl(a, b):
+#     return r'$%s \to %s$' % (a, b)
+#
+#
+# def sq_gnn_detail(D):
+#     """FNO_GNN: grafo de vértices, 1 mensagem V→V."""
+#     D.frame(FX, 2, 98, 98, 'Camada da GNN', bottom=True)
+#     s1 = _msg_col(D, 66, r'$e^{VV}_{uv}$', r'$h^V_u$', r'$W$', label=_arrow_lbl('V', 'V'),
+#                   ew=10, hw=9, dx=6)
+#     hv = D.box(90, 90, 9, 6, r'$h^V_v$', fs=SQ_FONT - 0.5)
+#     cat = D.bar_h(62, 96, 44)
+#     upd = D.box(79, 30, 24, 8, r'MLP$^V$', 'gnn')
+#     out = D.box(79, 15, 12, 7, r"$h^{V\prime}_v$")
+#     D.arrow(s1.b, (s1.x, cat.t[1]))
+#     D.arrow(hv.b, (hv.x, cat.t[1]))
+#     D.arrow(cat.b, (upd.x, upd.t[1]))
+#     D.arrow(upd.b, out.t)
+#
+#
+# def sq_bipartite_detail(D):
+#     """Bipartite: nós E atualizados; mensagens E→E e V→E (V só com x^V, sem estado)."""
+#     D.frame(FX, 2, 98, 98, 'Camada da GNN bipartida', bottom=True)
+#     s1 = _msg_col(D, 61, r'$e^{EE}_{uv}$', r'$h^E_u$', r'$W_1$', label=_arrow_lbl('E', 'E'),
+#                   ew=9, hw=8)
+#     s2 = _msg_col(D, 85, r'$e^{VE}_{uv}$', r'$x^V_u$', r'$W_2$', label=_arrow_lbl('V', 'E'),
+#                   ew=9, hw=8)
+#     hv = D.box(54, 55, 9, 6, r'$h^E_v$', fs=SQ_FONT - 0.5)
+#     cat = D.bar_h(50, 96, 44)
+#     upd = D.box(73, 30, 24, 8, r'MLP$^E$', 'gnn')
+#     out = D.box(73, 15, 12, 7, r"$h^{E\prime}_v$")
+#     for n in (s1, s2, hv):
+#         D.arrow(n.b, (n.x, cat.t[1]))
+#     D.arrow(cat.b, upd.t)
+#     D.arrow(upd.b, out.t)
+#
+#
+# def sq_split(D):
+#     xin = D.box(24, 93, 22, 7, XG)
+#     fno = D.box(24, 82, 30, 7, 'FNO', 'fno')
+#     pr = D.box(24, 69.5, 30, 10, PROJ, 'proj')
+#     ue = D.box(14, 56, 10, 6, r'$\tilde u^{E}$')
+#     uv = D.box(34, 56, 10, 6, r'$\tilde u^{V}$')
+#     ce = D.op(14, 45.5, r'$\|$', r=2.4)
+#     cv = D.op(34, 45.5, r'$\|$', r=2.4)
+#     xs = D.box(24, 45.5, 8, 9, r'$x^{E}$' + '\n' + r'$x^{V}$')
+#     g = D.box(24, 32, 34, 9, 'GNN', 'gnn')
+#     pe = D.op(14, 19, r'$+$', r=2.4)
+#     pv = D.op(34, 19, r'$+$', r=2.4)
+#     oe = D.box(14, 7, 11, 7, r'$\hat y^{E}$')
+#     ov = D.box(34, 7, 11, 7, r'$\hat y^{V}$')
+#     D.arrow(xin.b, fno.t)
+#     D.arrow(fno.b, pr.t)
+#     D.text(25.5, 77, YG, ha='left')
+#     D.arrow(pr.at('b', -10), ue.t)
+#     D.arrow(pr.at('b', 10), uv.t)
+#     D.arrow(ue.b, ce.t)
+#     D.arrow(uv.b, cv.t)
+#     D.arrow(xs.l, ce.r)
+#     D.arrow(xs.r, cv.l)
+#     D.arrow(ce.b, (ce.x, g.t[1]))
+#     D.arrow(cv.b, (cv.x, g.t[1]))
+#     D.arrow((pe.x, g.b[1]), pe.t)
+#     D.arrow((pv.x, g.b[1]), pv.t)
+#     D.text(15.5, 24, r'$\Delta^{E}$', ha='left')
+#     D.text(35.5, 24, r'$\Delta^{V}$', ha='left')
+#     D.arrow(pe.b, oe.t)
+#     D.arrow(pv.b, ov.t)
+#     D.arrow(ue.l, (3, ue.y), (3, pe.y), pe.l)
+#     D.arrow(uv.r, (45, uv.y), (45, pv.y), pv.r)
+#     D.text(1.8, 38, 'resíduo', rotation=90, fs=SQ_FONT - 1.5)
+#     D.text(46.4, 38, 'resíduo', rotation=90, fs=SQ_FONT - 1.5)
+#     # detalhe: 3 mensagens + 2 atualizações
+#     D.frame(FX, 2, 98, 99, 'Camada da GNN por material', bottom=True)
+#     kw = dict(top=89, ew=7, hw=7, dx=4, gw=7.5, wW=7)
+#     s1 = _msg_col(D, 57, r'$e^{EE}_{uv}$', r'$h^E_u$', r'$W_1$', label=_arrow_lbl('E', 'E'), **kw)
+#     s2 = _msg_col(D, 73, r'$e^{VE}_{uv}$', r'$h^V_u$', r'$W_2$', label=_arrow_lbl('V', 'E'), **kw)
+#     s3 = _msg_col(D, 89, r'$e^{EV}_{uv}$', r'$h^E_u$', r'$W_3$', label=_arrow_lbl('E', 'V'), **kw)
+#     he = D.box(53, 54, 8, 6, r'$h^E_v$', fs=SQ_FONT - 0.5)
+#     hv = D.box(85, 54, 8, 6, r'$h^V_v$', fs=SQ_FONT - 0.5)
+#     cat_e = D.bar_h(50, 81, 44)
+#     cat_v = D.bar_h(83, 97, 44)
+#     for n in (he, s1, s2):
+#         D.arrow(n.b, (n.x, cat_e.t[1]))
+#     for n in (hv, s3):
+#         D.arrow(n.b, (n.x, cat_v.t[1]))
+#     me = D.box(65.5, 30, 22, 8, r'MLP$^E$', 'gnn')
+#     mv = D.box(90, 30, 13, 8, r'MLP$^V$', 'gnn')
+#     oe_ = D.box(65.5, 15, 12, 7, r"$h^{E\prime}_v$")
+#     ov_ = D.box(90, 15, 12, 7, r"$h^{V\prime}_v$")
+#     D.arrow((me.x, cat_e.b[1]), me.t)
+#     D.arrow((mv.x, cat_v.b[1]), mv.t)
+#     D.arrow(me.b, oe_.t)
+#     D.arrow(mv.b, ov_.t)
+#
+#
+# def sq_fno_gnn(D):
+#     sq_left_single(D, 'V')
+#     sq_gnn_detail(D)
+#
+#
+# def sq_fno_bipartite(D):
+#     g = sq_left_single(D, 'E')
+#     xv = D.box(39, g.y, 10, 6, r'$x^{V}$')                         # nós V auxiliares (sem estado)
+#     D.arrow(xv.l, g.r)
+#     sq_bipartite_detail(D)
+#
+#
+# SQ = dict(fno2d=sq_fno2d, fno_gnn=sq_fno_gnn, fno_bipartite=sq_fno_bipartite,
+#           fno_splitgnn=sq_split)
+
+
+# Notação do artigo (todas as figuras):
+#   domínios: grade e grafo; tipos de nó: V (vértice), E (elemento), C (cópia de vértice por
+#   material, só no Split); r = relação (tipo de origem, tipo de destino);
+#   aresta i → j (i = origem, j = destino); g_ij = sig(MLP_{g,r}(e_ij)); m_ij = g_ij W_r h_i;
+#   F_{j,r} = Σ_i m_ij; h_j^{(l+1)} = MLP_{u,τ(j)}([h_j ‖ F_{j,r1} ‖ ...]);
+#   x^τ, ũ^τ, Δ^τ, ŷ^τ: entrada, FNO interpolado e reescalado, correção e saída nos nós do tipo τ.
+GATE = r'$g_{ij}$'
 XG, YG = r'$x^{\mathrm{grade}}$', r'$\hat y^{\mathrm{grade}}$'
-PROJ = 'Projeção\ngrade ' + r'$\to$' + ' grafo'
+PROJ = 'Interpolação e\nreescala\ngrade ' + r'$\to$' + ' grafo'
+
+
+def _h_next(t):
+    return r'$h^{%s,(l+1)}_j$' % t
+
+
+def _mlp(t):
+    return r'MLP$_u^{%s}$' % t
 
 
 def sq_fno2d(D):
     x = 50
     xin = D.box(x, 89, 30, 9, XG)
-    P = D.box(x, 70, 40, 9, 'Lifting $P$', 'fno')
+    P = D.box(x, 70, 40, 9, 'Elevação $P$', 'fno')
     F = D.stack(x, 49.5, 40, 11, 'Camadas de Fourier', 'fno')
     Q = D.box(x, 29, 40, 9, 'Projeção $Q$', 'fno')
     yo = D.box(x, 10, 30, 9, YG)
@@ -581,7 +773,7 @@ def sq_left_single(D, t):
     cx = 21
     xin = D.box(cx, 92, 22, 7, XG)
     fno = D.box(cx, 80.5, 30, 7, 'FNO', 'fno')
-    pr = D.box(cx, 67, 30, 10, PROJ, 'proj')
+    pr = D.box(cx, 67, 30, 12, PROJ, 'proj')
     u = D.box(cx, 54, 10, 6, r'$\tilde u^{%s}$' % t)
     cat = D.op(cx, 44, r'$\|$', r=2.4)
     xn = D.box(38, 44, 10, 6, r'$x^{%s}$' % t)
@@ -603,12 +795,12 @@ def sq_left_single(D, t):
     return g
 
 
-def _msg_col(D, cx, e_txt, h_txt, W_txt, top=90, label=None, ew=8, hw=8, dx=5, gw=8.5,
-             wW=8):
-    """Mensagem em coluna: e e h_u no topo; gate e W; ×; Σ. Devolve o Σ."""
+def _msg_col(D, cx, e_txt, h_txt, W_txt, top=90, label=None, F_txt=None, cat_y=44, ew=8, hw=8,
+             dx=5, gw=8.5, wW=8):
+    """Mensagem em coluna: e_ij e h_i no topo; g_ij e W_r; ×; Σ (→ F_{j,r}). Devolve o Σ."""
     e = D.box(cx - dx, top, ew, 6, e_txt, fs=SQ_FONT - 0.5)
     h = D.box(cx + dx, top, hw, 6, h_txt, fs=SQ_FONT - 0.5)
-    gt = D.box(cx - dx, top - 13, gw, 7, GATE, 'gate', fs=SQ_FONT - 1)
+    gt = D.box(cx - dx, top - 13, gw, 7, GATE, 'gate')
     W = D.box(cx + dx, top - 13, wW, 7, W_txt, 'gnn')
     mul = D.op(cx + dx, top - 25, r'$\times$', r=2.2)
     sm = D.op(cx + dx, top - 35, r'$\Sigma$', r=2.2)
@@ -619,6 +811,8 @@ def _msg_col(D, cx, e_txt, h_txt, W_txt, top=90, label=None, ew=8, hw=8, dx=5, g
     D.arrow(mul.b, sm.t)
     if label:
         D.text(cx, top + 5.6, label, fs=SQ_FONT - 1)
+    if F_txt:
+        D.text(sm.x - 1.0, (sm.y - 2.2 + cat_y + 1.3) / 2, F_txt, ha='right', fs=SQ_FONT - 1)
     return sm
 
 
@@ -626,15 +820,19 @@ def _arrow_lbl(a, b):
     return r'$%s \to %s$' % (a, b)
 
 
+def _F(r):
+    return r'$F_{j,%s}$' % r
+
+
 def sq_gnn_detail(D):
-    """FNO_GNN: grafo de vértices, 1 mensagem V→V."""
+    """FNO_GNN: grafo de vértices, 1 mensagem V→V (EdgeConvLayer)."""
     D.frame(FX, 2, 98, 98, 'Camada da GNN', bottom=True)
-    s1 = _msg_col(D, 66, r'$e^{VV}_{uv}$', r'$h^V_u$', r'$W$', label=_arrow_lbl('V', 'V'),
-                  ew=10, hw=9, dx=6)
-    hv = D.box(90, 90, 9, 6, r'$h^V_v$', fs=SQ_FONT - 0.5)
+    s1 = _msg_col(D, 66, r'$e^{VV}_{ij}$', r'$h^V_i$', r'$W_{VV}$', label=_arrow_lbl('V', 'V'),
+                  F_txt=_F('VV'), ew=10, hw=9, dx=6, wW=10)
+    hv = D.box(90, 90, 9, 6, r'$h^V_j$', fs=SQ_FONT - 0.5)
     cat = D.bar_h(62, 96, 44)
-    upd = D.box(79, 30, 24, 8, r'MLP$^V$', 'gnn')
-    out = D.box(79, 15, 12, 7, r"$h^{V\prime}_v$")
+    upd = D.box(79, 30, 24, 8, _mlp('V'), 'gnn')
+    out = D.box(79, 15, 16, 7, _h_next('V'))
     D.arrow(s1.b, (s1.x, cat.t[1]))
     D.arrow(hv.b, (hv.x, cat.t[1]))
     D.arrow(cat.b, (upd.x, upd.t[1]))
@@ -642,16 +840,16 @@ def sq_gnn_detail(D):
 
 
 def sq_bipartite_detail(D):
-    """Bipartite: nós E atualizados; mensagens E→E e V→E (V só com x^V, sem estado)."""
+    """Bipartite (Elem): nós E atualizados; E→E sobre h^E e V→E sobre x^V (BipartiteEdgeConvLayer)."""
     D.frame(FX, 2, 98, 98, 'Camada da GNN bipartida', bottom=True)
-    s1 = _msg_col(D, 61, r'$e^{EE}_{uv}$', r'$h^E_u$', r'$W_1$', label=_arrow_lbl('E', 'E'),
-                  ew=9, hw=8)
-    s2 = _msg_col(D, 85, r'$e^{VE}_{uv}$', r'$x^V_u$', r'$W_2$', label=_arrow_lbl('V', 'E'),
-                  ew=9, hw=8)
-    hv = D.box(54, 55, 9, 6, r'$h^E_v$', fs=SQ_FONT - 0.5)
+    s1 = _msg_col(D, 61, r'$e^{EE}_{ij}$', r'$h^E_i$', r'$W_{EE}$', label=_arrow_lbl('E', 'E'),
+                  F_txt=_F('EE'), ew=9, hw=8, wW=9)
+    s2 = _msg_col(D, 85, r'$e^{VE}_{ij}$', r'$x^V_i$', r'$W_{VE}$', label=_arrow_lbl('V', 'E'),
+                  F_txt=_F('VE'), ew=9, hw=8, wW=9)
+    hv = D.box(54, 55, 9, 6, r'$h^E_j$', fs=SQ_FONT - 0.5)
     cat = D.bar_h(50, 96, 44)
-    upd = D.box(73, 30, 24, 8, r'MLP$^E$', 'gnn')
-    out = D.box(73, 15, 12, 7, r"$h^{E\prime}_v$")
+    upd = D.box(73, 30, 24, 8, _mlp('E'), 'gnn')
+    out = D.box(73, 15, 16, 7, _h_next('E'))
     for n in (s1, s2, hv):
         D.arrow(n.b, (n.x, cat.t[1]))
     D.arrow(cat.b, upd.t)
@@ -659,62 +857,68 @@ def sq_bipartite_detail(D):
 
 
 def sq_split(D):
+    cE, cC = 11, 37                                                 # colunas dos ramos E e C
     xin = D.box(24, 93, 22, 7, XG)
     fno = D.box(24, 82, 30, 7, 'FNO', 'fno')
-    pr = D.box(24, 69.5, 30, 10, PROJ, 'proj')
-    ue = D.box(14, 56, 10, 6, r'$\tilde u^{E}$')
-    uv = D.box(34, 56, 10, 6, r'$\tilde u^{V}$')
-    ce = D.op(14, 45.5, r'$\|$', r=2.4)
-    cv = D.op(34, 45.5, r'$\|$', r=2.4)
-    xs = D.box(24, 45.5, 8, 9, r'$x^{E}$' + '\n' + r'$x^{V}$')
+    pr = D.box(24, 69, 30, 12, PROJ, 'proj')
+    ue = D.box(cE, 55, 10, 6, r'$\tilde u^{E}$')
+    uc = D.box(cC, 55, 10, 6, r'$\tilde u^{C}$')
+    ce = D.op(cE, 45.5, r'$\|$', r=2.4)
+    cc = D.op(cC, 45.5, r'$\|$', r=2.4)
+    xe = D.box(19, 45.5, 6, 6, r'$x^{E}$')
+    xc = D.box(29, 45.5, 6, 6, r'$x^{C}$')
     g = D.box(24, 32, 34, 9, 'GNN', 'gnn')
-    pe = D.op(14, 19, r'$+$', r=2.4)
-    pv = D.op(34, 19, r'$+$', r=2.4)
-    oe = D.box(14, 7, 11, 7, r'$\hat y^{E}$')
-    ov = D.box(34, 7, 11, 7, r'$\hat y^{V}$')
+    pe = D.op(cE, 19, r'$+$', r=2.4)
+    pc = D.op(cC, 19, r'$+$', r=2.4)
+    oe = D.box(cE, 7, 11, 7, r'$\hat y^{E}$')
+    oc = D.box(cC, 7, 11, 7, r'$\hat y^{C}$')
     D.arrow(xin.b, fno.t)
     D.arrow(fno.b, pr.t)
     D.text(25.5, 77, YG, ha='left')
-    D.arrow(pr.at('b', -10), ue.t)
-    D.arrow(pr.at('b', 10), uv.t)
+    D.arrow(pr.at('b', cE - 24), ue.t)
+    D.arrow(pr.at('b', cC - 24), uc.t)
     D.arrow(ue.b, ce.t)
-    D.arrow(uv.b, cv.t)
-    D.arrow(xs.l, ce.r)
-    D.arrow(xs.r, cv.l)
+    D.arrow(uc.b, cc.t)
+    D.arrow(xe.l, ce.r)
+    D.arrow(xc.r, cc.l)
     D.arrow(ce.b, (ce.x, g.t[1]))
-    D.arrow(cv.b, (cv.x, g.t[1]))
+    D.arrow(cc.b, (cc.x, g.t[1]))
     D.arrow((pe.x, g.b[1]), pe.t)
-    D.arrow((pv.x, g.b[1]), pv.t)
-    D.text(15.5, 24, r'$\Delta^{E}$', ha='left')
-    D.text(35.5, 24, r'$\Delta^{V}$', ha='left')
+    D.arrow((pc.x, g.b[1]), pc.t)
+    D.text(cE + 1.5, 24, r'$\Delta^{E}$', ha='left')
+    D.text(cC + 1.5, 24, r'$\Delta^{C}$', ha='left')
     D.arrow(pe.b, oe.t)
-    D.arrow(pv.b, ov.t)
+    D.arrow(pc.b, oc.t)
     D.arrow(ue.l, (3, ue.y), (3, pe.y), pe.l)
-    D.arrow(uv.r, (45, uv.y), (45, pv.y), pv.r)
+    D.arrow(uc.r, (45, uc.y), (45, pc.y), pc.r)
     D.text(1.8, 38, 'resíduo', rotation=90, fs=SQ_FONT - 1.5)
     D.text(46.4, 38, 'resíduo', rotation=90, fs=SQ_FONT - 1.5)
-    # detalhe: 3 mensagens + 2 atualizações
+    # detalhe: 3 mensagens + 2 atualizações (SplitGNNLayer); C→E e E→C leem o mesmo
+    # cross_edge_attr (índice invertido): e^{CE}_{ij} e e^{CE}_{ji}
     D.frame(FX, 2, 98, 99, 'Camada da GNN por material', bottom=True)
-    kw = dict(top=89, ew=7, hw=7, dx=4, gw=7.5, wW=7)
-    s1 = _msg_col(D, 57, r'$e^{EE}_{uv}$', r'$h^E_u$', r'$W_1$', label=_arrow_lbl('E', 'E'), **kw)
-    s2 = _msg_col(D, 73, r'$e^{VE}_{uv}$', r'$h^V_u$', r'$W_2$', label=_arrow_lbl('V', 'E'), **kw)
-    s3 = _msg_col(D, 89, r'$e^{EV}_{uv}$', r'$h^E_u$', r'$W_3$', label=_arrow_lbl('E', 'V'), **kw)
-    he = D.box(53, 54, 8, 6, r'$h^E_v$', fs=SQ_FONT - 0.5)
-    hv = D.box(85, 54, 8, 6, r'$h^V_v$', fs=SQ_FONT - 0.5)
+    kw = dict(top=89, ew=7, hw=7, dx=4, gw=7.5, wW=7.5)
+    s1 = _msg_col(D, 57, r'$e^{EE}_{ij}$', r'$h^E_i$', r'$W_{EE}$', label=_arrow_lbl('E', 'E'),
+                  F_txt=_F('EE'), **kw)
+    s2 = _msg_col(D, 73, r'$e^{CE}_{ij}$', r'$h^C_i$', r'$W_{CE}$', label=_arrow_lbl('C', 'E'),
+                  F_txt=_F('CE'), **kw)
+    s3 = _msg_col(D, 89, r'$e^{CE}_{ji}$', r'$h^E_i$', r'$W_{EC}$', label=_arrow_lbl('E', 'C'),
+                  F_txt=_F('EC'), **kw)
+    he = D.box(53, 54, 8, 6, r'$h^E_j$', fs=SQ_FONT - 0.5)
+    hc = D.box(85, 54, 8, 6, r'$h^C_j$', fs=SQ_FONT - 0.5)
     cat_e = D.bar_h(50, 81, 44)
-    cat_v = D.bar_h(83, 97, 44)
+    cat_c = D.bar_h(83, 97, 44)
     for n in (he, s1, s2):
         D.arrow(n.b, (n.x, cat_e.t[1]))
-    for n in (hv, s3):
-        D.arrow(n.b, (n.x, cat_v.t[1]))
-    me = D.box(65.5, 30, 22, 8, r'MLP$^E$', 'gnn')
-    mv = D.box(90, 30, 13, 8, r'MLP$^V$', 'gnn')
-    oe_ = D.box(65.5, 15, 12, 7, r"$h^{E\prime}_v$")
-    ov_ = D.box(90, 15, 12, 7, r"$h^{V\prime}_v$")
+    for n in (hc, s3):
+        D.arrow(n.b, (n.x, cat_c.t[1]))
+    me = D.box(65.5, 30, 22, 8, _mlp('E'), 'gnn')
+    mc = D.box(90, 30, 13, 8, _mlp('C'), 'gnn')
+    oe_ = D.box(65.5, 15, 15, 7, _h_next('E'))
+    oc_ = D.box(90, 15, 15, 7, _h_next('C'))
     D.arrow((me.x, cat_e.b[1]), me.t)
-    D.arrow((mv.x, cat_v.b[1]), mv.t)
+    D.arrow((mc.x, cat_c.b[1]), mc.t)
     D.arrow(me.b, oe_.t)
-    D.arrow(mv.b, ov_.t)
+    D.arrow(mc.b, oc_.t)
 
 
 def sq_fno_gnn(D):

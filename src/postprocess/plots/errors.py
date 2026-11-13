@@ -175,7 +175,7 @@ def fig_surface_error_single(xy, elems, e_tri, in_omega, iface, vmax, cmap='Blue
 ARTICLE_WIDE_IN = 18.0 / 2.54    # largura de 2 colunas (figure*)
 
 
-def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cmap='hot_r',
+def fig_surface_error_grid(xy, elems, E_list, labels, in_omega, iface, vmax, cmap='viridis',
                            ncols=2, width_in=ARTICLE_WIDE_IN, tick_step=0.1, cb_label='[T]'):
     """Erro no domínio de várias archs numa figura só (artigo): painéis e_tri [M] em grade
     ncols × ceil(n/ncols), MESMA escala (vmin = 0, vmax dado) e UMA colorbar vertical à direita

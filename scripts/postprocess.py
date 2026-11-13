@@ -33,7 +33,7 @@ Subcomandos:
       Mapa e_tri = Σe·w/Σw por triângulo (surface_error_per_triangle); fora de Ω em cinza.
       Escala comum: vmax = p99 dos 4 mapas em Ω, para cima em 0,01 T (--vmax fixa à mão).
       Saída: docs/figures/erro_dominio.{pdf,png} (as 4 archs em 2×2 com o nome em cima; uma
-      colorbar vertical, sem seta; --cmap, default hot_r; --fig-article troca o destino) +
+      colorbar vertical, sem seta; --cmap, default viridis; --fig-article troca o destino) +
       docs/figures/campo_referencia.{pdf,png} (|B| do FEMM, 1 painel, 1 coluna, 0..2,5 T) +
       diagnóstico em
       dados/surface_error/sample_XXXXXX_<loss>.{json,npz} e plots/surface_error/*.png (4 archs
@@ -567,7 +567,9 @@ SURFACE_REF_RUN = 'FNO2d_mae'                  # surface --pct: run que escolhe 
 ARTICLE_FIG_NAME = 'erro_dominio'              # docs/figures/erro_dominio.{pdf,png} (4 archs, 2×2)
 ARTICLE_REF_FIG_NAME = 'campo_referencia'      # docs/figures/campo_referencia.{pdf,png} (|B| do FEMM)
 ARTICLE_FONT_PT = 10                           # fonte das figuras do surface (pedido: maior que 8 pt)
-SURFACE_CMAP = 'hot_r'                         # escala do mapa do artigo (0 = branco)
+# [REMOVIDO] trocado por viridis a pedido (2026-11-12):
+# SURFACE_CMAP = 'hot_r'                         # escala do mapa do artigo (0 = branco)
+SURFACE_CMAP = 'viridis'                       # escala do mapa do artigo
 
 
 def _json_default(o):

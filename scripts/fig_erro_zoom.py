@@ -72,8 +72,9 @@ ROW_REGION = {'Quina': 0, 'Interface': 1, 'Entreferro': 'entreferro'}
 #   Interface  -> abertura da ranhura entre dois dentes (pontas em 49,16° e 50,84°, de
 #                 r = 37,514 a 38,614 mm) e um pouco das pontas dos dentes: r = 38,0 mm, θ = 50,0°
 #                 [antes: face ímã–coroa do rotor, r = 42,175 mm, θ = 49,63° -- (27.33, 32.13)];
-#   Entreferro -> meio do entreferro (38,614–39,925 mm), r = 39,27 mm, θ = 66,0°: sapata do
-#                 dente (60,84°–69,16°) embaixo e ímã (63,54°–70,01°) em cima.
+#   Entreferro -> meio do entreferro (38,614–39,925 mm), r = 39,27 mm, θ = 90°: faixa quase
+#                 horizontal, janela maior (ENTREFERRO_SIDE_MM) com dentes embaixo e ímãs em cima
+#                 [antes: θ = 66,0°, lado igual às outras -- (15.97, 35.88)].
 # [REMOVIDO] janelas de 3,0 mm -- aumentadas para 4,5 mm a pedido (mais área no zoom)
 # DEFAULT_WINDOWS = {
 #     'Quina': (19.79, 33.16, 3.0),
@@ -81,11 +82,13 @@ ROW_REGION = {'Quina': 0, 'Interface': 1, 'Entreferro': 'entreferro'}
 #     'Entreferro': (15.97, 35.88, 3.0),
 # }
 WINDOW_SIDE_MM = 4.5
+ENTREFERRO_SIDE_MM = 8.0          # janela do entreferro maior (faixa horizontal em θ = 90°)
 DEFAULT_WINDOWS = {
     'Quina': (19.79, 33.16, WINDOW_SIDE_MM),
     # [REMOVIDO] face ímã–coroa do rotor: 'Interface': (27.33, 32.13, WINDOW_SIDE_MM),
     'Interface': (24.43, 29.11, WINDOW_SIDE_MM),
-    'Entreferro': (15.97, 35.88, WINDOW_SIDE_MM),
+    # [REMOVIDO] θ = 66°, mesmo lado das outras: 'Entreferro': (15.97, 35.88, WINDOW_SIDE_MM),
+    'Entreferro': (0.0, 39.27, ENTREFERRO_SIDE_MM),
 }
 
 

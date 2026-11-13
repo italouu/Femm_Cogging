@@ -118,7 +118,9 @@ NEUTRAL_FACE, NEUTRAL_EDGE = 'white', '0.55'
 # vértice sem material (c) = anel cinza fino. Diâmetros em fração do lado da janela.
 D_ELEM_FRAC, D_VERT_FRAC = 0.040, 0.046
 RING_LW, RING_LW_NEUTRAL, DISC_EDGE_LW = 1.8, 0.9, 0.4
-TITLES = ('Grade', 'Grafo de vértices', 'Elementos + vértices', 'Elementos + vértices por material')
+# [REMOVIDO] TITLES = ('Grade', 'Grafo de vértices', 'Elementos + vértices', 'Elementos + vértices por material')
+TITLES = ('Grade', 'Grafo de vértices', 'Elementos e vértices', 'Elementos e vértices por material')
+TITLE_PT = 10.5                   # títulos dos painéis maiores que os rótulos (a)–(d) (8 pt)
 ARCH_OF_PANEL = ('FNO2d', 'FNO_GNN', 'FNO_Bipartite', 'FNO_SplitGNN')
 
 
@@ -341,7 +343,8 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
     nr, nc = (2, 2) if layout == '2x2' else (1, 4)
     # [REMOVIDO] gap, h_t, h_leg = 0.08, (0.16 if titles else 0.02), 0.62  (legenda com 3 linhas)
     # [REMOVIDO] h_leg = 0.80 (legenda de 4 linhas)
-    gap, h_t, h_leg = 0.08, (0.16 if titles else 0.02), 0.60
+    # [REMOVIDO] gap, h_t, h_leg = 0.08, (0.16 if titles else 0.02), 0.60  (título 8 pt)
+    gap, h_t, h_leg = 0.08, (0.30 if titles else 0.02), 0.60
     pw = (FIG_WIDTH_IN - (nc - 1) * gap - 0.04) / nc
     ph = pw * (box[3] - box[2]) / side
     h_lab = 0.16                                               # rótulo (a)–(d) abaixo
@@ -376,7 +379,8 @@ def render(F, layout='2x2', titles=True, out_dir=ARTICLE_FIG_DIR, name=None):
             ax.add_collection(LineCollection(F['mesh_seg'], colors=MESH_COLOR, linewidths=MESH_LW,
                                              zorder=1))
             if titles:
-                ax.set_title(TITLES[k], pad=3)
+                # [REMOVIDO] ax.set_title(TITLES[k], pad=3)
+                ax.set_title(TITLES[k], pad=5, fontsize=TITLE_PT, fontweight='bold')
             ax.text(0.5, -0.02, f'({"abcd"[k]}) {ARCH_OF_PANEL[k]}',
                     transform=ax.transAxes, ha='center', va='top')
             axs.append(ax)

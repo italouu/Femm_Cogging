@@ -69,20 +69,27 @@ class Diagram:
         ax.set_aspect('equal')
         ax.axis('off')
         self.ax = ax
+        # [REMOVIDO] self._centered = [] -- os rótulos centralizados agora são contornos (label)
 
     def box(self, x, y, w, h, txt, kind='data', fs=None, lw=0.8):
         from matplotlib.patches import FancyBboxPatch
         style = 'square,pad=0' if kind == 'data' else 'round,pad=0,rounding_size=1.0'
         self.ax.add_patch(FancyBboxPatch((x - w / 2, y - h / 2), w, h, boxstyle=style,
                                          fc=COLORS[kind], ec=EDGE, lw=lw, zorder=3))
-        self.ax.text(x, y, txt, ha='center', va='center', fontsize=fs or self.fs, zorder=4,
-                     linespacing=1.15)
+        # [REMOVIDO] self.ax.text(x, y, txt, ...) -- texto registrado para centralizar pela tinta
+        # [REMOVIDO] self._centered.append(self.ax.text(x, y, txt, ha='center', va='center',
+        # [REMOVIDO]     fontsize=fs or self.fs, zorder=4, linespacing=1.15))
+        # -- o PDF posiciona o mathtext diferente do PNG; o contorno é igual nos dois
+        self.label(x, y, txt, fs or self.fs, linespacing=1.15)
         return Node(x, y, w, h)
 
     def op(self, x, y, sym, r=1.6):
         from matplotlib.patches import Circle
         self.ax.add_patch(Circle((x, y), r, fc='white', ec=EDGE, lw=0.8, zorder=3))
-        self.ax.text(x, y, sym, ha='center', va='center', fontsize=self.fs + 1, zorder=4)
+        # [REMOVIDO] self.ax.text(x, y, sym, ...) -- texto registrado para centralizar pela tinta
+        # [REMOVIDO] self._centered.append(self.ax.text(x, y, sym, ha='center', va='center',
+        # [REMOVIDO]     fontsize=self.fs + 1, zorder=4)) -- contorno (igual no PNG e no PDF)
+        self.label(x, y, sym, self.fs + 1)
         return Node(x, y, 2 * r, 2 * r)
 
     def bar(self, x, y0, y1, w=2.2):
@@ -103,9 +110,41 @@ class Diagram:
                                     zorder=3))
         # [REMOVIDO] self.ax.text((x0 + x1) / 2, y, 'concatenação', ha='center', va='center', -- rótulo configurável
         # [REMOVIDO] self.ax.text((x0 + x1) / 2, y, label, ...) -- posição do rótulo configurável
-        self.ax.text((x0 + x1) / 2 if label_x is None else label_x, y, label, ha='center', va='center',
-                     fontsize=self.fs - 1.5, zorder=4)
+        if label:                                                   # label=None: barra sem rótulo
+            # [REMOVIDO] self._centered.append(self.ax.text((x0 + x1) / 2 if label_x is None
+            # [REMOVIDO]     else label_x, y, label, ha='center', va='center',
+            # [REMOVIDO]     fontsize=self.fs - 1.5, zorder=4)) -- contorno (igual no PNG e no PDF)
+            self.label((x0 + x1) / 2 if label_x is None else label_x, y, label, self.fs - 1.5)
         return Node((x0 + x1) / 2, y, x1 - x0, h)
+
+    def label(self, x, y, txt, fs, linespacing=1.2, zorder=4):
+        """Rótulo desenhado como contorno dos glifos (TextPath), com a tinta centrada em (x, y).
+
+        O ax.text centraliza pela caixa tipográfica (reserva descendentes e sobrescritos) e o
+        mathtext sai em posições diferentes no PNG (Agg) e no PDF; o contorno é o mesmo caminho
+        nos dois formatos e o centro dos seus limites é o centro exato da tinta. Linhas
+        separadas por quebra de linha ficam centradas uma a uma, com passo linespacing × fs.
+        """
+        from matplotlib.font_manager import FontProperties
+        from matplotlib.patches import PathPatch
+        from matplotlib.path import Path
+        from matplotlib.textpath import TextPath
+        from matplotlib.transforms import Affine2D, ScaledTranslation
+        prop = FontProperties(size=fs)
+        paths = []
+        for k, line in enumerate(txt.split('\n')):
+            tp = TextPath((0, 0), line, prop=prop)
+            e = tp.get_extents()
+            paths.append(tp.transformed(Affine2D().translate(-(e.x0 + e.x1) / 2,
+                                                             -k * linespacing * fs)))
+        path = Path.make_compound_path(*paths)
+        e = path.get_extents()
+        path = path.transformed(Affine2D().translate(-(e.x0 + e.x1) / 2, -(e.y0 + e.y1) / 2))
+        # pontos -> polegadas -> pixels; depois desloca até (x, y) em dados
+        trans = (Affine2D().scale(1 / 72) + self.fig.dpi_scale_trans
+                 + ScaledTranslation(x, y, self.ax.transData))
+        self.ax.add_patch(PathPatch(path, transform=trans, fc=self.plt.rcParams['text.color'],
+                                    ec='none', lw=0, zorder=zorder))
 
     def stack(self, x, y, w, h, txt, kind, n=3, d=1.2):
         """Bloco repetido: n-1 cópias deslocadas atrás do bloco principal."""
@@ -148,8 +187,39 @@ class Diagram:
         for (xa, ya), xb in ((node.at('b', -node.w / 2), x0), (node.at('b', node.w / 2), x1)):
             self.ax.plot([xa, xb], [ya, y1], color='0.6', lw=0.5, ls=(0, (2, 2)), zorder=0)
 
+    # [REMOVIDO] center_ink: media a tinta no raster (Agg), mas o PDF posiciona o mathtext
+    # diferente (até ~0,5 unidade); substituído pelos rótulos em contorno (label)
+    # [REMOVIDO] def center_ink(self, dpi=600):
+    # [REMOVIDO]     """Desloca cada texto registrado para que o centro da tinta caia no ponto de ancoragem.
+    #
+    # [REMOVIDO]     O matplotlib centraliza pela caixa tipográfica (reserva descendentes e sobrescritos), o
+    # [REMOVIDO]     que deixa x^grade, ũ, Σ, FNO etc. visivelmente altos. Cada texto é renderizado sozinho,
+    # [REMOVIDO]     o retângulo da tinta é medido e o texto é transladado pela diferença.
+    # [REMOVIDO]     """
+    # [REMOVIDO]     fig, ax = self.fig, self.ax
+    # [REMOVIDO]     old_dpi = fig.dpi
+    # [REMOVIDO]     fig.set_dpi(dpi)
+    # [REMOVIDO]     arts = [*ax.patches, *ax.lines, *ax.texts, *ax.collections, *ax.images]
+    # [REMOVIDO]     vis = {a: a.get_visible() for a in arts}
+    # [REMOVIDO]     for t in self._centered:
+    # [REMOVIDO]         for a in arts:
+    # [REMOVIDO]             a.set_visible(a is t)
+    # [REMOVIDO]         fig.canvas.draw()
+    # [REMOVIDO]         img = np.asarray(fig.canvas.buffer_rgba())[..., :3].min(-1)
+    # [REMOVIDO]         ys, xs = np.nonzero(img < 250)
+    # [REMOVIDO]         if len(xs) == 0:
+    # [REMOVIDO]             continue
+    # [REMOVIDO]         ink = ((xs.min() + xs.max() + 1) / 2, img.shape[0] - (ys.min() + ys.max() + 1) / 2)
+    # [REMOVIDO]         ink = ax.transData.inverted().transform(ink)
+    # [REMOVIDO]         x, y = t.get_position()
+    # [REMOVIDO]         t.set_position((2 * x - ink[0], 2 * y - ink[1]))
+    # [REMOVIDO]     for a, v in vis.items():
+    # [REMOVIDO]         a.set_visible(v)
+    # [REMOVIDO]     fig.set_dpi(old_dpi)
+
     def save(self, name, out_dir=ARTICLE_FIG_DIR):
         out_dir.mkdir(parents=True, exist_ok=True)
+        # [REMOVIDO] self.center_ink() -- rótulos em contorno já saem centrados
         self.fig.savefig(out_dir / f'{name}.pdf')
         self.fig.savefig(out_dir / f'{name}.png', dpi=300)
         self.plt.close(self.fig)
@@ -847,7 +917,8 @@ def sq_gnn_detail(D):
                   F_txt=_F('VV'), ew=10, hw=9, dx=6, wW=10)
     hv = D.box(90, 90, 9, 6, r'$h^V_j$', fs=SQ_FONT - 0.5)
     # [REMOVIDO] cat = D.bar_h(62, 96, 44) -- fonte 10,5 pt (figura a 0,32 no artigo)
-    cat = D.bar_h(62, 96, 41, label=CAT, label_x=93.5)
+    # [REMOVIDO] cat = D.bar_h(62, 96, 41, label=CAT, label_x=93.5) -- ‖ saía da barra cinza
+    cat = D.bar_h(62, 96, 41, label=None)
     # [REMOVIDO] upd = D.box(79, 30, 24, 8, _mlp('V'), 'gnn') -- fonte 10,5 pt (figura a 0,32 no artigo)
     upd = D.box(79, 28, 24, 8, _mlp('V'), 'gnn')
     # [REMOVIDO] out = D.box(79, 15, 16, 7, _h_next('V')) -- fonte 10,5 pt (figura a 0,32 no artigo)
@@ -867,7 +938,8 @@ def sq_bipartite_detail(D):
                   F_txt=_F('VE'), ew=9, hw=8, wW=9)
     hv = D.box(54, 55, 9, 6, r'$h^E_j$', fs=SQ_FONT - 0.5)
     # [REMOVIDO] cat = D.bar_h(50, 96, 44) -- fonte 10,5 pt (figura a 0,32 no artigo)
-    cat = D.bar_h(50, 96, 41, label=CAT, label_x=93.5)
+    # [REMOVIDO] cat = D.bar_h(50, 96, 41, label=CAT, label_x=93.5) -- ‖ saía da barra cinza
+    cat = D.bar_h(50, 96, 41, label=None)
     # [REMOVIDO] upd = D.box(73, 30, 24, 8, _mlp('E'), 'gnn') -- fonte 10,5 pt (figura a 0,32 no artigo)
     upd = D.box(73, 28, 24, 8, _mlp('E'), 'gnn')
     # [REMOVIDO] out = D.box(73, 15, 16, 7, _h_next('E')) -- fonte 10,5 pt (figura a 0,32 no artigo)
@@ -931,9 +1003,11 @@ def sq_split(D):
     he = D.box(53, 54, 8, 6, r'$h^E_j$', fs=SQ_FONT - 0.5)
     hc = D.box(85, 54, 8, 6, r'$h^C_j$', fs=SQ_FONT - 0.5)
     # [REMOVIDO] cat_e = D.bar_h(50, 81, 44) -- fonte 10,5 pt (figura a 0,32 no artigo)
-    cat_e = D.bar_h(50, 81, 41, label=CAT, label_x=78.5)
+    # [REMOVIDO] cat_e = D.bar_h(50, 81, 41, label=CAT, label_x=78.5) -- ‖ saía da barra cinza
+    cat_e = D.bar_h(50, 81, 41, label=None)
     # [REMOVIDO] cat_c = D.bar_h(83, 97, 44) -- fonte 10,5 pt (figura a 0,32 no artigo)
-    cat_c = D.bar_h(83, 97, 41, label=CAT, label_x=94.5)
+    # [REMOVIDO] cat_c = D.bar_h(83, 97, 41, label=CAT, label_x=94.5) -- ‖ saía da barra cinza
+    cat_c = D.bar_h(83, 97, 41, label=None)
     for n in (he, s1, s2):
         D.arrow(n.b, (n.x, cat_e.t[1]))
     for n in (hc, s3):

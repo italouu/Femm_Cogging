@@ -2,7 +2,9 @@
 Reconstrução de uma run a partir do log (config.json + best.pth) e predição.
 A raiz da bateria é argumento de find_runs/load_set.
 """
+import hashlib
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -15,6 +17,8 @@ from src.neural_op.normalization import Normalizer
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 INTERP_MODE = 'cell_centered_circular_theta'   # rótulo da interpolação grade -> nós (única, archs/interp.py)
+# cache de inferência (fora do git: /data/temp/*). INFER_CACHE=0 desliga.
+CACHE_ROOT = Path(__file__).resolve().parents[2] / 'data' / 'temp' / 'inference_cache'
 
 ARCHS     = ('FNO2d', 'FNO_GNN', 'GNN_PostBase', 'FNO_BipartiteGNN', 'FNO_BipartiteGNN_Elem')
 RUN_ORDER = [(a, l) for a in ARCHS for l in ('mse', 'mae')]
@@ -40,6 +44,10 @@ def load_model(run_dir: Path):
     normalizer = (Normalizer.from_dict(cfg['norm_stats'])
                   if cfg.get('normalize') and cfg.get('norm_stats') else None)
     model.normalizer = normalizer
+    # tag do cache de inferência: run + identidade do best.pth (checkpoint novo invalida)
+    st = (run_dir / 'checkpoints' / 'best.pth').stat()
+    model._infer_cache_dir = (CACHE_ROOT / f"{cfg['arch']}_{cfg['loss']}_{run_dir.name}"
+                              / f'{st.st_size}_{st.st_mtime_ns}')
     return model, normalizer, cfg, ckpt['epoch']
 
 
@@ -79,8 +87,63 @@ def find_split_runs(root: Path):
     return out
 
 
-@torch.inference_mode()
+SPLIT_IN_KEYS = ('x_hw', 'node_x', 'elem_x', 'edge_index', 'edge_attr', 'cross_edge_index',
+                 'cross_edge_attr', 'L', 'elem_L')
+BIP_IN_KEYS   = ('x_hw', 'node_x', 'elem_x', 'edge_index', 'edge_attr', 'cross_edge_index',
+                 'cross_edge_attr', 'L')
+VERT_IN_KEYS  = ('x_hw', 'node_x', 'edge_index', 'edge_attr', 'L')
+
+
+def _cache_dir(model):
+    if os.environ.get('INFER_CACHE', '1') == '0':
+        return None
+    return getattr(model, '_infer_cache_dir', None)
+
+
+def _hash_inputs(tag, d, keys):
+    """blake2b do conteúdo (dtype, shape, bytes) das chaves de entrada."""
+    h = hashlib.blake2b(tag.encode(), digest_size=16)
+    for k in keys:
+        a = d[k]
+        a = a.detach().cpu().numpy() if torch.is_tensor(a) else np.asarray(a)
+        a = np.ascontiguousarray(a)
+        h.update(f'{k}|{a.dtype.str}|{a.shape}|'.encode())
+        h.update(a.view(np.uint8).reshape(-1).data)
+    return h.hexdigest()
+
+
+def _cache_load(path):
+    try:
+        with np.load(path) as z:
+            return z['a'], z['b']
+    except Exception:          # ausente ou corrompido -> recalcula
+        return None
+
+
+def _cache_save(path, a, b):
+    """Gravação atômica (tmp + replace), segura com vários workers."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f'{path.stem}.{os.getpid()}.tmp.npz')
+    np.savez(tmp, a=a, b=b)
+    os.replace(tmp, path)
+
+
 def predict_split(model, normalizer, d):
+    """predict_split com cache em disco (CACHE_ROOT; ver _predict_split_nocache)."""
+    cdir = _cache_dir(model)
+    if cdir is None:
+        return _predict_split_nocache(model, normalizer, d)
+    path = cdir / f"{_hash_inputs('split', d, SPLIT_IN_KEYS)}.npz"
+    hit = _cache_load(path)
+    if hit is not None:
+        return hit
+    y_aux, y_base = _predict_split_nocache(model, normalizer, d)
+    _cache_save(path, y_aux, y_base)
+    return y_aux, y_base
+
+
+@torch.inference_mode()
+def _predict_split_nocache(model, normalizer, d):
     """FNO_SplitGNN num layout parse_split_smooth (numpy) -> (B N_aux [M,2] por elemento,
     B N_base [K_base,2] por cópia vértice×material), desnormalizados (como
     tests/check_split_surface.py)."""
@@ -142,8 +205,27 @@ def to_torch_sample(s):
     return out
 
 
-@torch.inference_mode()
 def predict(arch, model, normalizer, ts):
+    """predict com cache em disco (CACHE_ROOT; ver _predict_nocache). Hit devolve
+    tensores no DEVICE com o mesmo dtype."""
+    cdir = _cache_dir(model)
+    if cdir is None:
+        return _predict_nocache(arch, model, normalizer, ts)
+    if arch in ('FNO_BipartiteGNN', 'FNO_BipartiteGNN_Elem'):
+        d, keys = (ts['elem'] if arch == 'FNO_BipartiteGNN_Elem' else ts['bip']), BIP_IN_KEYS
+    else:
+        d, keys = ts['vertex'], VERT_IN_KEYS
+    path = cdir / f'{_hash_inputs(arch, d, keys)}.npz'
+    hit = _cache_load(path)
+    if hit is not None:
+        return torch.from_numpy(hit[0]).to(DEVICE), torch.from_numpy(hit[1]).to(DEVICE)
+    out_hw, y_nodes = _predict_nocache(arch, model, normalizer, ts)
+    _cache_save(path, out_hw.detach().cpu().numpy(), y_nodes.detach().cpu().numpy())
+    return out_hw, y_nodes
+
+
+@torch.inference_mode()
+def _predict_nocache(arch, model, normalizer, ts):
     """Retorna (out_hw [2,H,W] em T no device, y_nodes [S,2] em T no device).
     FNO_BipartiteGNN_Elem: usa ts['elem'] e y_nodes é POR ELEMENTO [M,2]
     (levar aos nós com fields.elem_to_nodes; contrato do layout Elem: docstring de src/data_gen/parsers/elem_structure.py)."""

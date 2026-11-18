@@ -164,6 +164,15 @@ def polar_to_xy(B, x, y):
     return np.stack([B[:, 0] * c - B[:, 1] * s, B[:, 0] * s + B[:, 1] * c], axis=1)
 
 
+def grad_ops(xy, E):
+    """Gradiente P1 por elemento: ∂A/∂x = Σ gx·A, ∂A/∂y = Σ gy·A; área S."""
+    X, Y = xy[E, 0], xy[E, 1]
+    b = np.stack([Y[:, 1] - Y[:, 2], Y[:, 2] - Y[:, 0], Y[:, 0] - Y[:, 1]], 1)
+    c = np.stack([X[:, 2] - X[:, 1], X[:, 0] - X[:, 2], X[:, 1] - X[:, 0]], 1)
+    a2 = (X[:, 1] - X[:, 0]) * (Y[:, 2] - Y[:, 0]) - (X[:, 2] - X[:, 0]) * (Y[:, 1] - Y[:, 0])
+    return b / a2[:, None], c / a2[:, None], np.abs(a2) / 2
+
+
 def parse_torque_sample(path, row, with_split=False):
     """1 .ans.gz -> layouts para os modelos (samples.parse_smooth com Elem) + o que o torque
     usa: gt exato por elemento (xy), smooth no centróide (xy), material, centróide, área.

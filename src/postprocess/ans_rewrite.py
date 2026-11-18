@@ -1,12 +1,10 @@
 """
-.ans do FEMM: restrições de contorno da solução e cópia com outro A nodal.
+.ans do FEMM: restrições de contorno da solução.
 
   ans_constraints(lines, nodes) : nós Dirichlet (A prescrito = 0) e pares periódicos /
                                   antiperiódicos, lidos do próprio .ans -> classes de nós
-                                  amarrados (para a reconstrução de A com restrição,
-                                  a_reconstruction.reconstruct_A).
-  write_ans_with_A(text, dst, A) : grava uma CÓPIA do .ans trocando só a 3ª coluna (A) das
-                                  linhas de nó de [Solution]; o resto do texto fica idêntico.
+                                  amarrados (usado por weighted_mst.t22_python(periodic=True)
+                                  para amarrar a função peso g nos nós periódicos).
 
 Formato (Format 4.0, magnetostático, planar), seções usadas:
   [BdryProps] = n   blocos <BeginBdry> ... <BdryType> ... <A_0>,<A_1>,<A_2>,<Phi> ... <EndBdry>
@@ -18,11 +16,7 @@ Formato (Format 4.0, magnetostático, planar), seções usadas:
                     linhas; n_pbc; n_pbc linhas "n0 n1 tipo" (0 periódico, 1 antiperiódico);
                     n_airgap (0 aqui).
 """
-from pathlib import Path
-
 import numpy as np
-
-PROTECTED_DIRS = ('torque_theta_e_batch', 'raw')     # nunca gravar dentro destes
 
 
 # --------------------------------------------------------------------------- leitura
@@ -135,32 +129,3 @@ def ans_constraints(lines, nodes, tol_rel=1e-9):
     zero_root = np.zeros(N, bool); zero_root[root[on]] = True
     return dict(dirichlet=np.flatnonzero(on), pbc=pbc, root=root, sign=sign, zero=zero_root[root],
                 bdry=[(b['BdryName'], int(b['BdryType'])) for b in bp])
-
-
-# --------------------------------------------------------------------------- escrita
-def write_ans_with_A(src_text: str, dst_path, A):
-    """Grava em dst_path uma cópia de src_text (texto do .ans, com as quebras de linha
-    originais) trocando só o 3º campo (A) das N linhas de nó de [Solution], com '%.17g'
-    (round-trip exato do double). dst_path não pode existir como o original nem ficar sob
-    diretórios protegidos (cache do batch, raw)."""
-    dst = Path(dst_path).resolve()
-    if any(p in dst.parts for p in PROTECTED_DIRS):
-        raise PermissionError(f'destino protegido: {dst}')
-    lines = src_text.splitlines(keepends=True)
-    i_nodes, N, *_ = solution_layout(_strip(lines))
-    A = np.asarray(A, np.float64)
-    if A.shape != (N,):
-        raise ValueError(f'A com forma {A.shape}, esperado ({N},)')
-    out = list(lines)
-    for q in range(N):
-        l = lines[i_nodes + q]
-        body = l.rstrip('\r\n'); eol = l[len(body):]
-        f = body.split('\t')
-        f[2] = format(A[q], '.17g')
-        out[i_nodes + q] = '\t'.join(f) + eol
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dst.with_suffix(dst.suffix + '.part')
-    with open(tmp, 'w', encoding='utf-8', newline='') as fh:
-        fh.write(''.join(out))
-    tmp.replace(dst)
-    return dst

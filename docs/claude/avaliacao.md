@@ -340,11 +340,13 @@ fundamental ($L_d \approx L_q$, ímãs de superfície). $T_0$ = cogging na posi�
 Split por Maxwell está nos parâmetros, não na forma: $|\Delta T_0|$ ~11% e $\Delta A$ ~−7% (mediana).
 
 **Passos:**
-1. **A nodal a partir do B do Split:** mínimos quadrados P1,
-   $\min \sum_e S_e \lVert \nabla A_e - (-B_y, B_x)_e \rVert^2$ (xy em mm, B em T, A em Wb/m; 1 nó fixo, a
-   constante cancela em ψ). B do Split por elemento = média das 3 cópias N_base do material do
-   elemento (o mesmo do torque). Também remove a parte não rotacional do B previsto.
-   Conferência: com o B exato curl(A) do GT, reproduz o A do FEMM (torque idêntico).
+1. **A nos lados de cada bobina direto do B** (`src/postprocess/flux_linkage_direct.py`, caminho
+   c1; ver "ψ direto do B" abaixo): integral de linha de B a partir do eixo do dente, sem
+   reconstruir A no domínio. B do Split por elemento = média das 3 cópias N_base do material do
+   elemento (o mesmo do torque). Conferência: com o B exato curl(A) do GT, reproduz o ψ do A do
+   FEMM a 0,03%.
+   *(Até 2026-11-18: A nodal por mínimos quadrados P1, $\min \sum_e S_e \lVert \nabla A_e - (-B_y, B_x)_e \rVert^2$
+   — removido, ver abaixo.)*
 2. **Fluxo concatenado** por circuito, como o FEMM: $\psi_c = L\,N/S_c \int_{S_c} A\,dS$; por fase,
    $\psi_{fase} = \sum_k s_k\,(\psi_{k,0} - \psi_{k,1})$ com `WINDING_SECTOR` (dente $k$: `coil_k_0` ida,
    `coil_k_1` volta).
@@ -375,8 +377,10 @@ Maxwell no GT (diferença entre métodos, entra no erro do híbrido).
   cálculo por Maxwell, não do fluxo previsto.
 - Saída: `dados/torque/fluxlink_split_<loss>.json`, `plots/torque/fluxlink_split_<loss>_{excitacao,total}.png`.
 
-**Variante: ψ direto do B, sem reconstruir A** (2026-11-18) — `src/postprocess/flux_linkage_direct.py`
-(`flux_torque_direct`, mesma entrada de `a_reconstruction.flux_torque` trocando A nodal por B).
+**ψ direto do B, sem reconstruir A — ADOTADO em 2026-11-18** (caminho c1) —
+`src/postprocess/flux_linkage_direct.py` (`flux_torque_direct`). A reconstrução de A por mínimos
+quadrados (`a_reconstruction.py`) e o `scripts/maxwell_rec_torque.py` foram removidos do código
+nessa data; a tabela abaixo fica como histórico da comparação.
 - Em 2D, $\nabla A = (-B_y, B_x)$: a diferença de A entre dois pontos é o fluxo que atravessa a linha
   entre eles; em arco $\Delta A = \int B_r\,r\,d\theta$, em raio $\Delta A = -\int B_\theta\,dr$ (só a componente
   normal ao caminho entra).
@@ -390,15 +394,16 @@ Maxwell no GT (diferença entre métodos, entra no erro do híbrido).
 
 | ψ de | total | excitação | diferença para o MQ |
 |---|---|---|---|
-| A por mínimos quadrados (adotado) | **4,56% / 8,8%** | 3,18% | — |
-| B direto P0, c1 | 4,66% / 9,1% | 3,44% | 0,48% |
+| A por mínimos quadrados (removido) | 4,56% / 8,8% | 3,18% | — |
+| **B direto P0, c1 (adotado)** | **4,66% / 9,1%** | **3,44%** | 0,48% |
 | B direto P0, c2 | 4,78% / 8,3% | 3,60% | 1,25% |
 | B direto P1, c1 | 4,66% / 9,1% | 3,41% | 0,51% |
 | B direto P1, c2 | 4,74% / 8,0% | 3,52% | 1,33% |
 
 - Validação: com o B exato do GT reproduz o ψ do A do FEMM a 0,03% (c1) / 0,05% (c2).
 - Conclusão: equivalente ao MQ dentro de ~1%; o erro de torque vem do B previsto, não da
-  reconstrução de A. O MQ fica como padrão (projeção conservativa única, sem escolha de caminho).
+  reconstrução de A. Adotado o direto c1 (mais perto do MQ que o c2, sem resolver um sistema
+  no domínio inteiro); o MQ foi removido.
 - Script de comparação (local): `python -m tests.check_split_torque_fluxlinkage_directB [IDX ...] [--tag _80]`
   → `dados/torque/fluxlink_directB_split_<loss><tag>.json`, `plots/torque/fluxlink_directB_split_<loss><tag>.png`;
   diagrama dos caminhos em `plots/torque/fluxlink_directB_caminhos.png`.

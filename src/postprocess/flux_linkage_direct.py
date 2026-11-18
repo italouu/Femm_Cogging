@@ -1,6 +1,6 @@
 """
-Fluxo concatenado e torque de excitação DIRETO do B (integral de linha), sem reconstruir A.
-Alternativa a a_reconstruction.reconstruct_A + flux_torque (mesma interface de entrada).
+Fluxo concatenado e torque de excitação do projeto: ψ DIRETO do B (integral de linha), sem
+reconstruir A. Padrão: caminho 'c1'.
 
 Em 2D, ∇A = (−By, Bx): a diferença de A entre dois pontos é o fluxo de B que atravessa a linha
 que os liga, e só a componente de B normal ao caminho entra:
@@ -20,18 +20,42 @@ Campo B nos pontos:
     Bel     [M,2]   (Bx, By) constante por elemento (P0)
     Bcorner [M,3,2] (Bx, By) nos 3 cantos de cada elemento, interpolado linearmente (P1)
 
-Validação (80 amostras × 16 θe, Split mae): com o B exato do GT reproduz ψ do A do FEMM a
-0,03% (c1) / 0,05% (c2); no Split difere do A por mínimos quadrados 0,5% (c1) / 1,3% (c2)
-(mediana), com erro de torque mediano 4,66% / 4,78% contra 4,56% do mínimos quadrados.
+Validação (80 amostras × 16 θe, Split mae run_0002, T0 = 0): com o B exato do GT reproduz o ψ
+do A do FEMM a 0,03% (c1) / 0,05% (c2); erro de torque mediano do Split 4,66% (c1) / 4,78% (c2).
+Registro: a reconstrução de A por mínimos quadrados P1 (removida em 2026-11-18) dava 4,56%,
+a 0,5% (c1) do método direto — ver docs/claude/avaliacao.md §3.1.
 """
 import numpy as np
 from matplotlib.tri import Triangulation
 
-from src.postprocess.a_reconstruction import P_PAIRS, circuits, grad_ops
+from src.postprocess.torque import grad_ops
 
+P_PAIRS = 21                       # pares de polos da máquina inteira
 K_SAMP = 120                       # pontos (regra do ponto médio) por trecho de integral de linha
 TOOTH_0_DEG, TOOTH_PITCH_DEG = 5.0, 10.0
 SECTOR_DEG = 120.0
+
+
+# --------------------------------------------------------------------------- circuitos e correntes
+def circuits(lines):
+    """Nomes dos circuitos ([CircuitProps]) e, por elemento, índice do circuito (−1 = nenhum)
+    e espiras. lines = linhas do .ans; elem_label = rótulo de cada elemento."""
+    L = [l.rstrip('\r\n') for l in lines]
+    i = next(k for k, l in enumerate(L) if l.startswith('[CircuitProps]'))
+    names = []
+    for l in L[i + 1:]:
+        if l.strip().startswith('<CircuitName>'):
+            names.append(l.split('=')[1].strip().strip('"'))
+        if l.startswith('['):
+            break
+    j = next(k for k, l in enumerate(L) if l.startswith('[NumBlockLabels]')); n = int(L[j].split('=')[1])
+    lab = [l.split() for l in L[j + 1:j + 1 + n]]
+    return names, np.array([int(f[4]) - 1 for f in lab]), np.array([float(f[7]) for f in lab])
+
+
+def phase_currents(I, th_deg):
+    t = np.deg2rad(th_deg)       # = BLDC_Process.phase_currents
+    return {'A': I * np.cos(t), 'B': I * np.cos(t - 2 * np.pi / 3), 'C': I * np.cos(t + 2 * np.pi / 3)}
 
 
 # --------------------------------------------------------------------------- B em pontos
@@ -143,8 +167,9 @@ def torque_from_psi(psi, i_ph):
 
 def flux_torque_direct(lines, xy, elems, depth_m, i_ph, path='c1', Bel=None, Bcorner=None, field=None):
     """Torque de excitação [N·m] e ψ por fase a partir de B direto (Bel P0 ou Bcorner P1).
-    Mesma entrada de a_reconstruction.flux_torque, trocando A nodal por B. `field` reaproveita
-    um PointField já montado na mesma malha."""
+    lines = linhas do .ans, elems [M,4] = (n1, n2, n3, rótulo), depth_m = profundidade [m],
+    i_ph = correntes de fase (phase_currents). `field` reaproveita um PointField já montado
+    na mesma malha."""
     from src.data_gen.motor_constants import WINDING_SECTOR
     if (Bel is None) == (Bcorner is None):
         raise ValueError('passe exatamente um de Bel (P0) ou Bcorner (P1)')

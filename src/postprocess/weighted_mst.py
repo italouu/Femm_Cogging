@@ -1,6 +1,6 @@
 """
 Tensor de Maxwell PONDERADO (equivalente ao mo_blockintegral(22) do FEMM), em Python, com B
-por elemento dado diretamente (sem reconstrução de A).
+por elemento dado diretamente.
 
   weight_function(xy, E, lab_elem, sel_label, air_label, cons=None)
       g nodal: Laplace (P1) nos elementos de AR não selecionados, g = 1 nos nós dos elementos
@@ -18,7 +18,7 @@ import numpy as np
 import scipy.sparse as sp
 from scipy.sparse.linalg import spsolve
 
-from src.postprocess.a_reconstruction import grad_ops
+from src.postprocess.torque import grad_ops
 
 MU0 = 4e-7 * np.pi
 

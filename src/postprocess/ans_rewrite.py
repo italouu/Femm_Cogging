@@ -3,8 +3,9 @@
 
   ans_constraints(lines, nodes) : nós Dirichlet (A prescrito = 0) e pares periódicos /
                                   antiperiódicos, lidos do próprio .ans -> classes de nós
-                                  amarrados (usado por weighted_mst.t22_python(periodic=True)
-                                  para amarrar a função peso g nos nós periódicos).
+                                  amarrados. Dependência obrigatória de weighted_mst
+                                  (weight_function / t22_python): o wrap da função peso g nos
+                                  cortes θ = 0°/120° cancela os termos de contorno do T22.
 
 Formato (Format 4.0, magnetostático, planar), seções usadas:
   [BdryProps] = n   blocos <BeginBdry> ... <BdryType> ... <A_0>,<A_1>,<A_2>,<Phi> ... <EndBdry>

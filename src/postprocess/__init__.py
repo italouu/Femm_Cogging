@@ -17,7 +17,9 @@ Módulos:
   samples    — amostras do raw (designs, subsets, parse smooth)
   train_table — tabela de treinamento a partir dos logs das runs
   regions    — fronteiras entre materiais na malha (contornos, estratificação espacial)
-  torque     — torque pelo tensor de Maxwell na faixa do entreferro × FEMM T22
+  torque     — torque pelo método de Arkkio (média do tensor de Maxwell na faixa de ar do
+               entreferro): referência do projeto, mesma fórmula no GT e nas predições;
+               femm_ref (T22 do mo_blockintegral) só como teste de sanidade opcional
   saturation — curva B-H do aço (interpolação do FEMM) e pontos de operação
   timing     — custo computacional (FEMM × pré-processamento + inferência)
   plots/     — figuras (primitivas, treino, erro, campo)

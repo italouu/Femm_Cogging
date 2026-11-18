@@ -64,13 +64,14 @@ Subcomandos:
       plots/regions_map_sample_*_d*.png.
 
   torque {theta-e,batch,scatter} [--loss L] [--archs ...] [--femm] [--femm-ref] [--first K]
-      — torque pelo tensor de Maxwell na faixa do entreferro (B por elemento) × REFERÊNCIA
-      smooth (B suavizado do .ans no centróide, mesma fórmula), com o piso de cada arch (alvo
+      — torque pelo método de Arkkio (média do tensor de Maxwell na faixa de ar do entreferro,
+      B por elemento), a referência do projeto, aplicado da mesma forma às predições e à
+      REFERÊNCIA smooth (B suavizado do .ans no centróide), com o piso de cada arch (alvo
       de treino na reconstrução dela) e o gt (efeito da suavização), para as runs da loss
       escolhida (bateria bldc + FNO_SplitGNN; --archs filtra; Split = N_base, média das 3
       cópias do material do elemento). O FEMM só gera malha e .ans, em
       data/temp/torque_theta_e{,_batch}/ (--femm resolve); --femm-ref grava também o T22
-      (mo_blockintegral), fora dos resumos.
+      (mo_blockintegral) como teste de sanidade opcional, fora dos resultados e dos resumos.
       Saída: dados/torque/.
 
   saturation [N] [--knee-frac F ...] [--check-femm] — só o gabarito: curva B-H do aço
@@ -1285,8 +1286,9 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
                idxs=None, n_theta=None, n_samples=80, n_per_chunk=8, limit=None,
                raw_dir=None, work_dir=None, subset='test', femm_ref=False, first=None,
                cache_only=False, workers=None):
-    """Torque pelo tensor de Maxwell na faixa do entreferro, REFERÊNCIA = smooth (B suavizado
-    do .ans no centróide, mesma fórmula das predições; docs/claude/avaliacao.md §3), para as
+    """Torque pelo método de Arkkio (média do tensor de Maxwell na faixa de ar do entreferro;
+    referência do projeto), REFERÊNCIA = smooth (B suavizado do .ans no centróide, mesma
+    fórmula das predições; docs/claude/avaliacao.md §3), para as
     runs da loss (bateria bldc + FNO_SplitGNN; archs filtra), com o piso de cada arch
     (target_elem_xy) e o gt (efeito da suavização).
       theta-e : varredura θe das amostras idxs (None = THETA_E_N amostras do TESTE do
@@ -1296,8 +1298,8 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
                 summarize_batch (preds, pisos, suavização);
       scatter : torque das n_per_chunk primeiras amostras de cada chunk do subset.
     O FEMM só gera malha e .ans (femm = resolve as varreduras; caches com outra profundidade
-    são ressolvidos). femm_ref: calcula também o T22 (mo_blockintegral) e grava a curva
-    'femm' / T_femm -- fora de todos os resumos.
+    são ressolvidos). femm_ref: teste de sanidade opcional -- calcula também o T22
+    (mo_blockintegral) e grava a curva 'femm' / T_femm, fora dos resultados e de todos os resumos.
     limit: só os primeiros `limit` ângulos (theta-e/batch) ou amostras (scatter) -- smoke.
     raw_dir: raw de onde vêm valid_designs.csv e os .ans (None: samples.RAW_DIR); work_dir:
     soluções FEMM e temporários (None: TORQUE_TMP).
@@ -2217,8 +2219,9 @@ if __name__ == '__main__':
     p_tq.add_argument('--archs', nargs='+', default=None, help='default: todas (bateria bldc + FNO_SplitGNN)')
     p_tq.add_argument('--femm', action='store_true', help='resolve as varreduras no FEMM antes')
     p_tq.add_argument('--femm-ref', action='store_true',
-                      help='calcula e grava também o T22 do FEMM (mo_blockintegral); fora dos resumos '
-                           '(a referência é sempre o smooth)')
+                      help='teste de sanidade opcional: calcula e grava também o T22 do FEMM '
+                           '(mo_blockintegral), fora dos resultados e dos resumos (a referência é '
+                           'sempre o Arkkio no smooth)')
     p_tq.add_argument('--cache-only', action='store_true',
                       help='batch: não chama o FEMM; ângulos sem cache válido são pulados e registrados')
     p_tq.add_argument('--workers', type=int, default=None, help='processos de parse (default: TORQUE_WORKERS)')

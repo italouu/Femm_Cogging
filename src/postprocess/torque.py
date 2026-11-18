@@ -5,20 +5,20 @@ Torque a partir do campo B: modelos × referência suavizada (smooth), pelo mesm
   batch   : select_batch_samples, fundamental, curve_row, batch_summary, summarize_batch
   scatter : scatter_ids, scatter_stats
 
+Método de torque do projeto = ARKKIO (band_torque): média do tensor de Maxwell na faixa de ar
+do entreferro, aplicada da MESMA forma ao campo de referência (smooth, gt) e às predições.
 Referência = smooth: o B suavizado do .ans no centróide de cada elemento (o alvo de treino
-da Elem), pela MESMA fórmula da faixa das predições. O FEMM só gera a malha e o .ans
-(femm_solve, cache em data/temp/torque_theta_e{,_batch}/); o T22 do mo_blockintegral não é
-mais referência -- só com femm_ref=True (CLI --femm-ref), gravado como curva 'femm', sem
-entrar nos resumos.
+da Elem). O FEMM só gera a malha e o .ans (femm_solve, cache em
+data/temp/torque_theta_e{,_batch}/).
 
 Método:
-  FEMM   : (opcional, --femm-ref) T22 = mo_blockintegral(22) nos blocos do rotor (rótulos com
-           r > r_m), × 3 setores.
-  campo  : tensor de Maxwell médio na faixa de ar do entreferro, com B por elemento:
-           T = −3·L/(μ0·(r2−r1)) · Σ_e r·Br·Bθ·A_e (elementos de ar com centróide em (r1, r2);
-           sinal: torque no rotor externo), L = stack length do design (coluna stack_length do
-           valid_designs.csv, fallback motor_constants.STACK_LENGTH_MM) -- a mesma profundidade
-           do mi_probdef em femm_solve.
+  Arkkio : T = −3·L/(μ0·(r2−r1)) · Σ_e r·Br·Bθ·A_e, com B por elemento (elementos de ar com
+           centróide em (r1, r2); sinal: torque no rotor externo), L = stack length do design
+           (coluna stack_length do valid_designs.csv, fallback motor_constants.STACK_LENGTH_MM)
+           -- a mesma profundidade do mi_probdef em femm_solve.
+  femm_ref (opcional, CLI --femm-ref): TESTE DE SANIDADE, fora dos resultados e dos resumos --
+           T22 = mo_blockintegral(22) nos blocos do rotor (rótulos com r > r_m), × 3 setores,
+           gravado como curva 'femm'.
   smooth : B suavizado no centróide (gabarito da Elem) = REFERÊNCIA.
   gt     : B exato curl(A) por elemento (parse_elem_structure) -- gt × smooth = efeito da
            suavização (reportado à parte, uma vez).
@@ -141,9 +141,10 @@ def femm_solve(row, theta_e, work_dir: Path, gz_out: Path, femm_ref=False):
 # torque pelo campo
 # --------------------------------------------------------------------------- #
 def band_torque(B, cen, area, mat, r1, r2, depth_m):
-    """Torque no rotor (×3, N·m): média do tensor de Maxwell na faixa de ar do entreferro.
-    B [M,2] = (Bx, By) por elemento; cen [M,2] mm; area [M] mm²; depth_m = stack length [m]
-    (stack_length_m(row), o mesmo da profundidade do FEMM)."""
+    """Torque no rotor (×3, N·m) pelo método de Arkkio: média do tensor de Maxwell na faixa de
+    ar do entreferro. É a referência de torque do projeto, aplicada da mesma forma ao campo GT
+    (smooth/gt) e às predições. B [M,2] = (Bx, By) por elemento; cen [M,2] mm; area [M] mm²;
+    depth_m = stack length [m] (stack_length_m(row), o mesmo da profundidade do FEMM)."""
     from src.data_gen.motor_constants import MATERIAL_ID
     r = np.hypot(cen[:, 0], cen[:, 1])
     sel = (r > r1) & (r < r2) & (mat == MATERIAL_ID['vacuum'])

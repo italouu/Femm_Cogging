@@ -375,6 +375,34 @@ Maxwell no GT (diferença entre métodos, entra no erro do híbrido).
   cálculo por Maxwell, não do fluxo previsto.
 - Saída: `dados/torque/fluxlink_split_<loss>.json`, `plots/torque/fluxlink_split_<loss>_{excitacao,total}.png`.
 
+**Variante: ψ direto do B, sem reconstruir A** (2026-11-18) — `src/postprocess/flux_linkage_direct.py`
+(`flux_torque_direct`, mesma entrada de `a_reconstruction.flux_torque` trocando A nodal por B).
+- Em 2D, $\nabla A = (-B_y, B_x)$: a diferença de A entre dois pontos é o fluxo que atravessa a linha
+  entre eles; em arco $\Delta A = \int B_r\,r\,d\theta$, em raio $\Delta A = -\int B_\theta\,dr$ (só a componente
+  normal ao caminho entra).
+- Por bobina $k$, A nos nós dos dois lados é integrado a partir de $(r_0, \theta_k)$ no eixo do dente
+  ($\theta_k = 5° + 10°k$, $r_0$ = meio radial da bobina); a referência cancela em $\langle A\rangle_{ida} - \langle A\rangle_{volta}$.
+  Daí em diante igual ao passo 2–3 (média de área, fases, Clarke).
+- Caminhos: **c1** = radial no eixo do dente, depois arco em $r_{nó}$; **c2** = arco em $r_0$, depois
+  radial em $\theta_{nó}$. Com B exato são equivalentes; com o B previsto a diferença mede a parte não
+  conservativa. Campo: P0 (B por elemento) ou P1 (3 cópias N_base interpoladas no triângulo).
+- 80 amostras × 16 θe (Split mae run_0002, T0 = 0, erro rel. mediano / p90 contra o GT Maxwell):
+
+| ψ de | total | excitação | diferença para o MQ |
+|---|---|---|---|
+| A por mínimos quadrados (adotado) | **4,56% / 8,8%** | 3,18% | — |
+| B direto P0, c1 | 4,66% / 9,1% | 3,44% | 0,48% |
+| B direto P0, c2 | 4,78% / 8,3% | 3,60% | 1,25% |
+| B direto P1, c1 | 4,66% / 9,1% | 3,41% | 0,51% |
+| B direto P1, c2 | 4,74% / 8,0% | 3,52% | 1,33% |
+
+- Validação: com o B exato do GT reproduz o ψ do A do FEMM a 0,03% (c1) / 0,05% (c2).
+- Conclusão: equivalente ao MQ dentro de ~1%; o erro de torque vem do B previsto, não da
+  reconstrução de A. O MQ fica como padrão (projeção conservativa única, sem escolha de caminho).
+- Script de comparação (local): `python -m tests.check_split_torque_fluxlinkage_directB [IDX ...] [--tag _80]`
+  → `dados/torque/fluxlink_directB_split_<loss><tag>.json`, `plots/torque/fluxlink_directB_split_<loss><tag>.png`;
+  diagrama dos caminhos em `plots/torque/fluxlink_directB_caminhos.png`.
+
 **Simetrias exatas usadas (TTA)** — `tests/check_split_symmetry_torque.py` monta as variantes em
 memória a partir do texto do `.ans` (mesma malha ou espelhada; sem FEMM), elemento $e$ da variante =
 elemento $e$ (espelhado) da original:

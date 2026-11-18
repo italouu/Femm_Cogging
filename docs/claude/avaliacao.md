@@ -320,11 +320,14 @@ O que a tabela mostra:
 - **Custo:** 68–71 min por loss com 2 processos de parse; pico de RAM de 4,0 GiB e de VRAM de
   2,4 GB.
 
-### 3.1 Torque do FNO_SplitGNN pelo método híbrido (fluxo concatenado + cogging por simetria)
+### 3.1 Torque do FNO_SplitGNN pelo fluxo concatenado direto do B (P0, caminho c1)
 
-**Método adotado para o torque do Split** (2026-11-11). Script:
-`python -m tests.check_split_torque_fluxlinkage [IDX ...] [--n 10] [--run DIR]` (sem FEMM; usa o
-cache `data/temp/torque_theta_e_batch/`).
+**Método adotado para o torque do Split** (2026-11-18): só o torque de EXCITAÇÃO pelo fluxo
+concatenado, com ψ calculado direto do B por elemento (P0) por integral de linha no caminho c1
+(radial no eixo do dente, depois arco), **T0 = 0** (cogging fora). Código:
+`src/postprocess/flux_linkage_direct.py` (`flux_torque_direct(lines, xy, elems, B, depth_m, i_ph)`).
+Comparação local nas amostras do cache `data/temp/torque_theta_e_batch/` (sem FEMM):
+`python -m tests.check_split_torque_fluxlinkage_directB [IDX ...] [--tag _80]`.
 
 **Por que não só o tensor de Maxwell.** O fluxo do Split é bom ponto a ponto (MAE ~9 mT no
 entreferro, viés ~0), mas `band_torque` amplifica o erro:
@@ -340,11 +343,10 @@ fundamental ($L_d \approx L_q$, ímãs de superfície). $T_0$ = cogging na posi�
 Split por Maxwell está nos parâmetros, não na forma: $|\Delta T_0|$ ~11% e $\Delta A$ ~−7% (mediana).
 
 **Passos:**
-1. **A nos lados de cada bobina direto do B** (`src/postprocess/flux_linkage_direct.py`, caminho
-   c1; ver "ψ direto do B" abaixo): integral de linha de B a partir do eixo do dente, sem
-   reconstruir A no domínio. B do Split por elemento = média das 3 cópias N_base do material do
-   elemento (o mesmo do torque). Conferência: com o B exato curl(A) do GT, reproduz o ψ do A do
-   FEMM a 0,03%.
+1. **A nos lados de cada bobina direto do B** (`flux_linkage_direct`, P0, c1; ver "ψ direto do B"
+   abaixo): integral de linha de B por elemento a partir do eixo do dente, sem reconstruir A no
+   domínio. B do Split por elemento = média das 3 cópias N_base do material do elemento (o mesmo
+   do torque). Conferência: com o B exato curl(A) do GT, reproduz o ψ do A do FEMM a 0,03%.
    *(Até 2026-11-18: A nodal por mínimos quadrados P1, $\min \sum_e S_e \lVert \nabla A_e - (-B_y, B_x)_e \rVert^2$
    — removido, ver abaixo.)*
 2. **Fluxo concatenado** por circuito, como o FEMM: $\psi_c = L\,N/S_c \int_{S_c} A\,dS$; por fase,
@@ -352,15 +354,21 @@ Split por Maxwell está nos parâmetros, não na forma: $|\Delta T_0|$ ~11% e $\
    `coil_k_1` volta).
 3. **Torque de excitação** (sem cogging), Clarke amplitude-invariante:
    $T_{exc} = 3 \cdot \tfrac{3}{2}\,p\,(\psi_\alpha i_\beta - \psi_\beta i_\alpha)$, $p = 21$, 3 setores.
-4. **Cogging** $T_0$ = média em θe de $\tfrac12(T^{Maxwell}_{Split} + T^{Maxwell}_{Split,RS})$: a variante RS
+   **Resultado do Split: $T = T_{exc}$ ($T_0 = 0$).**
+
+*Descartados (histórico, 2026-11-11): passos 4–5 abaixo.* O $T_0$ do GT é só ~1,2% da amplitude
+(cogging h12 ~0,3% da fundamental) e o $T_0$ estimado por Maxwell (original+RS)/2 no Split trazia
+mais erro que o próprio cogging — por isso $T_0 = 0$.
+4. ~~**Cogging** $T_0$ = média em θe de $\tfrac12(T^{Maxwell}_{Split} + T^{Maxwell}_{Split,RS})$: a variante RS
    (espelho na reta de 60° + ímãs invertidos, $T' = -T$) erra o $T_0$ com sinal oposto ao original
-   e a média cancela o viés (ver abaixo).
-5. **Híbrido:** $T(\theta_e) = T_{exc}(\theta_e) + T_0$.
+   e a média cancela o viés.~~
+5. ~~**Híbrido:** $T(\theta_e) = T_{exc}(\theta_e) + T_0$.~~
 
-Referência = smooth (Maxwell no B suavizado). O fluxo concatenado aplicado ao GT difere ~3% do
-Maxwell no GT (diferença entre métodos, entra no erro do híbrido).
+Referência = smooth (Arkkio no B suavizado). O fluxo concatenado aplicado ao GT difere ~3% do
+Arkkio no GT (diferença entre métodos, piso do erro do Split).
 
-**Resultado (Split mae run_0002, 10 amostras de 0,7 a 9,8 A, erro rel. mediano rmse/rms):**
+**Histórico — resultado do híbrido (descartado; Split mae run_0002, 10 amostras de 0,7 a 9,8 A,
+ψ ainda pelo A por mínimos quadrados, erro rel. mediano rmse/rms):**
 
 | | erro |
 |---|---|
@@ -377,15 +385,16 @@ Maxwell no GT (diferença entre métodos, entra no erro do híbrido).
   cálculo por Maxwell, não do fluxo previsto.
 - Saída: `dados/torque/fluxlink_split_<loss>.json`, `plots/torque/fluxlink_split_<loss>_{excitacao,total}.png`.
 
-**ψ direto do B, sem reconstruir A — ADOTADO em 2026-11-18** (caminho c1) —
+**ψ direto do B, sem reconstruir A — ADOTADO em 2026-11-18** (P0, caminho c1) —
 `src/postprocess/flux_linkage_direct.py` (`flux_torque_direct`). A reconstrução de A por mínimos
 quadrados (`a_reconstruction.py`) e o `scripts/maxwell_rec_torque.py` foram removidos do código
-nessa data; a tabela abaixo fica como histórico da comparação.
+nessa data; o caminho c2 e o B interpolado P1 também saíram do código (só P0 + c1). A tabela
+abaixo fica como histórico da comparação.
 - Em 2D, $\nabla A = (-B_y, B_x)$: a diferença de A entre dois pontos é o fluxo que atravessa a linha
   entre eles; em arco $\Delta A = \int B_r\,r\,d\theta$, em raio $\Delta A = -\int B_\theta\,dr$ (só a componente
   normal ao caminho entra).
 - Por bobina $k$, A nos nós dos dois lados é integrado a partir de $(r_0, \theta_k)$ no eixo do dente
-  ($\theta_k = 5° + 10°k$, $r_0$ = meio radial da bobina); a referência cancela em $\langle A\rangle_{ida} - \langle A\rangle_{volta}$.
+  ($\theta_k = (k + \tfrac12)\cdot 10°$, de `motor_constants.SLOT_PITCH_DEG`; $r_0$ = meio radial da bobina); a referência cancela em $\langle A\rangle_{ida} - \langle A\rangle_{volta}$.
   Daí em diante igual ao passo 2–3 (média de área, fases, Clarke).
 - Caminhos: **c1** = radial no eixo do dente, depois arco em $r_{nó}$; **c2** = arco em $r_0$, depois
   radial em $\theta_{nó}$. Com B exato são equivalentes; com o B previsto a diferença mede a parte não

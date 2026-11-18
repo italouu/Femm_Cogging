@@ -9,8 +9,9 @@ Separado de motor_model.py porque aquele importa `femm` (COM, só Windows): os
 parsers (src/data_gen/parsers/) e o pós-processamento leem estas constantes e rodam
 sem FEMM.
 
-motor_model.py importa daqui (BLDC_FEMM_Model_Sym120.N_POLES_SECTOR,
-WINDING_SECTOR, STACK_LENGTH_MM) em vez de literais duplicados -- fonte única.
+motor_model.py importa daqui (BLDC_FEMM_Model_Sym120.N_POLES_SECTOR, N_SLOTS_SECTOR,
+_SECTOR_DEG, WINDING_SECTOR, STACK_LENGTH_MM, BLDC_Process.phase_currents) em vez de literais
+duplicados -- fonte única. phase_currents usa numpy (import dentro da função).
 """
 
 # Propriedades de materiais — fonte única.
@@ -63,7 +64,24 @@ def stack_length_mm(motor_params: dict) -> float:
 
 # Simetria 120° (42 polos/36 ranhuras) — ver docstring de
 # BLDC_FEMM_Model_Sym120 em motor_model.py para a matemática completa.
+N_POLES = 42          # polos do rotor (máquina inteira) -> 21 pares
+N_SLOTS = 36          # ranhuras do estator (máquina inteira)
+SECTOR_DEG = 120.0    # setor periódico modelado
 N_POLES_SECTOR = 14   # 120 / (360/42)
+N_SLOTS_SECTOR = round(N_SLOTS * SECTOR_DEG / 360.0)   # 12
+SLOT_PITCH_DEG = 360.0 / N_SLOTS                       # 10°; ranhura i centrada em i·passo (corte 0° no centro da ranhura 0)
+
+
+def phase_currents(amplitude, angle_deg):
+    """{'A','B','C'} -> corrente [A]: Ia = I·cos θe, Ib = I·cos(θe − 120°),
+    Ic = I·cos(θe + 120°) (Ia + Ib + Ic = 0). `+ 0.0` evita −0.0 (com I = 0 o .ans
+    sai idêntico ao de um modelo sem circuitos). Fonte única: motor_model
+    (BLDC_Process.phase_currents) e o pós-processamento (flux_linkage_direct).
+    numpy importado aqui dentro para o módulo continuar sem dependências no import."""
+    import numpy as np
+    th = np.deg2rad(angle_deg)
+    return {ph: float(amplitude * np.cos(th - shift)) + 0.0
+            for ph, shift in (('A', 0.0), ('B', 2 * np.pi / 3), ('C', -2 * np.pi / 3))}
 
 # Enrolamento do setor 120°: 1 célula 12 ranhuras / 14 polos, camada dupla
 # concentrada. Dente k -> (fase, sinal); a bobina do dente k são os circuitos

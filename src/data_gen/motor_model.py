@@ -5,7 +5,10 @@ from pathlib import Path
 from src.configs.datagen import DatagenConfig
 from src.data_gen.motor_constants import (
     N_POLES_SECTOR as _MOTOR_N_POLES_SECTOR,
+    N_SLOTS_SECTOR as _MOTOR_N_SLOTS_SECTOR,
+    SECTOR_DEG as _MOTOR_SECTOR_DEG,
     WINDING_SECTOR as _MOTOR_WINDING_SECTOR,
+    phase_currents as _motor_phase_currents,
     STACK_LENGTH_MM as _MOTOR_STACK_LENGTH_MM,
 )
 _dg = DatagenConfig()
@@ -264,12 +267,9 @@ class BLDC_Process:
 
     @staticmethod
     def phase_currents(amplitude, angle_deg):
-        """{'A','B','C'} -> corrente [A]: Ia = I·cos θe, Ib = I·cos(θe − 120°),
-        Ic = I·cos(θe + 120°) (Ia + Ib + Ic = 0). `+ 0.0` evita −0.0 (com I = 0 o .ans
-        sai idêntico ao de um modelo sem circuitos)."""
-        th = np.deg2rad(angle_deg)
-        return {ph: float(amplitude * np.cos(th - shift)) + 0.0
-                for ph, shift in (('A', 0.0), ('B', 2 * np.pi / 3), ('C', -2 * np.pi / 3))}
+        """{'A','B','C'} -> corrente [A] (Ia = I·cos θe, ...; `+ 0.0` evita −0.0).
+        Fonte única: motor_constants.phase_currents."""
+        return _motor_phase_currents(amplitude, angle_deg)
 
     @staticmethod
     def export_params(params, filename="valid_designs.csv", data_path=None):
@@ -526,7 +526,7 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
     """
 
     N_POLES_SECTOR = _MOTOR_N_POLES_SECTOR   # 120 / (360/42) == 14
-    N_SLOTS_SECTOR = 12   # 120 / (360/36)
+    N_SLOTS_SECTOR = _MOTOR_N_SLOTS_SECTOR   # 120 / (360/36) == 12
     _PERIODIC = "periodic_120"
 
     def _bore_start_radius(self):
@@ -571,7 +571,7 @@ class BLDC_FEMM_Model_Sym120(BLDC_FEMM_Model):
         #     já desenhadas (polo 0 e o lóbulo da bobina) ---
         self._draw_periodic_cuts()
 
-    _SECTOR_DEG = 120.0
+    _SECTOR_DEG = _MOTOR_SECTOR_DEG   # 120.0
     _POLE_CUT_TOL_DEG = 0.01   # pedaço de polo mais estreito que isso é colado no corte
 
     def _pole_pieces(self):

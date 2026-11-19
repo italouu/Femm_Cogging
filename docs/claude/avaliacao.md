@@ -417,6 +417,32 @@ abaixo fica como histórico da comparação.
   → `dados/torque/fluxlink_directB_split_<loss><tag>.json`, `plots/torque/fluxlink_directB_split_<loss><tag>.png`;
   diagrama dos caminhos em `plots/torque/fluxlink_directB_caminhos.png`.
 
+**Superfície única (Faraday) — alternativa ao c1, 2026-11-18** — `src/postprocess/flux_linkage_surface.py`
+(`flux_torque_surface`, geometria por `slot_geometry(row)`). ψ da bobina = $N\cdot L\int \mathbf B\cdot\mathbf n\,dl$
+numa linha aberta: L do lado de ida (linha central da ranhura da coroa ao topo, topo até o canto do
+dente), arco no raio do canto atravessando o dente, L espelhado no lado de volta. Fases, Clarke e
+torque iguais ao c1 (`torque_from_psi`), T0 = 0.
+- 80 amostras × 16 θe (Split mae run_0002), erro rel. contra o GT Maxwell:
+
+| ψ de | Split mediana / p90 | B do GT mediana / p90 |
+|---|---|---|
+| c1 (adotado) | 4,66% / 9,1% | 3,65% / 5,8% |
+| superfície única | 4,59% / 8,7% | 3,93% / 6,4% |
+
+- As curvas do Split pelos dois métodos diferem 2,4% (mediana); a superfície é melhor em 34/80
+  amostras, ou seja, não há vantagem consistente. Com o B do GT, o torque fica a 0,34% (p90 0,9%) do
+  ψ do A do FEMM (c1: 0,03%).
+- O ψ por fase erra 8–13% contra o do FEMM (#3748, B do GT): a superfície supõe todas as espiras no
+  contorno externo do lado e soma a dispersão da ranhura, que é ∝ i da própria fase e não gera torque.
+- Tempo por solução: fluxo ~7,5 ms contra ~320 ms do c1; o `PointField` (~0,5 s) é comum aos dois.
+- Testes descartados (locais, não versionados): subdividir a bobina em camadas radiais ou fatias
+  angulares com a mesma regra. Com B exato não muda o torque (as pontas ficam no fundo da bobina);
+  com o B do Split só faz a média da parte não conservativa (#3748: 3,02% → 2,33%, c1 1,91%).
+- Scripts locais: `python -m tests.check_split_torque_fluxlinkage_surface [IDX]` (1 amostra + figura
+  da superfície) e `python -m tests.check_split_torque_fluxlinkage_surface_batch [--workers 4]` (lote;
+  guarda o B previsto em `data/temp/fluxlink_batch/<loss>_Bpred/`) →
+  `dados/torque/fluxlink_surface_split_<loss>_80.json`, `plots/torque/fluxlink_surface_split_<loss>_80_todas.png`.
+
 **Simetrias exatas usadas (TTA)** — `tests/check_split_symmetry_torque.py` monta as variantes em
 memória a partir do texto do `.ans` (mesma malha ou espelhada; sem FEMM), elemento $e$ da variante =
 elemento $e$ (espelhado) da original:

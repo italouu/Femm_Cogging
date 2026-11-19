@@ -76,7 +76,7 @@ def phase_currents(amplitude, angle_deg):
     """{'A','B','C'} -> corrente [A]: Ia = I·cos θe, Ib = I·cos(θe − 120°),
     Ic = I·cos(θe + 120°) (Ia + Ib + Ic = 0). `+ 0.0` evita −0.0 (com I = 0 o .ans
     sai idêntico ao de um modelo sem circuitos). Fonte única: motor_model
-    (BLDC_Process.phase_currents) e o pós-processamento (flux_linkage_direct).
+    (BLDC_Process.phase_currents) e o pós-processamento (flux_linkage_arc).
     numpy importado aqui dentro para o módulo continuar sem dependências no import."""
     import numpy as np
     th = np.deg2rad(angle_deg)

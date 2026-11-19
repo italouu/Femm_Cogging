@@ -18,8 +18,9 @@ Módulos:
   train_table — tabela de treinamento a partir dos logs das runs
   regions    — fronteiras entre materiais na malha (contornos, estratificação espacial)
   torque     — torque pelo método de Arkkio (média do tensor de Maxwell na faixa de ar do
-               entreferro): referência do projeto, mesma fórmula no GT e nas predições;
-               femm_ref (T22 do mo_blockintegral) só como teste de sanidade opcional
+               entreferro): referência do projeto, mesma fórmula no GT e nas predições
+  flux_linkage_arc — estimativa do torque de excitação pelo fluxo concatenado (Faraday num
+               arco único por bobina), alternativa ao Arkkio nas predições
   saturation — curva B-H do aço (interpolação do FEMM) e pontos de operação
   timing     — custo computacional (FEMM × pré-processamento + inferência)
   plots/     — figuras (primitivas, treino, erro, campo)

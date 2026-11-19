@@ -63,15 +63,14 @@ Subcomandos:
       Saída: dados/regions.json, dados/regions_curves.npz, plots/regions_curvas.{png,pdf},
       plots/regions_map_sample_*_d*.png.
 
-  torque {theta-e,batch,scatter} [--loss L] [--archs ...] [--femm] [--femm-ref] [--first K]
+  torque {theta-e,batch,scatter} [--loss L] [--archs ...] [--femm] [--first K]
       — torque pelo método de Arkkio (média do tensor de Maxwell na faixa de ar do entreferro,
       B por elemento), a referência do projeto, aplicado da mesma forma às predições e à
       REFERÊNCIA smooth (B suavizado do .ans no centróide), com o piso de cada arch (alvo
       de treino na reconstrução dela) e o gt (efeito da suavização), para as runs da loss
       escolhida (bateria bldc + FNO_SplitGNN; --archs filtra; Split = N_base, média das 3
       cópias do material do elemento). O FEMM só gera malha e .ans, em
-      data/temp/torque_theta_e{,_batch}/ (--femm resolve); --femm-ref grava também o T22
-      (mo_blockintegral) como teste de sanidade opcional, fora dos resultados e dos resumos.
+      data/temp/torque_theta_e{,_batch}/ (--femm resolve).
       Saída: dados/torque/.
 
   saturation [N] [--knee-frac F ...] [--check-femm] — só o gabarito: curva B-H do aço
@@ -167,7 +166,7 @@ from src.postprocess.timing import (ARCH_STAGES, DEVICE, LAYOUT, POLL_S, check_a
                                     femm_solve_timed_procs, hardware_info, iqr_stats,
                                     gpu_spinup, performance_cpus, preprocess_timed, set_affinity, time_batch,
                                     time_per_sample, to_torch)
-from src.postprocess.torque import (batch_summary, curve_row, femm_ref, femm_ref_ok, femm_solve, gap,
+from src.postprocess.torque import (batch_summary, cache_ok, cache_rec, curve_row, femm_solve, gap,
                                     summarize_batch,
                                     parse_torque_sample, read_rows, sample_torques, scatter_ids,
                                     scatter_stats, select_batch_samples)
@@ -1135,6 +1134,7 @@ def run_regions(out_dir: Path, fig_dir: Path, max_samples=None, d_list=None, d_m
 
 TORQUE_TMP = Path('data/temp')     # soluções FEMM das varreduras (torque_theta_e{,_batch}/)
 TORQUE_WORKERS, TORQUE_FEMM_WORKERS = 6, 8
+SWEEP_CACHE = 'femm_ref.json'      # registro da varredura theta-e (nome mantido: caches existentes)
 THETA_E_N, THETA_E_SEED = 5, 0     # amostras padrão do theta-e (teste, 1 por faixa de 2 A)
 
 
@@ -1162,25 +1162,18 @@ def _torque_sweep_dir(idx, work_dir=TORQUE_TMP):
     return Path(work_dir) / 'torque_theta_e' / f'sample_{idx:06d}'
 
 
-def _femm_batch_one(idx, k, th, row, work_dir=TORQUE_TMP, femm_ref=False):
-    """Resolve 1 ângulo do batch no FEMM (.ans + json do cache; T22 só com femm_ref)."""
+def _femm_batch_one(idx, k, th, row, work_dir=TORQUE_TMP):
+    """Resolve 1 ângulo do batch no FEMM (.ans + json do cache)."""
     d = Path(work_dir) / 'torque_theta_e_batch' / f'sample_{idx:06d}'
     gz, js = d / f'theta_{k:02d}.ans.gz', d / f'theta_{k:02d}.json'
-    if gz.exists() and js.exists() and femm_ref_ok(json.loads(js.read_text()), row) and \
-            (not femm_ref or json.loads(js.read_text()).get('T22_sector') is not None):
+    if gz.exists() and js.exists() and cache_ok(json.loads(js.read_text()), row):
         return
     tmp = Path(work_dir) / 'torque_theta_e_batch' / 'tmp' / f'{idx}_{k}'
     try:
-        t22 = femm_solve(row, th, tmp, gz, femm_ref=femm_ref)
-        js.write_text(json.dumps(femm_ref_rec(row, th, t22)))
+        femm_solve(row, th, tmp, gz)
+        js.write_text(json.dumps(cache_rec(row, th)))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-
-
-def femm_ref_rec(row, th, t22):
-    """Registro do cache de 1 solução (femm_ref de torque.py; T22 None sem --femm-ref)."""
-    return femm_ref(row, th, t22) if t22 is not None else \
-        dict(femm_ref(row, th, 0.0), T22_sector=None)
 
 
 def run_torque_freq(out_dir: Path, fig_dir: Path, losses=('mae', 'mse')):
@@ -1284,7 +1277,7 @@ def run_torque_freq(out_dir: Path, fig_dir: Path, losses=('mae', 'mse')):
 
 def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
                idxs=None, n_theta=None, n_samples=80, n_per_chunk=8, limit=None,
-               raw_dir=None, work_dir=None, subset='test', femm_ref=False, first=None,
+               raw_dir=None, work_dir=None, subset='test', first=None,
                cache_only=False, workers=None):
     """Torque pelo método de Arkkio (média do tensor de Maxwell na faixa de ar do entreferro;
     referência do projeto), REFERÊNCIA = smooth (B suavizado do .ans no centróide, mesma
@@ -1298,8 +1291,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
                 summarize_batch (preds, pisos, suavização);
       scatter : torque das n_per_chunk primeiras amostras de cada chunk do subset.
     O FEMM só gera malha e .ans (femm = resolve as varreduras; caches com outra profundidade
-    são ressolvidos). femm_ref: teste de sanidade opcional -- calcula também o T22
-    (mo_blockintegral) e grava a curva 'femm' / T_femm, fora dos resultados e de todos os resumos.
+    são ressolvidos).
     limit: só os primeiros `limit` ângulos (theta-e/batch) ou amostras (scatter) -- smoke.
     raw_dir: raw de onde vêm valid_designs.csv e os .ans (None: samples.RAW_DIR); work_dir:
     soluções FEMM e temporários (None: TORQUE_TMP).
@@ -1314,7 +1306,6 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
     split_run = find_runs(ROOT_S)[('FNO_BipartiteGNN_Elem', loss)]   # mesmo split em todas
     meta = dict(loss=loss, split_run=str(split_run), subset=subset,
                 reference='smooth (B suavizado do .ans no centróide, mesma fórmula da faixa)',
-                femm_T22_recorded=bool(femm_ref),
                 runs={r['arch']: dict(run_dir=r['run_dir'], best_epoch=r['epoch']) for r in runs.values()})
     pk = [f"pred_{r['arch']}" for r in runs.values()] + [f"floor_{r['arch']}" for r in runs.values()]
     n_work = workers or TORQUE_WORKERS
@@ -1327,22 +1318,20 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
         for idx in idxs:
             row, sw = rows[idx], _torque_sweep_dir(idx, work_dir)
             th_all = torque_thetas(n_theta)
-            cache = sw / 'femm_ref.json'
+            cache = sw / SWEEP_CACHE
             refs = json.loads(cache.read_text()) if cache.exists() else []
-            stale = cache.exists() and not all(femm_ref_ok(r, row) for r in refs)
-            no_t22 = femm_ref and any(r.get('T22_sector') is None for r in refs)
+            stale = cache.exists() and not all(cache_ok(r, row) for r in refs)
             if stale:
-                print(f'  s{idx}: femm_ref.json com outra profundidade (ou sem stack_length_mm) '
+                print(f'  s{idx}: {SWEEP_CACHE} com outra profundidade (ou sem stack_length_mm) '
                       f'-> descartado, ressolvendo', flush=True)
-            if femm or stale or no_t22 or not cache.exists():
-                ref = [femm_ref_rec(row, th, femm_solve(row, th, sw / 'tmp', sw / 'raw' / f'theta_{k:03d}.ans.gz',
-                                                        femm_ref=femm_ref))
-                       for k, th in enumerate(th_all)]
+            if femm or stale or not cache.exists():
+                ref = []
+                for k, th in enumerate(th_all):
+                    femm_solve(row, th, sw / 'tmp', sw / 'raw' / f'theta_{k:03d}.ans.gz')
+                    ref.append(cache_rec(row, th))
                 cache.write_text(json.dumps(ref, indent=1))
             ref = json.loads(cache.read_text())[:limit]
             T = {'smooth': [], 'gt': [], **{k: [] for k in pk}}
-            if femm_ref:
-                T['femm_T22'] = [3 * r['T22_sector'] for r in ref]
             with ProcessPoolExecutor(n_work) as ex:
                 futs = [ex.submit(parse_torque_sample, sw / 'raw' / f'theta_{k:03d}.ans.gz', row,
                                   _with_split(runs))
@@ -1370,18 +1359,17 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
         ids = select_batch_samples(split_run, rows, n_samples, subset=subset)[:first]
         root = work_dir / 'torque_theta_e_batch'
         # com --femm, todos os ângulos (_femm_batch_one pula só os caches válidos); sem --femm,
-        # só os caches existentes com outra profundidade (ou sem T22 com --femm-ref) são ressolvidos
+        # só os caches existentes com outra profundidade são ressolvidos
         tasks = [(i, k, th) for i in ids for k, th in enumerate(torque_thetas(n_theta))]
         if not femm:
             jsons = {(i, k): root / f'sample_{i:06d}' / f'theta_{k:02d}.json' for i, k, _ in tasks}
-            bad = lambda j, r: (not femm_ref_ok(j, r)) or (femm_ref and j.get('T22_sector') is None)
             tasks = [(i, k, th) for i, k, th in tasks if jsons[i, k].exists()
-                     and bad(json.loads(jsons[i, k].read_text()), rows[i])]
+                     and not cache_ok(json.loads(jsons[i, k].read_text()), rows[i])]
             if tasks:
-                print(f'  {len(tasks)} cache(s) a ressolver (profundidade / T22)', flush=True)
+                print(f'  {len(tasks)} cache(s) a ressolver (profundidade)', flush=True)
         skipped = []
         if cache_only:
-            skipped = [dict(idx=int(i), k=int(k), motivo='cache inválido (profundidade/T22)') for i, k, _ in tasks]
+            skipped = [dict(idx=int(i), k=int(k), motivo='cache inválido (profundidade)') for i, k, _ in tasks]
             skipped += [dict(idx=int(i), k=int(k), motivo='sem cache')
                         for i in ids for k in range(n_theta)
                         if not (root / f'sample_{i:06d}' / f'theta_{k:02d}.json').exists()]
@@ -1392,7 +1380,7 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
                 print(f'  --cache-only: {len(skipped)} ângulo(s) pulados: {skipped[:10]}', flush=True)
         if tasks:
             with ProcessPoolExecutor(TORQUE_FEMM_WORKERS) as ex:
-                for f in [ex.submit(_femm_batch_one, i, k, th, rows[i], work_dir, femm_ref)
+                for f in [ex.submit(_femm_batch_one, i, k, th, rows[i], work_dir)
                           for i, k, th in tasks]:
                     f.result()
         res = {}
@@ -1405,14 +1393,10 @@ def run_torque(mode, out_dir: Path, loss='mae', archs=None, femm=False,
                                   _with_split(runs))
                         for k in ks]
                 cur = dict(theta_e_deg=[], smooth=[], gt=[], **{kk: [] for kk in pk})
-                if femm_ref:
-                    cur['femm'] = []
                 for k, f in zip(ks, futs):
                     ref = json.loads((d / f'theta_{k:02d}.json').read_text())
                     t = sample_torques(f.result(), rows[i], runs)
                     cur['theta_e_deg'].append(ref['theta_e_deg'])
-                    if femm_ref:
-                        cur['femm'].append(3 * ref['T22_sector'])
                     for kk in ['smooth', 'gt'] + pk:
                         cur[kk].append(t[kk])
                 row = rows[i]
@@ -2218,10 +2202,6 @@ if __name__ == '__main__':
     p_tq.add_argument('--loss', default='mae', choices=('mse', 'mae'))
     p_tq.add_argument('--archs', nargs='+', default=None, help='default: todas (bateria bldc + FNO_SplitGNN)')
     p_tq.add_argument('--femm', action='store_true', help='resolve as varreduras no FEMM antes')
-    p_tq.add_argument('--femm-ref', action='store_true',
-                      help='teste de sanidade opcional: calcula e grava também o T22 do FEMM '
-                           '(mo_blockintegral), fora dos resultados e dos resumos (a referência é '
-                           'sempre o Arkkio no smooth)')
     p_tq.add_argument('--cache-only', action='store_true',
                       help='batch: não chama o FEMM; ângulos sem cache válido são pulados e registrados')
     p_tq.add_argument('--workers', type=int, default=None, help='processos de parse (default: TORQUE_WORKERS)')
@@ -2337,7 +2317,7 @@ if __name__ == '__main__':
     elif a.cmd == 'torque':
         run_torque(a.mode, a.out, a.loss, a.archs, a.femm, a.idx, a.n_theta,
                    a.n_samples, a.n_per_chunk, a.limit, a.raw_dir, a.work_dir, a.subset,
-                   a.femm_ref, a.first, a.cache_only, a.workers)
+                   a.first, a.cache_only, a.workers)
     elif a.cmd == 'saturation':
         run_saturation(a.out, a.fig, a.n, tuple(a.knee_frac), a.check_femm, a.subset)
     elif a.cmd == 'sat-bh':

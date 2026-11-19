@@ -380,7 +380,7 @@ def _stability(run_dir: Path):
 
 
 def _torque_analysis(loss):
-    """L7: vs referência suavizada (mesmo método da faixa do entreferro) e vs FEMM T22;
+    """L7: vs referência suavizada (mesmo método da faixa do entreferro);
     erro da referência (suavizada × exata P0 = 'gt'). curve_row/fundamental/scatter_stats
     de src.postprocess.torque."""
     from src.postprocess.torque import curve_row, fundamental, scatter_stats
@@ -407,11 +407,8 @@ def _torque_analysis(loss):
                 continue
             th = np.array(c['theta_e_deg'])
             S, G = (np.array(c[k]) * 1e3 for k in ('smooth', 'gt'))
-            F = np.array(c['femm']) * 1e3 if 'femm' in c else None   # T22 só com --femm-ref
             band = next(f'{lo}-{hi}A' for lo, hi in BANDS if lo <= I < hi)
             ref[band].append(dict(I=I, rmse_smooth_vs_gt=float(np.sqrt(np.mean((S - G) ** 2))),
-                                  rmse_smooth_vs_femm=None if F is None else float(np.sqrt(np.mean((S - F) ** 2))),
-                                  rmse_gt_vs_femm=None if F is None else float(np.sqrt(np.mean((G - F) ** 2))),
                                   rms_gt=float(np.sqrt(np.mean(G ** 2))),
                                   A_smooth_over_A_gt=float(fundamental(th, S)[1] / fundamental(th, G)[1])))
             for a in ARCHS:
@@ -445,12 +442,10 @@ def _torque_analysis(loss):
         out['batch'] = dict(fonte=f'dados/torque/theta_e_batch_{loss}.json',
                             referencia='suavizada (gt_smooth), mesmo método da faixa do entreferro',
                             por_arch=summ,
-                            vs_femm_resumo_existente=(_j(SRC / 'torque' / f'theta_e_batch_{loss}_summary.json')
+                            resumo_existente=(_j(SRC / 'torque' / f'theta_e_batch_{loss}_summary.json')
                                                       or {}).get('summary'),
                             ref_error={b: dict(n=len(v), rmse_smooth_vs_gt_median_mNm=float(np.median([x['rmse_smooth_vs_gt'] for x in v])),
                                                rel_smooth_vs_gt_median_pct=float(np.median([100 * x['rmse_smooth_vs_gt'] / x['rms_gt'] for x in v])),
-                                               rmse_smooth_vs_femm_median_mNm=None if v[0]['rmse_smooth_vs_femm'] is None else float(np.median([x['rmse_smooth_vs_femm'] for x in v])),
-                                               rmse_gt_vs_femm_median_mNm=None if v[0]['rmse_gt_vs_femm'] is None else float(np.median([x['rmse_gt_vs_femm'] for x in v])),
                                                A_smooth_over_A_gt_mean=float(np.mean([x['A_smooth_over_A_gt'] for x in v])))
                                        for b, v in ref.items() if v})
     return out
@@ -586,8 +581,6 @@ def _fig_f5b(theta_files, loss):
         T = {k: np.array(v) for k, v in d['T_Nm'].items()}
         ax.plot(th, T['smooth'] if 'smooth' in T else T['gt_smooth'], color='k', lw=1.3, label='referência suavizada')
         ax.plot(th, T['gt'], color='#52514e', lw=0.8, ls='--', label='referência exata (P0)')
-        if 'femm_T22' in T:      # só em JSONs antigos ou com --femm-ref
-            ax.plot(th, T['femm_T22'], color='#52514e', lw=0.8, ls=':', label='FEMM (T22)')
         for a in ARCHS:
             if f'pred_{a}' in T:
                 ax.plot(th, T[f'pred_{a}'], color=MODEL_COLOR[a], lw=0.8, label=_short(a).replace('\n', ''))
@@ -877,7 +870,7 @@ def run_render():
     if have_tq:
         md += ['- Método (`src/postprocess/torque.py::band_torque`): tensor de Maxwell na faixa de ar do '
                'entreferro, B por elemento; referência suavizada = B suavizado do FEMM no centróide com o mesmo '
-               'método; referência exata = curl(A) P0 (`gt`); FEMM T22 = `mo_blockintegral(22)`.', '']
+               'método; referência exata = curl(A) P0 (`gt`).', '']
         body = []
         for l in LOSSES:
             b = tq[l].get('batch')
@@ -899,12 +892,11 @@ def run_render():
                                  f"{_fmt(lo['bias_vs_theta_mNm']['min'], 1)} a {_fmt(lo['bias_vs_theta_mNm']['max'], 1)}",
                                  _fmt(100 * (hi['A_ratio_mean'] - 1), 1), _fmt(lo['rel_median_pct'], 1),
                                  _fmt(hi['rel_median_pct'], 1)])
-            md += ['', '| faixa | n | RMSE suav.×exata (mN·m) | rel. (%) | A_suav/A_exata | RMSE suav.×FEMM | RMSE exata×FEMM |',
-                   '|---|---|---|---|---|---|---|']
+            md += ['', '| faixa | n | RMSE suav.×exata (mN·m) | rel. (%) | A_suav/A_exata |',
+                   '|---|---|---|---|---|']
             for band, s in b['ref_error'].items():
                 md.append(f"| {band} | {s['n']} | {_fmt(s['rmse_smooth_vs_gt_median_mNm'], 2)} | "
-                          f"{_fmt(s['rel_smooth_vs_gt_median_pct'], 2)} | {_fmt(s['A_smooth_over_A_gt_mean'], 4)} | "
-                          f"{_fmt(s['rmse_smooth_vs_femm_median_mNm'], 2)} | {_fmt(s['rmse_gt_vs_femm_median_mNm'], 2)} |")
+                          f"{_fmt(s['rel_smooth_vs_gt_median_pct'], 2)} | {_fmt(s['A_smooth_over_A_gt_mean'], 4)} |")
             md.append('')
         for l in LOSSES:
             s = tq[l].get('scatter')

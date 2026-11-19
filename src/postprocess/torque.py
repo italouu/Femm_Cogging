@@ -16,9 +16,6 @@ Método:
            centróide em (r1, r2); sinal: torque no rotor externo), L = stack length do design
            (coluna stack_length do valid_designs.csv, fallback motor_constants.STACK_LENGTH_MM)
            -- a mesma profundidade do mi_probdef em femm_solve.
-  femm_ref (opcional, CLI --femm-ref): TESTE DE SANIDADE, fora dos resultados e dos resumos --
-           T22 = mo_blockintegral(22) nos blocos do rotor (rótulos com r > r_m), × 3 setores,
-           gravado como curva 'femm'.
   smooth : B suavizado no centróide (gabarito da Elem) = REFERÊNCIA.
   gt     : B exato curl(A) por elemento (parse_elem_structure) -- gt × smooth = efeito da
            suavização (reportado à parte, uma vez).
@@ -51,14 +48,13 @@ def stack_length_m(row):
     return float(row.get('stack_length [mm]', STACK_LENGTH_MM)) * 1e-3
 
 
-def femm_ref(row, theta_e, t22):
-    """Registro de cache de 1 solução FEMM: T22 do setor + a profundidade
-    (stack length) com que foi resolvido -- a mesma de femm_solve(row, ...)."""
-    return dict(theta_e_deg=float(theta_e), T22_sector=float(t22),
-                stack_length_mm=stack_length_m(row) * 1e3)
+def cache_rec(row, theta_e):
+    """Registro de cache de 1 solução FEMM: θe e a profundidade (stack length) com que foi
+    resolvido -- a mesma de femm_solve(row, ...). Campos extras de caches antigos são ignorados."""
+    return dict(theta_e_deg=float(theta_e), stack_length_mm=stack_length_m(row) * 1e3)
 
 
-def femm_ref_ok(ref, row):
+def cache_ok(ref, row):
     """True se o cache foi resolvido com o stack length de `row` (cache sem o campo
     stack_length_mm -> inválido)."""
     sl = ref.get('stack_length_mm')
@@ -86,27 +82,18 @@ def thetas(n_theta):
     return np.arange(n_theta) * 360.0 / n_theta
 
 
-def block_labels(ans_path):
-    lines = Path(ans_path).read_text('utf-8', errors='replace').splitlines()
-    j = next(i for i, l in enumerate(lines) if l.startswith('[NumBlockLabels]'))
-    n = int(lines[j].split('=')[1])
-    return np.array([[float(v) for v in l.split()[:2]] for l in lines[j + 1:j + 1 + n]])
-
-
 # --------------------------------------------------------------------------- #
 # FEMM (Windows: pyfemm)
 # --------------------------------------------------------------------------- #
-def femm_solve(row, theta_e, work_dir: Path, gz_out: Path, femm_ref=False):
+def femm_solve(row, theta_e, work_dir: Path, gz_out: Path):
     """Redesenha o design (fase do rotor e amplitude da corrente do CSV, ângulo θe dado),
-    resolve e grava o .ans comprimido em gz_out. femm_ref=True: devolve também o T22 do setor
-    (rotor externo, mo_blockintegral); False (padrão): devolve None."""
+    resolve e grava o .ans comprimido em gz_out."""
     import femm
     from src.data_gen.motor_model import BLDC_FEMM_Model_Sym120_Annular
     work_dir = Path(work_dir).resolve()
     work_dir.mkdir(parents=True, exist_ok=True)
     p = params_of(row)
     p['current_angle']['value'] = float(theta_e)
-    r_m = sum(gap(row)) / 2
     cwd0 = os.getcwd()
     os.chdir(work_dir)
     try:
@@ -115,18 +102,6 @@ def femm_solve(row, theta_e, work_dir: Path, gz_out: Path, femm_ref=False):
         femm.mi_probdef(0, 'millimeters', 'planar', 1e-8, stack_length_m(row) * 1e3, 200)
         model.draw_motor(); femm.mi_zoomnatural(); femm.mi_saveas(str(work_dir / 'model.fem'))
         femm.mi_createmesh(); femm.mi_analyze()
-        t22 = None
-        if femm_ref:      # T22 só sob pedido (a referência do torque é o smooth do .ans)
-            femm.mi_loadsolution()
-            lab = block_labels(work_dir / 'model.ans')
-            # Rotor = rótulos com r > r_m. O rótulo do ar do entreferro fica exatamente em
-            # r = (RID + SOD)/4 = r_m (motor_model.py, r_avg); a seleção depende de o raio dele,
-            # relido do .ans, não passar de r_m em ponto flutuante — funciona porque rótulo e
-            # r_m saem da mesma conta (conferido igual em 100 amostras), e o > estrito o exclui.
-            for x, y in lab[np.hypot(lab[:, 0], lab[:, 1]) > r_m]:
-                femm.mo_selectblock(x, y)
-            t22 = float(np.atleast_1d(femm.mo_blockintegral(22))[0])
-            femm.mo_clearblock()
         femm.closefemm()
         Path(gz_out).parent.mkdir(parents=True, exist_ok=True)
         with open(work_dir / 'model.ans', 'rb') as f, gzip.open(str(gz_out) + '.part', 'wb') as g:
@@ -134,7 +109,6 @@ def femm_solve(row, theta_e, work_dir: Path, gz_out: Path, femm_ref=False):
         os.replace(str(gz_out) + '.part', gz_out)
     finally:
         os.chdir(cwd0)
-    return t22
 
 
 # --------------------------------------------------------------------------- #
@@ -163,15 +137,6 @@ def polar_to_xy(B, x, y):
     c, s = np.cos(th), np.sin(th)
     B = np.asarray(B, np.float64)
     return np.stack([B[:, 0] * c - B[:, 1] * s, B[:, 0] * s + B[:, 1] * c], axis=1)
-
-
-def grad_ops(xy, E):
-    """Gradiente P1 por elemento: ∂A/∂x = Σ gx·A, ∂A/∂y = Σ gy·A; área S."""
-    X, Y = xy[E, 0], xy[E, 1]
-    b = np.stack([Y[:, 1] - Y[:, 2], Y[:, 2] - Y[:, 0], Y[:, 0] - Y[:, 1]], 1)
-    c = np.stack([X[:, 2] - X[:, 1], X[:, 0] - X[:, 2], X[:, 1] - X[:, 0]], 1)
-    a2 = (X[:, 1] - X[:, 0]) * (Y[:, 2] - Y[:, 0]) - (X[:, 2] - X[:, 0]) * (Y[:, 1] - Y[:, 0])
-    return b / a2[:, None], c / a2[:, None], np.abs(a2) / 2
 
 
 def parse_torque_sample(path, row, with_split=False):

@@ -1,6 +1,8 @@
 """
-Fluxo concatenado e torque de EXCITAÇÃO do projeto: ψ direto do B por elemento (integral de
-linha), sem reconstruir A; T0 = 0 (o cogging não entra).
+Fluxo concatenado e torque de EXCITAÇÃO pelo c1: ψ direto do B por elemento (integral de linha),
+sem reconstruir A; T0 = 0 (o cogging não entra). Referência exata do ψ (média de área, como o FEMM);
+o método adotado do projeto desde 2026-11-19 é o arco único (flux_linkage_arc), que reutiliza daqui
+PointField, coil_geometry, K_SAMP e torque_from_psi.
 
 Em 2D, ∇A = (−By, Bx): a diferença de A entre dois pontos é o fluxo de B que atravessa a linha
 que os liga, e só a componente de B normal ao caminho entra:

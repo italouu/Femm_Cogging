@@ -320,14 +320,18 @@ O que a tabela mostra:
 - **Custo:** 68–71 min por loss com 2 processos de parse; pico de RAM de 4,0 GiB e de VRAM de
   2,4 GB.
 
-### 3.1 Torque do FNO_SplitGNN pelo fluxo concatenado direto do B (P0, caminho c1)
+### 3.1 Torque do FNO_SplitGNN pelo fluxo concatenado (arco único; c1 como referência exata)
 
-**Método adotado para o torque do Split** (2026-11-18): só o torque de EXCITAÇÃO pelo fluxo
-concatenado, com ψ calculado direto do B por elemento (P0) por integral de linha no caminho c1
-(radial no eixo do dente, depois arco), **T0 = 0** (cogging fora). Código:
-`src/postprocess/flux_linkage_direct.py` (`flux_torque_direct(lines, xy, elems, B, depth_m, i_ph)`).
+**Método adotado para o torque do Split** (2026-11-19): só o torque de EXCITAÇÃO pelo fluxo
+concatenado, **T0 = 0** (cogging fora), com ψ por Faraday num **arco único** por bobina (no topo da
+bobina, de linha central a linha central de ranhura; ver "Arco único" abaixo). Código:
+`src/postprocess/flux_linkage_arc.py` (`flux_torque_arc(lines, xy, elems, B, depth_m, i_ph, slot)`,
+`slot = slot_geometry(row)`). Os passos 1–2 abaixo descrevem o **c1** (`flux_linkage_direct`, média de
+área como o FEMM), adotado de 2026-11-18 a 2026-11-19 e mantido como referência exata do ψ; o passo
+3 (fases, Clarke, torque) é comum aos dois.
 Comparação local nas amostras do cache `data/temp/torque_theta_e_batch/` (sem FEMM):
-`python -m tests.check_split_torque_fluxlinkage_directB [IDX ...] [--tag _80]`.
+`python -m tests.check_split_torque_fluxlinkage_arc [IDX ...] [--workers 8]` (c1:
+`python -m tests.check_split_torque_fluxlinkage_directB [IDX ...] [--tag _80]`).
 
 **Por que não só o tensor de Maxwell.** O fluxo do Split é bom ponto a ponto (MAE ~9 mT no
 entreferro, viés ~0), mas `band_torque` amplifica o erro:
@@ -385,7 +389,7 @@ Arkkio no GT (diferença entre métodos, piso do erro do Split).
   cálculo por Maxwell, não do fluxo previsto.
 - Saída: `dados/torque/fluxlink_split_<loss>.json`, `plots/torque/fluxlink_split_<loss>_{excitacao,total}.png`.
 
-**ψ direto do B, sem reconstruir A — ADOTADO em 2026-11-18** (P0, caminho c1) —
+**ψ direto do B, sem reconstruir A — adotado de 2026-11-18 a 2026-11-19; hoje referência exata** (P0, caminho c1) —
 `src/postprocess/flux_linkage_direct.py` (`flux_torque_direct`). A reconstrução de A por mínimos
 quadrados (`a_reconstruction.py`) e o `scripts/maxwell_rec_torque.py` foram removidos do código
 nessa data; o caminho c2 e o B interpolado P1 também saíram do código (só P0 + c1). A tabela
@@ -404,7 +408,7 @@ abaixo fica como histórico da comparação.
 | ψ de | total | excitação | diferença para o MQ |
 |---|---|---|---|
 | A por mínimos quadrados (removido) | 4,56% / 8,8% | 3,18% | — |
-| **B direto P0, c1 (adotado)** | **4,66% / 9,1%** | **3,44%** | 0,48% |
+| **B direto P0, c1 (referência exata)** | **4,66% / 9,1%** | **3,44%** | 0,48% |
 | B direto P0, c2 | 4,78% / 8,3% | 3,60% | 1,25% |
 | B direto P1, c1 | 4,66% / 9,1% | 3,41% | 0,51% |
 | B direto P1, c2 | 4,74% / 8,0% | 3,52% | 1,33% |
@@ -417,8 +421,8 @@ abaixo fica como histórico da comparação.
   → `dados/torque/fluxlink_directB_split_<loss><tag>.json`, `plots/torque/fluxlink_directB_split_<loss><tag>.png`;
   diagrama dos caminhos em `plots/torque/fluxlink_directB_caminhos.png`.
 
-**Superfície única (Faraday) — alternativa ao c1, 2026-11-18** — `src/postprocess/flux_linkage_surface.py`
-(`flux_torque_surface`, geometria por `slot_geometry(row)`). ψ da bobina = $N\cdot L\int \mathbf B\cdot\mathbf n\,dl$
+**Superfície única (Faraday) — testada em 2026-11-18, substituída pelo arco único em 2026-11-19** —
+saiu do código versionado; módulo local em `tests/flux_linkage_surface.py` (`flux_torque_surface`). ψ da bobina = $N\cdot L\int \mathbf B\cdot\mathbf n\,dl$
 numa linha aberta: L do lado de ida (linha central da ranhura da coroa ao topo, topo até o canto do
 dente), arco no raio do canto atravessando o dente, L espelhado no lado de volta. Fases, Clarke e
 torque iguais ao c1 (`torque_from_psi`), T0 = 0.
@@ -426,7 +430,7 @@ torque iguais ao c1 (`torque_from_psi`), T0 = 0.
 
 | ψ de | Split mediana / p90 | B do GT mediana / p90 |
 |---|---|---|
-| c1 (adotado) | 4,66% / 9,1% | 3,65% / 5,8% |
+| c1 | 4,66% / 9,1% | 3,65% / 5,8% |
 | superfície única | 4,59% / 8,7% | 3,93% / 6,4% |
 
 - As curvas do Split pelos dois métodos diferem 2,4% (mediana); a superfície é melhor em 34/80
@@ -442,6 +446,38 @@ torque iguais ao c1 (`torque_from_psi`), T0 = 0.
   da superfície) e `python -m tests.check_split_torque_fluxlinkage_surface_batch [--workers 4]` (lote;
   guarda o B previsto em `data/temp/fluxlink_batch/<loss>_Bpred/`) →
   `dados/torque/fluxlink_surface_split_<loss>_80.json`, `plots/torque/fluxlink_surface_split_<loss>_80_todas.png`.
+
+**Arco único (Faraday) — ADOTADO em 2026-11-19** — `src/postprocess/flux_linkage_arc.py`
+(`flux_torque_arc`, `psi_arc`, `slot_geometry`). A superfície da bobina do dente $k$ é só o arco no raio
+do topo da bobina, $r = r_{bs0}$, da linha central da ranhura $k$ à da $k+1$: cobre os dois lados e
+atravessa o dente. $\psi_k = -N L \int B_r\,r\,d\theta$; fases, Clarke e torque por `torque_from_psi`, T0 = 0.
+- 80 amostras × 16 θe (Split mae run_0002), erro rel. contra o GT Maxwell, mediana / p90:
+
+| ψ de | Split | B do GT | B do GT × ψ do A do FEMM |
+|---|---|---|---|
+| c1 (média de área) | 4,66% / 9,1% | 3,65% / 5,8% | 0,03% / 0,06% |
+| superfície única | 4,59% / 8,7% | 3,93% / 6,4% | 0,34% / 0,93% |
+| **arco único** | **4,23% / 8,2%** | **2,95% / 5,3%** | 0,74% / 1,63% |
+
+- O arco é melhor que a superfície em 53/80 amostras e que o c1 em 42/80; nas amostras de erro alto
+  (#2198, #3960) os métodos coincidem (o erro é do B previsto).
+- **M arcos radiais** (teste local `tests/check_split_torque_fluxlinkage_arcs_radial.py`): a bobina é
+  dividida em M faixas radiais iguais entre o fundo ($x_b$) e o topo ($r_{bs0}$), cada uma com um arco no
+  seu raio externo e $N_j = N\,S_j/S$ espiras ($S_j$ = área da bobina na faixa, recorte exato por shapely;
+  as faixas de cima, cortadas pela sapata, têm menos área: 8% contra 15,7% na base com M = 8).
+
+| M | 1 | 2 | 4 | 8 | c1 |
+|---|---|---|---|---|---|
+| B do GT × ψ do A do FEMM | 0,74% | 0,53% | 0,40% | 0,22% | 0,03% |
+| B do GT × GT Maxwell | 2,95% | 3,36% | 3,34% | 3,47% | 3,65% |
+| Split × GT Maxwell | 4,23% | 4,46% | 4,48% | 4,57% | 4,66% |
+
+  Com M crescente o ψ converge ao exato (c1) e o torque se afasta do Maxwell: o arco único deixa de
+  fora a dispersão da ranhura abaixo do topo e isso compensa parte da diferença Maxwell × fluxo
+  concatenado (~3,7% no GT). A vantagem do arco é contra a referência Arkkio, não um ψ mais exato.
+- Saídas: `dados/torque/fluxlink_arc_split_mae_80.json`, `plots/torque/fluxlink_arc_split_mae_80.png`;
+  `dados/torque/fluxlink_arcs_radial_split_mae_80.json`, `plots/torque/fluxlink_arcs_radial_split_mae_80.png`,
+  `plots/torque/fluxlink_arcs_radial_divisao_3748.png` (desenho das faixas e arcos).
 
 **Simetrias exatas usadas (TTA)** — `tests/check_split_symmetry_torque.py` monta as variantes em
 memória a partir do texto do `.ans` (mesma malha ou espelhada; sem FEMM), elemento $e$ da variante =
